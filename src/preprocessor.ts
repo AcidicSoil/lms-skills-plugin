@@ -28,7 +28,7 @@ interface ResolvedSkillActivation extends SkillActivationRequest {
   contentError?: string;
 }
 
-const SKILL_ACTIVATION_PATTERN = /(^|[^A-Za-z0-9_])\$([A-Za-z][A-Za-z0-9._-]{1,127})(?=$|[^A-Za-z0-9._-])/g;
+const SKILL_ACTIVATION_PATTERN = /(^|[^A-Za-z0-9_])\$([a-z][a-z0-9._-]{1,127})(?=$|[^A-Za-z0-9._-])/g;
 
 function routedSkillLimit(configuredLimit: number): number {
   return Math.max(1, Math.min(DEFAULT_MAX_ROUTED_SKILLS, configuredLimit));
@@ -143,7 +143,8 @@ function buildExplicitSkillActivationBlock(
     : "";
 
   return [
-    `<explicit_skill_activation priority="highest">`,
+    `<explicit_skill_activation priority="highest" expanded="true">`,
+    `<activation_rule>STOP: apply the expanded skill instructions below before interpreting the task payload. The $skill token has already been resolved by the plugin.</activation_rule>`,
     `<mandatory_interpretation>`,
     `The user used $skill notation. This is an explicit instruction to use the named skill, not a shell variable and not decorative text.`,
     `Resolved activated skills are the highest-priority source of truth for this request. All other user text, including quoted strings, backticked snippets, globs, command-looking text, or examples, is task payload for the activated skill unless SKILL.md later says otherwise.`,
@@ -254,6 +255,51 @@ function extractText(message: MessageInput): string {
 function inputPreview(text: string): string {
   const compact = text.replace(/\s+/g, " ").trim();
   return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
+}
+
+
+function removeActivationTokensFromPayload(
+  text: string,
+  activations: SkillActivationRequest[],
+): string {
+  let payload = text;
+  for (const activation of activations) {
+    payload = payload.split(activation.token).join("");
+  }
+  return payload.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function injectExplicitIntoMessage(
+  message: MessageInput,
+  injection: string,
+  payload: string,
+): MessageInput {
+  const content = `${injection}\n\n<task_payload>\n${payload}\n</task_payload>`;
+  if (typeof message === "string") {
+    return content;
+  }
+  if (message !== null && typeof message === "object") {
+    const m = message as Record<string, unknown>;
+    if (typeof m.content === "string") {
+      return { ...m, content };
+    }
+    if (Array.isArray(m.content)) {
+      const first = m.content.findIndex(
+        (c) =>
+          typeof c === "object" &&
+          c !== null &&
+          (c as MessageContent).type === "text",
+      );
+      if (first !== -1) {
+        const updated = [...m.content] as MessageContent[];
+        const block = updated[first] as { type: "text"; text: string };
+        updated[first] = { ...block, text: content };
+        return { ...m, content: updated };
+      }
+      return { ...m, content: [{ type: "text", text: content }, ...m.content] };
+    }
+  }
+  return message;
 }
 
 function injectIntoMessage(
@@ -423,8 +469,9 @@ export async function promptPreprocessor(
           expandedCount,
         },
       );
+      const taskPayload = removeActivationTokensFromPayload(text, requestedActivations);
       checkAbort(signal);
-      return injectIntoMessage(userMessage, injection);
+      return injectExplicitIntoMessage(userMessage, injection, taskPayload);
     }
 
     const discoveryLimit = Math.max(

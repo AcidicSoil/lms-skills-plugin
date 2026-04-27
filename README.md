@@ -73,7 +73,7 @@ Explicit activations tell the model:
 - `run_command` must not be used for exploration,
 - unresolved `$skill` tokens should be searched with `list_skills` before proceeding.
 
-The notation accepts skill-like names beginning with a letter and containing letters, numbers, `.`, `_`, or `-`, for example:
+The notation accepts lowercase skill-like names beginning with a lowercase letter and containing lowercase letters, numbers, `.`, `_`, or `-`. Uppercase shell variables such as `$HOME` are ignored so command payloads are not misread as skill activations. Examples:
 
 ```text
 $docx
@@ -81,7 +81,7 @@ $example-skill
 $my.custom_skill
 ```
 
-Explicit activation works even when the regular internal context is disabled, because the user is directly asking for a skill by name. Unlike normal routed candidates, explicit activations expand the selected `SKILL.md` body immediately; normal routing still uses progressive disclosure and expects the model to call `read_skill_file` for routed candidates.
+Explicit activation works even when the regular internal context is disabled, because the user is directly asking for a skill by name. Unlike normal routed candidates, explicit activations expand the selected `SKILL.md` body immediately; normal routing still uses progressive disclosure and expects the model to call `read_skill_file` for routed candidates. For explicit activations, the preprocessor removes the `$skill-name` token from the model-facing task payload and wraps the remaining user text in `<task_payload>` so the model applies the expanded skill before interpreting command-looking text.
 
 ### 3. Skill tools
 
