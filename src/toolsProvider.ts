@@ -28,6 +28,16 @@ import {
 import { createRequestId, logDiagnostic, serializeError, timedStep } from "./diagnostics";
 import { validateCommandSafety } from "./commandSafety";
 import { createTimeoutSignal, isTimeoutError } from "./timeout";
+import {
+  commandSchema,
+  cwdSchema,
+  envSchema,
+  listSkillsLimitSchema,
+  listSkillsQuerySchema,
+  optionalRelativeSkillPathSchema,
+  skillNameSchema,
+  timeoutMsSchema,
+} from "./toolSchemas";
 import type { RuntimeRegistry } from "./runtime";
 import type { RuntimeTargetName } from "./environment";
 import type { ResolvedSkillRoot } from "./pathResolver";
@@ -168,14 +178,8 @@ export async function toolsProvider(ctl: PluginController) {
       "With a query, scores and ranks skills by relevance across name, tags, description, and SKILL.md body content. " +
       "Always call read_skill_file on any skill that looks relevant before starting work.",
     parameters: {
-      query: z.string().optional().describe("Optional search query."),
-      limit: z
-        .number()
-        .int()
-        .min(1)
-        .max(200)
-        .optional()
-        .describe(`Maximum number of skills to return. Defaults to ${LIST_SKILLS_DEFAULT_LIMIT}.`),
+      query: listSkillsQuerySchema.describe("Optional search query."),
+      limit: listSkillsLimitSchema,
     },
     implementation: async ({ query, limit }, { status }) =>
       withToolLogging(ctl, "list_skills", { query, limit }, TOOL_LIST_SKILLS_TIMEOUT_MS, async (requestId, toolSignal) => {
@@ -321,8 +325,8 @@ export async function toolsProvider(ctl: PluginController) {
     description:
       "Read a file from within a skill directory. Accepts a skill name, an environment-prefixed display path such as WSL:/path, or an absolute path within a configured skill root.",
     parameters: {
-      skill_name: z.string().min(1).describe("Skill name or absolute/display path."),
-      file_path: z.string().optional().describe("Relative path inside the skill directory. Omit for SKILL.md."),
+      skill_name: skillNameSchema.describe("Skill name or absolute/display path."),
+      file_path: optionalRelativeSkillPathSchema.describe("Relative path inside the skill directory. Omit for SKILL.md."),
     },
     implementation: async ({ skill_name, file_path }, { status }) =>
       withToolLogging(ctl, "read_skill_file", { skill_name, file_path }, TOOL_READ_SKILL_FILE_TIMEOUT_MS, async (requestId, toolSignal) => {
@@ -431,8 +435,8 @@ export async function toolsProvider(ctl: PluginController) {
     description:
       "List all files inside a skill directory. Accepts a skill name or an environment-prefixed display path.",
     parameters: {
-      skill_name: z.string().min(1).describe("Skill name or absolute/display path."),
-      sub_path: z.string().optional().describe("Optional relative sub-path within the skill directory."),
+      skill_name: skillNameSchema.describe("Skill name or absolute/display path."),
+      sub_path: optionalRelativeSkillPathSchema.describe("Optional relative sub-path within the skill directory."),
     },
     implementation: async ({ skill_name, sub_path }, { status }) =>
       withToolLogging(ctl, "list_skill_files", { skill_name, sub_path }, TOOL_LIST_SKILL_FILES_TIMEOUT_MS, async (requestId, toolSignal) => {
@@ -521,17 +525,11 @@ export async function toolsProvider(ctl: PluginController) {
     description:
       "Execute a shell command only when plugin settings explicitly allow it. Disabled by default. Read-only mode allows simple inspection commands only; guarded mode still blocks dangerous patterns.",
     parameters: {
-      command: z.string().min(1).max(EXEC_MAX_COMMAND_LENGTH).describe("The shell command to execute."),
-      cwd: z.string().optional().describe("Working directory for the command."),
+      command: commandSchema.describe("The single-line shell command to execute."),
+      cwd: cwdSchema.describe("Working directory for the command."),
       environment: z.enum(["windows", "wsl"]).optional().describe("Optional explicit command target."),
-      timeout_ms: z
-        .number()
-        .int()
-        .min(1_000)
-        .max(EXEC_MAX_TIMEOUT_MS)
-        .optional()
-        .describe(`Timeout in milliseconds. Defaults to ${EXEC_DEFAULT_TIMEOUT_MS}ms.`),
-      env: z.record(z.string()).optional().describe("Optional environment variables."),
+      timeout_ms: timeoutMsSchema.describe(`Timeout in milliseconds. Defaults to ${EXEC_DEFAULT_TIMEOUT_MS}ms.`),
+      env: envSchema.describe("Optional environment variables."),
     },
     implementation: async ({ command, cwd, environment, timeout_ms, env }, { status }) =>
       withToolLogging(

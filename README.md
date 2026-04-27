@@ -153,6 +153,21 @@ Settings are persisted to:
 ~/.lmstudio/plugin-data/lms-skills/settings.json
 ```
 
+
+### Tool input schemas
+
+All plugin tools use Zod schemas before the implementation runs. These schemas reject malformed inputs early, including:
+
+- empty required fields,
+- overly long skill names, paths, queries, commands, and environment values,
+- control characters and null bytes,
+- path traversal such as `..` in skill-relative file paths,
+- absolute paths where a skill-relative path is required,
+- invalid command timeout ranges,
+- unsafe environment variable names or oversized environment maps.
+
+Schema validation is not the only safety layer. Runtime path checks, command safety policy, and request timeouts still run after schema validation.
+
 ---
 
 ## Command execution safety
