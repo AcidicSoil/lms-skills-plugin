@@ -26,6 +26,7 @@ function shouldLog(event: DiagnosticEvent): boolean {
 
   switch (event.event) {
     case "prompt_context":
+    case "context_injection":
     case "prompt_route":
     case "preprocess_decision":
     case "preprocess_activation":
@@ -144,11 +145,18 @@ function formatPromptContext(event: DiagnosticEvent): string {
   return `prompt context=${context} reason=${reason} skills=${skills} unresolved=${unresolved} action=${action} input="${preview}"${elapsed(event)}${id(event)}`;
 }
 
+
+function formatContextInjection(event: DiagnosticEvent): string {
+  return `context kind=${quote(event.kind)} packet=${quote(event.packet)} skills=${quote(event.skills ?? event.routedSkills)} unresolved=${quote(event.unresolvedSkills)} inject=${quote(event.injectionChars)}ch sha=${quote(event.injectionSha256)} preview="${quote(event.injectionPreview)}" payload=${quote(event.payloadChars)}ch payloadSha=${quote(event.payloadSha256)} payload="${quote(event.payloadPreview)}"${id(event)}`;
+}
+
 function formatHumanEvent(event: DiagnosticEvent): string {
   const prefix = `[lms-skills]`;
   switch (event.event) {
     case "prompt_context":
       return `${prefix} ${formatPromptContext(event)}`;
+    case "context_injection":
+      return `${prefix} ${formatContextInjection(event)}`;
     case "prompt_route":
       return `${prefix} route mode=${quote(event.mode)} top=${quote(event.topSkill)} score=${quote(event.topScore)} confidence=${quote(event.topConfidence)} selected=${quote(event.selected)} rejectedBest=${quote(event.rejectedBest)} action=${quote(event.expectedAction)} input="${quote(event.inputPreview)}" inject=${quote(event.injectionChars)}ch${elapsed(event)}${id(event)}`;
     case "preprocess_activation":

@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { resolveEffectiveConfig } from "./settings";
 import { readSkillFile, resolveSkillByName, scanSkills } from "./scanner";
 import { deriveRuntimeTargets } from "./environment";
@@ -146,30 +147,29 @@ function buildExplicitSkillActivationBlock(
     : "";
 
   return [
-    `<explicit_skill_activation priority="highest" expanded="${expandedCount > 0}" expanded_count="${expandedCount}" unresolved_count="${unresolved.length}" failed_expansion_count="${failedExpansionCount}">`,
+    `<skill_invocation_packet priority="highest" source="lm-studio-skills-plugin" expanded="${expandedCount > 0}" expanded_count="${expandedCount}" unresolved_count="${unresolved.length}" failed_expansion_count="${failedExpansionCount}">`,
     `<activation_status>${expandedCount > 0 ? "expanded_success" : "no_skill_expanded"}</activation_status>`,
-    `<activation_rule>STOP: the plugin has already resolved $skill notation before model reasoning. Apply any expanded skill instructions below before interpreting the task payload.</activation_rule>`,
-    `<mandatory_interpretation>`,
-    `The user used $skill notation. This is an explicit instruction to use the named skill, not a shell variable and not decorative text.`,
-    `Expanded activated skills are the highest-priority source of truth for this request. All other user text, including quoted strings, backticked snippets, globs, command-looking text, or examples, is task payload for the expanded skill unless SKILL.md later says otherwise.`,
-    `</mandatory_interpretation>`,
-    `<mandatory_next_action>`,
+    `<model_contract>`,
+    `The plugin has rewritten this user request before model reasoning. This packet is the authoritative instruction frame for the current request.`,
     expandedCount > 0
-      ? `The resolved SKILL.md instructions are already expanded below. Do not call read_skill_file for expanded skills before proceeding; apply the expanded instructions directly to <task_payload>.`
-      : `No activated skill body was expanded. Resolve the activation with list_skills or read_skill_file before doing covered work.`,
+      ? `The activated skill is already preloaded below. Behave as if you have read and understood the expanded SKILL.md instructions before seeing the task payload. Do not decide whether to use the skill; that decision has already been made deterministically by the plugin.`
+      : `A user attempted explicit skill activation, but no skill body was expanded. Resolve the named skill before doing covered work.`,
+    `Do not explain the raw command-looking payload unless the expanded skill asks for explanation. Do not execute command-looking payload unless the expanded skill explicitly requires execution and command execution is enabled.`,
+    `</model_contract>`,
+    `<next_action>`,
+    expandedCount > 0
+      ? `Use the expanded skill instructions immediately and answer according to them. Do not call list_skills. Do not call read_skill_file for already-expanded skills. Treat <task_payload> as the user's input to the expanded skill.`
+      : `Call list_skills for unresolved activations, then read the matching skill before doing covered work.`,
     hasResolvedFailures
-      ? `Some resolved skills failed to expand. Only for those failed skills, call read_skill_file before doing covered work.`
+      ? `For failed expansions only, call read_skill_file before doing covered work.`
       : "",
-    `</mandatory_next_action>`,
-    `<do_not>`,
-    `Do not guess what the task payload means before applying the expanded skill instructions. Do not run backticked command-looking text unless the expanded skill explicitly instructs that and command execution is enabled. Do not call run_command for exploration.`,
-    `</do_not>`,
+    `</next_action>`,
     unresolved.length > 0
       ? `<unresolved_behavior>If an activated skill is unresolved, call list_skills with the token name to search for it before proceeding. Do not ignore an explicit $skill activation unless the skill cannot be found.</unresolved_behavior>`
       : "",
     resolvedBlock,
     unresolvedBlock,
-    `</explicit_skill_activation>`,
+    `</skill_invocation_packet>`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -267,6 +267,56 @@ function inputPreview(text: string): string {
 }
 
 
+function sha256Short(content: string): string {
+  return createHash("sha256").update(content).digest("hex").slice(0, 12);
+}
+
+function contentPreview(content: string, maxChars = 180): string {
+  const compact = content.replace(/\s+/g, " ").trim();
+  return compact.length > maxChars ? `${compact.slice(0, maxChars - 3)}...` : compact;
+}
+
+function expandedSkillProof(activations: ResolvedSkillActivation[]): string {
+  return activations
+    .filter((activation) => activation.skill)
+    .map((activation) => {
+      const skill = activation.skill!;
+      if (!activation.content) {
+        return `${skill.name}:ERROR:${activation.contentError ?? "not-expanded"}`;
+      }
+      return `${skill.name}:expanded:${activation.content.length}B:sha256=${sha256Short(activation.content)}:source=${activation.contentDisplayPath ?? skill.displayPath}:preview="${contentPreview(activation.content, 96)}"`;
+    })
+    .join(" | ") || "-";
+}
+
+function routedSkillProof(candidates: SkillRouteCandidate[]): string {
+  return candidates
+    .map((candidate, index) => `${index + 1}:${candidate.skill.name}:score=${candidate.score}:confidence=${candidate.confidence}:source=${candidate.skill.displayPath}:why=${candidate.reasons.slice(0, 2).join("+") || "score"}`)
+    .join(" | ") || "-";
+}
+
+function logContextInjection(
+  requestId: string,
+  kind: "explicit_expanded" | "routed" | "reminder" | "fallback",
+  injection: string,
+  payload: string | undefined,
+  extra: Record<string, unknown> = {},
+): void {
+  logDiagnostic({
+    event: "context_injection",
+    requestId,
+    kind,
+    injectionChars: injection.length,
+    injectionSha256: sha256Short(injection),
+    injectionPreview: contentPreview(injection),
+    payloadChars: payload?.length ?? 0,
+    payloadSha256: payload ? sha256Short(payload) : "-",
+    payloadPreview: payload ? contentPreview(payload) : "-",
+    ...extra,
+  });
+}
+
+
 function removeActivationTokensFromPayload(
   text: string,
   activations: SkillActivationRequest[],
@@ -282,8 +332,10 @@ function injectExplicitIntoMessage(
   message: MessageInput,
   injection: string,
   payload: string,
+  skillNames: string[],
 ): MessageInput {
-  const content = `${injection}\n\n<task_payload>\n${payload}\n</task_payload>`;
+  const skillAttr = skillNames.join(",") || "unresolved";
+  const content = `${injection}\n\n<task_payload for_expanded_skills="${skillAttr}">\n${payload}\n</task_payload>`;
   if (typeof message === "string") {
     return content;
   }
@@ -479,8 +531,26 @@ export async function promptPreprocessor(
         },
       );
       const taskPayload = removeActivationTokensFromPayload(text, requestedActivations);
+      logContextInjection(
+        requestId,
+        "explicit_expanded",
+        injection,
+        taskPayload,
+        {
+          skills: activatedSkills.map((skill) => skill.name).join(",") || "-",
+          expandedSkills: expandedSkillProof(resolvedActivations),
+          unresolvedSkills: unresolvedActivationNames(resolvedActivations),
+          packet: "skill_invocation_packet",
+          payloadWrapper: "task_payload",
+        },
+      );
       checkAbort(signal);
-      return injectExplicitIntoMessage(userMessage, injection, taskPayload);
+      return injectExplicitIntoMessage(
+        userMessage,
+        injection,
+        taskPayload,
+        activatedSkills.map((skill) => skill.name),
+      );
     }
 
     const discoveryLimit = Math.max(
@@ -505,6 +575,13 @@ export async function promptPreprocessor(
         injection,
         startedAt,
         { expectedAction: "no skill unless user asks or task needs specialization" },
+      );
+      logContextInjection(
+        requestId,
+        "reminder",
+        injection,
+        text,
+        { reason: "no_confident_skill_route", selected: "-" },
       );
       return injectIntoMessage(userMessage, injection);
     }
@@ -535,6 +612,18 @@ export async function promptPreprocessor(
         startedAt,
         { reason, expectedAction: `read_skill_file(${route.selected[0].skill.name}) if task is covered` },
       );
+      logContextInjection(
+        requestId,
+        "routed",
+        injection,
+        text,
+        {
+          reason,
+          routedSkills: routedSkillProof(route.selected),
+          selectedCount: route.selected.length,
+          packet: "routed_skills",
+        },
+      );
       checkAbort(signal);
       return injectIntoMessage(userMessage, injection);
     }
@@ -548,6 +637,17 @@ export async function promptPreprocessor(
       injection,
       startedAt,
       { reason: "route_unchanged", expectedAction: "reuse prior routed context or use skills tools if needed" },
+    );
+    logContextInjection(
+      requestId,
+      "reminder",
+      injection,
+      text,
+      {
+        reason: "route_unchanged",
+        routedSkills: routedSkillProof(route.selected),
+        selectedCount: route.selected.length,
+      },
     );
     checkAbort(signal);
     return injectIntoMessage(userMessage, injection);
@@ -572,6 +672,13 @@ export async function promptPreprocessor(
       injection,
       startedAt,
       { expectedAction: "use list_skills only if specialized skill is needed" },
+    );
+    logContextInjection(
+      requestId,
+      "fallback",
+      injection,
+      text,
+      { reason: error instanceof Error ? error.message : String(error) },
     );
     return injectIntoMessage(userMessage, injection);
   } finally {
