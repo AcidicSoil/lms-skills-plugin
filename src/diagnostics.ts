@@ -33,6 +33,7 @@ function shouldLog(event: DiagnosticEvent): boolean {
     case "skill_resolved":
     case "read_skill_file_result":
     case "list_skills_exact_result":
+    case "run_command_safety_check":
     case "run_command_result":
     case "runtime_exec_error":
     case "runtime_exec_abort":

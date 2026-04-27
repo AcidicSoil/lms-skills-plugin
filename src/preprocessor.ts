@@ -38,11 +38,11 @@ function buildAvailableSkillsBlock(skills: SkillInfo[], limit: number): string {
 }
 
 function buildFullInstruction(): string {
-  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills. This full skills context applies to the conversation until the plugin refreshes it.\n</skills_runtime_context>";
+  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills. Do not use `run_command` for exploration unless command execution is explicitly enabled and the user task requires it; prefer skill reads and file-listing tools. This full skills context applies to the conversation until the plugin refreshes it.\n</skills_runtime_context>";
 }
 
 function buildReminderInstruction(): string {
-  return "<skills_runtime_reminder>The LM Studio Skills plugin is active. If this request matches an installed skill, use `list_skills` or `read_skill_file` as needed; do not ask the user to add skill instructions to the system prompt.</skills_runtime_reminder>";
+  return "<skills_runtime_reminder>The LM Studio Skills plugin is active. If this request matches an installed skill, use `list_skills` or `read_skill_file` as needed; do not ask the user to add skill instructions to the system prompt. Do not run shell commands unless explicitly enabled and necessary.</skills_runtime_reminder>";
 }
 
 function buildFullInjection(skills: SkillInfo[], limit: number): string {

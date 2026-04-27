@@ -22,6 +22,7 @@ import {
   listAbsoluteDirectory,
 } from "./scanner";
 import { createRequestId, logDiagnostic, serializeError, timedStep } from "./diagnostics";
+import { validateCommandSafety } from "./commandSafety";
 import type { RuntimeRegistry } from "./runtime";
 import type { RuntimeTargetName } from "./environment";
 import type { ResolvedSkillRoot } from "./pathResolver";
@@ -491,7 +492,7 @@ export async function toolsProvider(ctl: PluginController) {
   const runCommandTool = tool({
     name: "run_command",
     description:
-      "Execute a shell command in the configured skills runtime environment. In Both mode, pass environment or a cwd/display path that identifies Windows or WSL.",
+      "Execute a shell command only when plugin settings explicitly allow it. Disabled by default. Read-only mode allows simple inspection commands only; guarded mode still blocks dangerous patterns.",
     parameters: {
       command: z.string().min(1).max(EXEC_MAX_COMMAND_LENGTH).describe("The shell command to execute."),
       cwd: z.string().optional().describe("Working directory for the command."),
@@ -512,6 +513,28 @@ export async function toolsProvider(ctl: PluginController) {
         async (requestId) => {
           const cfg = await timedStep(requestId, "run_command", "resolve_config", async () => resolveEffectiveConfig(ctl));
           status(`Running ${environment ? `in ${environment}` : "command"}: ${command.slice(0, 60)}${command.length > 60 ? "\u2026" : ""}`);
+
+          const safety = validateCommandSafety(command, cfg.commandExecutionMode);
+          logDiagnostic({
+            event: "run_command_safety_check",
+            requestId,
+            tool: "run_command",
+            mode: safety.mode,
+            allowed: safety.allowed,
+            reason: safety.reason,
+            commandPreview: safety.commandPreview,
+          });
+          if (!safety.allowed) {
+            status("Command blocked by safety policy");
+            return {
+              success: false,
+              blocked: true,
+              mode: safety.mode,
+              error: safety.reason,
+              hint:
+                "Use skill file reads/listing for normal work. Enable read-only command mode only for trusted inspection tasks, or guarded mode only when you intentionally accept broader shell risk.",
+            };
+          }
 
           const registry = await timedStep(requestId, "run_command", "create_runtime_registry", async () => createRuntimeRegistry(cfg));
           const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
@@ -548,7 +571,7 @@ export async function toolsProvider(ctl: PluginController) {
           );
 
           status(result.timedOut ? "Timed out" : `Exit ${result.exitCode}`);
-          logDiagnostic({ event: "run_command_result", requestId, tool: "run_command", exitCode: result.exitCode, timedOut: result.timedOut, environment: result.environment, shell: result.shell, stdoutBytes: result.stdout.length, stderrBytes: result.stderr.length });
+          logDiagnostic({ event: "run_command_result", requestId, tool: "run_command", mode: cfg.commandExecutionMode, exitCode: result.exitCode, timedOut: result.timedOut, environment: result.environment, shell: result.shell, stdoutBytes: result.stdout.length, stderrBytes: result.stderr.length });
 
           return {
             stdout: result.stdout,
@@ -558,6 +581,7 @@ export async function toolsProvider(ctl: PluginController) {
             environment: result.environment,
             platform: result.platform,
             shell: result.shell,
+            commandExecutionMode: cfg.commandExecutionMode,
             ...(result.timedOut
               ? { hint: "Command exceeded the timeout. Try increasing timeout_ms or splitting into smaller steps." }
               : {}),

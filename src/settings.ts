@@ -11,7 +11,15 @@ import {
 import { configSchematics } from "./config";
 import { detectHostPlatform, parseSkillsEnvironment } from "./environment";
 import type { PersistedSettings, EffectiveConfig } from "./types";
+import type { CommandExecutionMode } from "./commandSafety";
 import type { PluginController } from "./pluginTypes";
+
+function parseCommandExecutionMode(value: unknown): CommandExecutionMode {
+  if (value === "disabled" || value === "readOnly" || value === "guarded") {
+    return value;
+  }
+  return "disabled";
+}
 
 const DEFAULTS: PersistedSettings = {
   skillsPaths: [DEFAULT_SKILLS_DIR],
@@ -22,6 +30,7 @@ const DEFAULTS: PersistedSettings = {
   windowsShellPath: "",
   wslShellPath: "",
   wslDistro: "",
+  commandExecutionMode: "disabled",
 };
 
 let cachedConfig: EffectiveConfig | null = null;
@@ -60,6 +69,7 @@ export function loadSettings(): PersistedSettings {
       windowsShellPath,
       wslShellPath: typeof parsed.wslShellPath === "string" ? parsed.wslShellPath : "",
       wslDistro: typeof parsed.wslDistro === "string" ? parsed.wslDistro : "",
+      commandExecutionMode: parseCommandExecutionMode(parsed.commandExecutionMode),
     };
   } catch {
     return { ...DEFAULTS };
@@ -96,6 +106,9 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     ((c.get("wslShellPath") as string | undefined) ?? "").trim() || saved.wslShellPath;
   const wslDistro =
     ((c.get("wslDistro") as string | undefined) ?? "").trim() || saved.wslDistro;
+  const commandExecutionMode = parseCommandExecutionMode(
+    c.get("commandExecutionMode") || saved.commandExecutionMode,
+  );
 
   if (rawPaths === RESET_TO_DEFAULT_SENTINEL) {
     const next: PersistedSettings = {
@@ -107,6 +120,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
       windowsShellPath,
       wslShellPath,
       wslDistro,
+      commandExecutionMode,
     };
     saveSettings(next);
     cachedConfig = next;
@@ -131,6 +145,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     windowsShellPath,
     wslShellPath,
     wslDistro,
+    commandExecutionMode,
   };
 
   if (JSON.stringify(next) !== JSON.stringify(saved)) saveSettings(next);

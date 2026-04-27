@@ -1,4 +1,5 @@
 import type { RuntimeTargetName, SkillsEnvironment } from "./environment";
+import type { CommandExecutionMode } from "./commandSafety";
 
 export interface SkillInfo {
   name: string;
@@ -30,6 +31,7 @@ export interface PersistedSettings {
   windowsShellPath: string;
   wslShellPath: string;
   shellPath: string;
+  commandExecutionMode: CommandExecutionMode;
 }
 
 export interface EffectiveConfig {
@@ -41,6 +43,7 @@ export interface EffectiveConfig {
   windowsShellPath: string;
   wslShellPath: string;
   shellPath: string;
+  commandExecutionMode: CommandExecutionMode;
 }
 
 export interface DirectoryEntry {

@@ -77,6 +77,31 @@ export const configSchematics = createConfigSchematics()
     },
     "",
   )
+
+  .field(
+    "commandExecutionMode",
+    "select",
+    {
+      displayName: "Command Execution Safety",
+      subtitle:
+        "Controls the run_command tool. Disabled is safest. Read-only allows inspection commands. Guarded allows broader commands but blocks dangerous patterns.",
+      options: [
+        {
+          value: "disabled",
+          displayName: "Disabled - do not allow model-issued shell commands (recommended)",
+        },
+        {
+          value: "readOnly",
+          displayName: "Read-only - allow simple inspection commands only",
+        },
+        {
+          value: "guarded",
+          displayName: "Guarded - allow shell commands except blocked dangerous patterns",
+        },
+      ],
+    },
+    "disabled",
+  )
   .field(
     "wslDistro",
     "string",
