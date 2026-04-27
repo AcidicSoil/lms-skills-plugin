@@ -11,6 +11,10 @@ import {
   EXEC_MAX_TIMEOUT_MS,
   EXEC_MAX_COMMAND_LENGTH,
   LIST_SKILLS_DEFAULT_LIMIT,
+  TOOL_LIST_SKILLS_TIMEOUT_MS,
+  TOOL_READ_SKILL_FILE_TIMEOUT_MS,
+  TOOL_LIST_SKILL_FILES_TIMEOUT_MS,
+  TOOL_COMMAND_SETUP_TIMEOUT_MS,
 } from "./constants";
 import {
   scanSkills,
@@ -23,6 +27,7 @@ import {
 } from "./scanner";
 import { createRequestId, logDiagnostic, serializeError, timedStep } from "./diagnostics";
 import { validateCommandSafety } from "./commandSafety";
+import { createTimeoutSignal, isTimeoutError } from "./timeout";
 import type { RuntimeRegistry } from "./runtime";
 import type { RuntimeTargetName } from "./environment";
 import type { ResolvedSkillRoot } from "./pathResolver";
@@ -55,6 +60,7 @@ async function getRuntimeContext(
   ctl: PluginController,
   requestId: string,
   toolName: string,
+  signal: AbortSignal,
 ): Promise<{
   cfg: EffectiveConfig;
   registry: RuntimeRegistry;
@@ -85,7 +91,7 @@ async function getRuntimeContext(
     requestId,
     toolName,
     "resolve_skill_roots",
-    async () => resolveSkillRoots(cfg.skillsPaths, targets, registry, ctl.abortSignal),
+    async () => resolveSkillRoots(cfg.skillsPaths, targets, registry, signal),
     { targetCount: targets.length, rawPathCount: cfg.skillsPaths.length },
   );
   logDiagnostic({
@@ -104,33 +110,54 @@ async function getRuntimeContext(
 }
 
 async function withToolLogging<T>(
+  ctl: PluginController,
   toolName: string,
   args: Record<string, unknown>,
-  fn: (requestId: string) => Promise<T>,
+  timeoutMs: number,
+  fn: (requestId: string, signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
   const requestId = createRequestId(toolName);
   const startedAt = Date.now();
-  logDiagnostic({ event: "tool_start", requestId, tool: toolName, args });
+  const timeout = createTimeoutSignal(
+    ctl.abortSignal,
+    timeoutMs,
+    `${toolName} tool request`,
+  );
+  logDiagnostic({ event: "tool_start", requestId, tool: toolName, timeoutMs, args });
   try {
-    const result = await fn(requestId);
+    const result = await fn(requestId, timeout.signal);
     logDiagnostic({
       event: "tool_complete",
       requestId,
       tool: toolName,
       elapsedMs: Date.now() - startedAt,
+      timeoutMs,
     });
     return result;
   } catch (error) {
+    const timedOut = isTimeoutError(error);
     logDiagnostic({
-      event: "tool_error",
+      event: timedOut ? "tool_timeout" : "tool_error",
       requestId,
       tool: toolName,
       elapsedMs: Date.now() - startedAt,
+      timeoutMs,
       error: serializeError(error),
     });
+    if (timedOut) {
+      return {
+        success: false,
+        timedOut: true,
+        error: error instanceof Error ? error.message : `${toolName} timed out.`,
+        hint: "The plugin aborted this tool request so the model cannot hang indefinitely. Try a narrower skill name/query or reduce the target directory size.",
+      } as T;
+    }
     throw error;
+  } finally {
+    timeout.cleanup();
   }
 }
+
 
 export async function toolsProvider(ctl: PluginController) {
   const listSkillsTool = tool({
@@ -151,8 +178,8 @@ export async function toolsProvider(ctl: PluginController) {
         .describe(`Maximum number of skills to return. Defaults to ${LIST_SKILLS_DEFAULT_LIMIT}.`),
     },
     implementation: async ({ query, limit }, { status }) =>
-      withToolLogging("list_skills", { query, limit }, async (requestId) => {
-        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skills");
+      withToolLogging(ctl, "list_skills", { query, limit }, TOOL_LIST_SKILLS_TIMEOUT_MS, async (requestId, toolSignal) => {
+        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skills", toolSignal);
         const cap = limit ?? LIST_SKILLS_DEFAULT_LIMIT;
 
         if (query && query.trim()) {
@@ -163,7 +190,7 @@ export async function toolsProvider(ctl: PluginController) {
             requestId,
             "list_skills",
             "resolve_exact_skill_query",
-            async () => resolveSkillByName(roots, registry, trimmedQuery, ctl.abortSignal),
+            async () => resolveSkillByName(roots, registry, trimmedQuery, toolSignal),
             { query: trimmedQuery, rootCount: roots.length },
           );
 
@@ -204,7 +231,7 @@ export async function toolsProvider(ctl: PluginController) {
             requestId,
             "list_skills",
             "search_skills",
-            async () => searchSkills(roots, registry, trimmedQuery, ctl.abortSignal),
+            async () => searchSkills(roots, registry, trimmedQuery, toolSignal),
             { query: trimmedQuery, rootCount: roots.length },
           );
 
@@ -249,7 +276,7 @@ export async function toolsProvider(ctl: PluginController) {
           requestId,
           "list_skills",
           "scan_skills",
-          async () => scanSkills(roots, registry, ctl.abortSignal),
+          async () => scanSkills(roots, registry, toolSignal),
           { rootCount: roots.length },
         );
 
@@ -298,8 +325,8 @@ export async function toolsProvider(ctl: PluginController) {
       file_path: z.string().optional().describe("Relative path inside the skill directory. Omit for SKILL.md."),
     },
     implementation: async ({ skill_name, file_path }, { status }) =>
-      withToolLogging("read_skill_file", { skill_name, file_path }, async (requestId) => {
-        const { registry, roots } = await getRuntimeContext(ctl, requestId, "read_skill_file");
+      withToolLogging(ctl, "read_skill_file", { skill_name, file_path }, TOOL_READ_SKILL_FILE_TIMEOUT_MS, async (requestId, toolSignal) => {
+        const { registry, roots } = await getRuntimeContext(ctl, requestId, "read_skill_file", toolSignal);
         status(`Reading ${skill_name}${file_path ? ` / ${file_path}` : ""}..`);
 
         if (
@@ -311,7 +338,7 @@ export async function toolsProvider(ctl: PluginController) {
             requestId,
             "read_skill_file",
             "read_absolute_path",
-            async () => readAbsolutePath(skill_name, roots, registry, ctl.abortSignal),
+            async () => readAbsolutePath(skill_name, roots, registry, toolSignal),
             { skill_name, file_path },
           );
           if ("error" in result) return { success: false, error: result.error };
@@ -338,7 +365,7 @@ export async function toolsProvider(ctl: PluginController) {
           requestId,
           "read_skill_file",
           "resolve_skill_by_name",
-          async () => resolveSkillByName(roots, registry, skill_name, ctl.abortSignal),
+          async () => resolveSkillByName(roots, registry, skill_name, toolSignal),
           { skill_name, rootCount: roots.length },
         );
 
@@ -365,7 +392,7 @@ export async function toolsProvider(ctl: PluginController) {
           requestId,
           "read_skill_file",
           "read_skill_file_content",
-          async () => readSkillFile(skill, file_path, registry, ctl.abortSignal),
+          async () => readSkillFile(skill, file_path, registry, toolSignal),
           { skill: skill.name, file_path: file_path || "SKILL.md", environment: skill.environment },
         );
         if ("error" in result) return { success: false, skill: skill_name, error: result.error };
@@ -408,8 +435,8 @@ export async function toolsProvider(ctl: PluginController) {
       sub_path: z.string().optional().describe("Optional relative sub-path within the skill directory."),
     },
     implementation: async ({ skill_name, sub_path }, { status }) =>
-      withToolLogging("list_skill_files", { skill_name, sub_path }, async (requestId) => {
-        const { registry, roots } = await getRuntimeContext(ctl, requestId, "list_skill_files");
+      withToolLogging(ctl, "list_skill_files", { skill_name, sub_path }, TOOL_LIST_SKILL_FILES_TIMEOUT_MS, async (requestId, toolSignal) => {
+        const { registry, roots } = await getRuntimeContext(ctl, requestId, "list_skill_files", toolSignal);
         status(`Listing files in ${skill_name}..`);
 
         if (
@@ -421,7 +448,7 @@ export async function toolsProvider(ctl: PluginController) {
             requestId,
             "list_skill_files",
             "list_absolute_directory",
-            async () => listAbsoluteDirectory(skill_name, roots, registry, ctl.abortSignal),
+            async () => listAbsoluteDirectory(skill_name, roots, registry, toolSignal),
             { skill_name, sub_path },
           );
           const formatted = formatDirEntries(entries, path.basename(skill_name));
@@ -446,7 +473,7 @@ export async function toolsProvider(ctl: PluginController) {
           requestId,
           "list_skill_files",
           "resolve_skill_by_name",
-          async () => resolveSkillByName(roots, registry, skill_name, ctl.abortSignal),
+          async () => resolveSkillByName(roots, registry, skill_name, toolSignal),
           { skill_name, rootCount: roots.length },
         );
 
@@ -462,7 +489,7 @@ export async function toolsProvider(ctl: PluginController) {
           requestId,
           "list_skill_files",
           "list_skill_directory",
-          async () => listSkillDirectory(skill, sub_path, registry, ctl.abortSignal),
+          async () => listSkillDirectory(skill, sub_path, registry, toolSignal),
           { skill: skill.name, environment: skill.environment, sub_path },
         );
         const formatted = formatDirEntries(entries, skill.name);
@@ -508,9 +535,11 @@ export async function toolsProvider(ctl: PluginController) {
     },
     implementation: async ({ command, cwd, environment, timeout_ms, env }, { status }) =>
       withToolLogging(
+        ctl,
         "run_command",
         { commandPreview: command.slice(0, 120), cwd, environment, timeout_ms, envKeys: env ? Object.keys(env) : [] },
-        async (requestId) => {
+        Math.min((timeout_ms ?? EXEC_DEFAULT_TIMEOUT_MS) + TOOL_COMMAND_SETUP_TIMEOUT_MS, EXEC_MAX_TIMEOUT_MS + TOOL_COMMAND_SETUP_TIMEOUT_MS),
+        async (requestId, toolSignal) => {
           const cfg = await timedStep(requestId, "run_command", "resolve_config", async () => resolveEffectiveConfig(ctl));
           status(`Running ${environment ? `in ${environment}` : "command"}: ${command.slice(0, 60)}${command.length > 60 ? "\u2026" : ""}`);
 
@@ -561,7 +590,7 @@ export async function toolsProvider(ctl: PluginController) {
                   cwd,
                   timeoutMs: timeout_ms,
                   env,
-                  signal: ctl.abortSignal,
+                  signal: toolSignal,
                   target: environment,
                 },
                 registry,

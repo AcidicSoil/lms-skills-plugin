@@ -28,6 +28,7 @@ function shouldLog(event: DiagnosticEvent): boolean {
     case "tool_start":
     case "tool_complete":
     case "tool_error":
+    case "tool_timeout":
     case "step_error":
     case "skill_not_found":
     case "skill_resolved":
