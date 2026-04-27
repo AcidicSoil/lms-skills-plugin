@@ -62,12 +62,12 @@ Users can explicitly activate a skill in a prompt with `$skill-name` notation:
 Use $example-skill to create the helper.
 ```
 
-When the preprocessor sees `$example-skill`, it resolves that skill directly and expands the matching `SKILL.md` body into an `<explicit_skill_activation>` block before the request reaches the model.
+When the preprocessor sees `$example-skill`, it resolves that skill directly and expands the matching `SKILL.md` body into a `<skill_invocation_packet>` before the request reaches the model.
 
 Explicit activations tell the model:
 
 - the named skill is intentional and should be treated as the highest-priority skill context for the request,
-- the matching `SKILL.md` body has already been expanded before model reasoning,
+- the matching `SKILL.md` body has already been expanded into a `<skill_invocation_packet>` before model reasoning,
 - all other user text is secondary task payload for that skill,
 - quoted strings, backticked snippets, globs, and command-looking text must not be interpreted before applying the expanded skill,
 - `run_command` must not be used for exploration,
@@ -81,7 +81,7 @@ $example-skill
 $my.custom_skill
 ```
 
-Explicit activation works even when the regular internal context is disabled, because the user is directly asking for a skill by name. Unlike normal routed candidates, explicit activations expand the selected `SKILL.md` body immediately; normal routing still uses progressive disclosure and expects the model to call `read_skill_file` for routed candidates. For explicit activations, the preprocessor removes the `$skill-name` token from the model-facing task payload and wraps the remaining user text in `<task_payload>` so the model applies the expanded skill before interpreting command-looking text.
+Explicit activation works even when the regular internal context is disabled, because the user is directly asking for a skill by name. Unlike normal routed candidates, explicit activations expand the selected `SKILL.md` body immediately; normal routing still uses progressive disclosure and expects the model to call `read_skill_file` for routed candidates. For explicit activations, the preprocessor removes the `$skill-name` token from the model-facing task payload and wraps the remaining user text in `<task_payload for_expanded_skills="...">` so the model applies the expanded skill before interpreting command-looking text.
 
 ### 3. Skill tools
 
@@ -358,7 +358,7 @@ In WSL mode, `~` is resolved using the WSL/Linux home directory.
 
 1. User sends a message.
 2. The prompt preprocessor checks for explicit `$skill-name` tokens.
-3. If present, the plugin resolves the exact skill and expands the stripped `SKILL.md` body before model reasoning.
+3. If present, the plugin resolves the exact skill and expands the stripped `SKILL.md` body into a `<skill_invocation_packet>` before model reasoning.
 4. If no explicit activation exists, the deterministic router scores skill metadata and injects up to three routed candidates, or only a compact reminder when no route is confident.
 5. For routed candidates, the model calls `read_skill_file("skill-name")` before doing covered work.
 6. The model follows `SKILL.md`; if needed, it calls `list_skill_files` and reads referenced supporting files.

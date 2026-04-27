@@ -1,12 +1,13 @@
 # Project Overview
 
-`lms-plugin-skills` is an LM Studio plugin that implements a Claude-style local skill system with deterministic routing and explicit skill expansion.
+`lms-plugin-skills` is an LM Studio plugin that implements a Claude-style local skill system with deterministic routing, explicit skill expansion, and auditable model-context injection.
 
 Current purpose:
 - Discover local skill directories that contain a `SKILL.md` entry point.
 - Internally supply skills context to the model through an LM Studio prompt preprocessor, without requiring users to paste anything into the system prompt.
 - Protect model context from overload by routing each normal prompt to a tiny candidate set instead of dumping a full skills catalog.
-- Expand explicitly requested `$skill-name` activations before model reasoning so the model receives the relevant `SKILL.md` body immediately.
+- Expand explicitly requested `$skill-name` activations before model reasoning so the model receives the relevant `SKILL.md` body immediately and is told the skill is preloaded/read/understood.
+- Log proof of every model-facing context injection, including packet type, selected/expanded skills, content hashes, sizes, previews, and payload summaries.
 - Expose LM Studio tools for listing/routing skills, reading skill files, listing skill directory contents, and optionally executing commands.
 - Support Windows, WSL, and Both runtime environments for path resolution, skill reads, directory listing, and command routing.
 - Persist plugin configuration under `~/.lmstudio/plugin-data/lms-skills/settings.json` because LM Studio plugin settings may not persist across new chats.
@@ -31,11 +32,13 @@ Core behavior:
   - If no confident route exists, only a compact `<skills_runtime_reminder>` is injected.
   - Skills with `disable-model-invocation: true` are excluded from automatic routing.
 - Explicit `$skill-name` activation is a special fast path:
-  - User can write `$create-plan`, `$docx`, `$example-skill`, etc.
+  - Supported tokens are lowercase skill-like names. Uppercase shell variables like `$HOME` are ignored and preserved as payload.
   - The preprocessor resolves the exact matching skill directly.
-  - The plugin reads and expands that skill’s stripped `SKILL.md` body inside `<expanded_skill_instructions>` before the model starts reasoning.
-  - No extra routing/scanning is done before the explicit expansion beyond what is needed to resolve the skill.
-  - All other user text is treated as task payload for the expanded skill.
+  - The plugin reads and expands that skill’s stripped `SKILL.md` body inside `<expanded_skill_instructions>` within a `<skill_invocation_packet>` before the model starts reasoning.
+  - The packet says the skill is already preloaded/read/understood and that the plugin already decided to use it.
+  - No extra routing/scanning is done before explicit expansion beyond what is needed to resolve the skill.
+  - The `$skill-name` token is removed from the model-facing task payload.
+  - Remaining user text is wrapped in `<task_payload for_expanded_skills="...">`.
   - Explicit activation works even when normal internal context injection is disabled.
   - Explicit activation can still use skills marked `disable-model-invocation: true` because the user directly requested them.
 - `list_skills({ query, mode: "route" })` exposes the same deterministic router used by prompt injection for debugging/testability.
@@ -44,14 +47,24 @@ Core behavior:
 - Tool input schemas are centralized in `src/toolSchemas.ts` using Zod and reject invalid/traversal/control-character inputs before implementation logic runs.
 - Tool-level timeouts prevent model/tool requests from hanging indefinitely.
 - Command execution is disabled by default and guarded by policy before any shell runtime is created.
-- Default diagnostics are human-readable, route/tool-focused summaries. Full JSON diagnostics are available with `LMS_SKILLS_DEBUG=1`.
+- Default diagnostics are human-readable route/tool/context summaries. Full JSON diagnostics are available with `LMS_SKILLS_DEBUG=1`.
+
+Context-injection proof logging:
+- Every prompt injection logs a `context_injection` event.
+- Default human-readable format starts with `[lms-skills] context ...`.
+- Logs prove whether model received:
+  - explicit expanded skill packet,
+  - routed skill candidates,
+  - compact reminder,
+  - fallback context.
+- Logs include injection kind, packet name, selected/expanded skill names, source paths when available, char counts, short SHA-256 hashes, previews, and payload summaries.
 
 Tech stack:
 - TypeScript targeting ES2022.
 - Node/CommonJS plugin runner.
 - LM Studio SDK (`@lmstudio/sdk`).
 - Zod for tool parameter schemas.
-- Node built-ins: `fs`, `path`, `os`, `child_process`.
+- Node built-ins: `fs`, `path`, `os`, `child_process`, `crypto`.
 
 Package metadata:
 - Main built entrypoint: `dist/index.js`.
@@ -73,14 +86,14 @@ Repository structure:
 - `src/pathResolver.ts`: environment-aware skill root/path resolution.
 - `src/scanner.ts`: skill discovery, frontmatter parsing, exact lookup, manifest parsing, description/body extraction, search, safe reads, directory listing.
 - `src/skillRouter.ts`: deterministic metadata router for prompt injection and `list_skills(mode="route")`.
-- `src/preprocessor.ts`: internal routed context injection, compact reminder, explicit `$skill` expansion.
+- `src/preprocessor.ts`: internal routed context injection, compact reminder, explicit `$skill` expansion, context-injection proof logging.
 - `src/toolsProvider.ts`: LM Studio tools (`list_skills`, `read_skill_file`, `list_skill_files`, `run_command`), request logging, tool-level timeout wiring.
 - `src/executor.ts`: target-aware command routing layer.
 - `src/commandSafety.ts`: command execution mode and safety policy.
 - `src/toolSchemas.ts`: reusable Zod schemas for tool inputs.
 - `src/timeout.ts`: timeout AbortSignal helpers.
 - `src/abort.ts`: abort/error helpers.
-- `src/diagnostics.ts`: structured/human-readable `[lms-skills]` logging.
+- `src/diagnostics.ts`: structured/human-readable `[lms-skills]` logging and context proof formatting.
 - `src/types.ts`: shared interfaces.
 - `src/pluginTypes.ts`: plugin context/controller types.
 - `src/setup.ts`: default skills directory bootstrap compatibility.

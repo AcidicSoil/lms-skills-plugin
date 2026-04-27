@@ -53,21 +53,39 @@ Prompt preprocessor:
 
 Explicit skill expansion:
 - Users can write `$skill-name` anywhere in the prompt.
-- Supported token form: starts with a letter, then letters/numbers/dot/underscore/hyphen.
+- Supported activation token form is lowercase skill-like names: starts with lowercase letter, then lowercase letters/numbers/dot/underscore/hyphen.
+- Uppercase shell variables such as `$HOME` are intentionally ignored and preserved as task payload.
 - The preprocessor extracts activations with `SKILL_ACTIVATION_PATTERN`.
 - For each activation, it calls `resolveSkillByName` directly.
-- If resolved, the preprocessor calls `readSkillFile` internally and injects the stripped `SKILL.md` body inside `<expanded_skill_instructions>` under `<explicit_skill_activation>` before the model starts reasoning.
+- If resolved, the preprocessor calls `readSkillFile` internally and injects the stripped `SKILL.md` body inside `<expanded_skill_instructions>` under a `<skill_invocation_packet>` before the model starts reasoning.
 - Explicit activation does not route supplemental skills first. It expands only the explicitly requested skill(s).
-- The model-facing instruction says the expanded skill is highest-priority source of truth and all remaining user text is task payload.
-- If expansion fails, the activation block includes `<expanded_skill_instructions_error>` and the model should call `read_skill_file`.
+- The model-facing contract says the expanded skill is already preloaded/read/understood and is the highest-priority source of truth.
+- The model-facing request is rewritten:
+  - `$skill-name` token is removed from payload,
+  - remaining user text is wrapped as `<task_payload for_expanded_skills="skill-name">`,
+  - command-looking or fenced markdown payload is treated as input to the expanded skill.
+- If expansion fails, the packet indicates failed expansion and the model should call `read_skill_file` for failed/resolved skills.
 - If unresolved, the model is instructed to call `list_skills` with the token name.
 - Explicit activation works even if regular internal context is disabled.
 - Explicit activation can use skills marked `disable-model-invocation: true` because the user directly requested them.
+
+Context-injection audit logging:
+- `src/preprocessor.ts` calls `logContextInjection` for explicit, routed, reminder, and fallback injections.
+- `src/diagnostics.ts` formats `context_injection` events as readable `[lms-skills] context ...` lines.
+- Every prompt injection should emit proof of model-facing context:
+  - `kind=explicit_expanded`, `kind=routed`, `kind=reminder`, or `kind=fallback`,
+  - packet type (`skill_invocation_packet`, `routed_skills`, etc.),
+  - skills/expanded skill proof,
+  - injected character count and short SHA-256 hash,
+  - compact injection preview,
+  - task payload character count/hash/preview.
+- Explicit expansion proof includes expanded skill body size, source path, short hash, and preview in the `skills=` field.
 
 Important behavior expectations:
 - `$create-plan` should expand the matching `create-plan/SKILL.md` body before model reasoning.
 - `$example-skill` should not cause the model to interpret backticked command-looking payload before applying the expanded skill.
 - Normal queries should not inject more than three routed candidates.
 - Casual/unrelated messages should receive only a compact reminder or no meaningful skill context.
+- Logs should let us prove what context was injected and which skill bodies were expanded.
 - Do not reintroduce mandatory system-prompt setup.
 - Do not reintroduce broad `<available_skills>` dumping as the default model context.
