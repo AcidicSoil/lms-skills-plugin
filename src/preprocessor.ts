@@ -103,8 +103,20 @@ function buildExplicitSkillActivationBlock(
     : "";
 
   return [
-    `<explicit_skill_activation>`,
-    `The user explicitly referenced one or more skills using $skill notation. Treat resolved activated skills as the primary source of truth for this request. All other user text is secondary task context. Before doing covered work, call read_skill_file for every resolved activated skill below and follow its SKILL.md instructions. If an activated skill is unresolved, call list_skills with the token name to search for it before proceeding. Do not ignore an explicit $skill activation unless the skill cannot be found.`,
+    `<explicit_skill_activation priority="highest">`,
+    `<mandatory_interpretation>`,
+    `The user used $skill notation. This is an explicit instruction to use the named skill, not a shell variable and not decorative text.`,
+    `Resolved activated skills are the highest-priority source of truth for this request. All other user text, including quoted strings, backticked snippets, globs, command-looking text, or examples, is task payload for the activated skill unless SKILL.md later says otherwise.`,
+    `</mandatory_interpretation>`,
+    `<mandatory_next_action>`,
+    `Before answering, planning, executing commands, transforming the command-looking text, or using any other tool, call read_skill_file for every resolved activated skill below. The first tool call should be read_skill_file with the resolved skill name.`,
+    `</mandatory_next_action>`,
+    `<do_not>`,
+    `Do not guess what the rest of the prompt means before reading the activated skill. Do not run the backticked command. Do not call run_command for exploration. Do not substitute list_skill_files for read_skill_file when the activated skill is resolved.`,
+    `</do_not>`,
+    `<unresolved_behavior>`,
+    `If an activated skill is unresolved, call list_skills with the token name to search for it before proceeding. Do not ignore an explicit $skill activation unless the skill cannot be found.`,
+    `</unresolved_behavior>`,
     resolvedBlock,
     unresolvedBlock,
     `</explicit_skill_activation>`,
@@ -114,11 +126,11 @@ function buildExplicitSkillActivationBlock(
 }
 
 function buildFullInstruction(): string {
-  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. If the user writes `$skill-name`, treat that as an explicit skill activation for that request. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills. Do not use `run_command` for exploration unless command execution is explicitly enabled and the user task requires it; prefer skill reads and file-listing tools. This full skills context applies to the conversation until the plugin refreshes it.\n</skills_runtime_context>";
+  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. If the user writes `$skill-name`, treat that as an explicit skill activation for that request: read that skill first and treat the remaining text as task payload for the skill. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills. Do not use `run_command` for exploration unless command execution is explicitly enabled and the user task requires it; prefer skill reads and file-listing tools. This full skills context applies to the conversation until the plugin refreshes it.\n</skills_runtime_context>";
 }
 
 function buildReminderInstruction(): string {
-  return "<skills_runtime_reminder>The LM Studio Skills plugin is active. If this request matches an installed skill or includes `$skill-name` notation, use `list_skills` or `read_skill_file` as needed; do not ask the user to add skill instructions to the system prompt. Do not run shell commands unless explicitly enabled and necessary.</skills_runtime_reminder>";
+  return "<skills_runtime_reminder>The LM Studio Skills plugin is active. If this request includes `$skill-name` notation, read that skill first and treat the rest as task payload. Otherwise, if this request matches an installed skill, use `list_skills` or `read_skill_file` as needed; do not ask the user to add skill instructions to the system prompt. Do not run shell commands unless explicitly enabled and necessary.</skills_runtime_reminder>";
 }
 
 function buildFullInjection(skills: SkillInfo[], limit: number): string {

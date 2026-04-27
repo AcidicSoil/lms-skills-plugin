@@ -65,8 +65,10 @@ When the preprocessor sees `$shell-helper-generator`, it resolves that skill dir
 Explicit activations tell the model:
 
 - the named skill is intentional and should be treated as the highest-priority skill context for the request,
-- all other user text is secondary task context,
-- the model should call `read_skill_file` for the activated skill before doing covered work,
+- all other user text is secondary task payload for that skill,
+- quoted strings, backticked snippets, globs, and command-looking text must not be interpreted before reading the skill,
+- the first tool call should be `read_skill_file` for the activated skill,
+- `run_command` must not be used for exploration,
 - unresolved `$skill` tokens should be searched with `list_skills` before proceeding.
 
 The notation accepts skill-like names beginning with a letter and containing letters, numbers, `.`, `_`, or `-`, for example:
@@ -258,14 +260,16 @@ Timeouts are enforced with `AbortSignal`, so WSL/runtime subprocesses are killed
 
 The plugin emits concise structured logs prefixed with `[lms-skills]`.
 
-Default logs focus on request-level events, such as:
+Default logs are human-readable request summaries, such as:
 
 ```text
-[lms-skills] {"event":"tool_start","tool":"read_skill_file",...}
-[lms-skills] {"event":"skill_resolved","resolvedSkill":"docx",...}
-[lms-skills] {"event":"read_skill_file_result","contentLength":1234,...}
-[lms-skills] {"event":"tool_complete","elapsedMs":18,...}
+[lms-skills] read_skill_file start skill=shell-helper-generator file=- timeout=30000ms id=read_skill_file-...
+[lms-skills] read_skill_file resolved shell-helper-generator -> shell-helper-generator env=wsl id=read_skill_file-...
+[lms-skills] read_skill_file read skill=shell-helper-generator mode=skill env=wsl bytes=2048 id=read_skill_file-...
+[lms-skills] read_skill_file done 42ms id=read_skill_file-...
 ```
+
+Set `LMS_SKILLS_DEBUG=1` to switch back to full JSON event logs.
 
 Enable verbose step/runtime tracing with:
 
