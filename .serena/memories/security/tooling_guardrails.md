@@ -12,7 +12,7 @@ Command execution:
 - `validateCommandSafety(command, cfg.commandExecutionMode)` must run before runtime registry creation or shell execution in `run_command`.
 - Blocked categories include destructive file operations, package managers, network/download tools, ssh/scp/rsync, mutating git commands, process killing, nested shells, encoded PowerShell, and redirection.
 - Read-only mode also blocks shell metacharacters, redirects, pipes, command chaining, variable expansion, and mutating args such as `find -delete`, `find -exec`, `sed -i`.
-- This is policy-level hardening, not a full OS sandbox. For untrusted workloads, use external container/VM/locked-down WSL sandbox with read-only mounts, no network, and resource limits.
+- This is policy-level hardening, not a full OS sandbox. For untrusted workloads, use an external container/VM/locked-down WSL sandbox with read-only mounts, no network, and resource limits.
 
 Tool schemas:
 - Tool input validation is centralized in `src/toolSchemas.ts` using Zod.
@@ -28,6 +28,21 @@ Tool schemas:
 - `read_skill_file.file_path` and `list_skill_files.sub_path` are intentionally relative-only. Absolute/display paths are accepted through `skill_name` for absolute skill/directory modes.
 - Runtime path containment checks remain necessary even with schemas.
 
+Context-overload protection:
+- Normal prompt injection uses deterministic routing rather than a broad skills catalog.
+- `src/skillRouter.ts` scores metadata/frontmatter and selects only up to `DEFAULT_MAX_ROUTED_SKILLS` candidates.
+- `disable-model-invocation: true` excludes skills from automatic routing.
+- Explicit `$skill-name` activations bypass routing and expand only the requested skill body.
+- Full skill bodies are not injected for normal routed candidates; they are loaded by `read_skill_file` if needed.
+- This protects model context from large skill sets and reduces distractor skills.
+
+Explicit skill expansion safety:
+- `$skill-name` reads and expands matching `SKILL.md` before the model reasons.
+- Frontmatter is stripped from expanded body.
+- Expansion is limited by existing file read size/truncation safeguards in `readFileSafe`.
+- Explicit activation should not route or inject unrelated supplemental skills.
+- Command-looking user payload remains task payload unless expanded skill instructions and command settings permit execution.
+
 Timeouts and aborts:
 - Timeout constants live in `src/constants.ts`:
   - `PREPROCESSOR_SCAN_TIMEOUT_MS = 3_000`.
@@ -42,9 +57,10 @@ Timeouts and aborts:
 - Do not throw from subprocess data handlers on abort; ignore data after abort and let controlled abort path reject.
 
 Diagnostics:
-- Structured logging lives in `src/diagnostics.ts`.
-- Default logs are concise. Verbose step/runtime logs are enabled via `LMS_SKILLS_DEBUG=1`.
-- Important events: `tool_start`, `tool_complete`, `tool_timeout`, `tool_error`, `skill_resolved`, `read_skill_file_result`, `list_skills_exact_result`, `run_command_safety_check`, `run_command_result`, `runtime_exec_abort`, `runtime_exec_error`.
+- Structured/human logs live in `src/diagnostics.ts`.
+- Default logs are human-readable, not raw JSON.
+- Verbose full JSON logs are enabled via `LMS_SKILLS_DEBUG=1`.
+- Important events: `prompt_route`, `preprocess_activation`, `tool_start`, `tool_complete`, `tool_timeout`, `tool_error`, `skill_resolved`, `read_skill_file_result`, `list_skills_route_result`, `list_skills_exact_result`, `run_command_safety_check`, `run_command_result`, `runtime_exec_abort`, `runtime_exec_error`.
 - Keep logs actionable and avoid dumping huge data. Use previews/counts/elapsed times, not full content.
 
 High-risk areas for future changes:
@@ -54,3 +70,5 @@ High-risk areas for future changes:
 - Absolute path read/list behavior.
 - Schema changes that loosen path traversal or command constraints.
 - Tool timeout values and abort propagation.
+- Reintroducing broad skill catalog injection.
+- Expanding multiple large `$skill` bodies without additional limits.

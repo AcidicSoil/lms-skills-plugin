@@ -49,21 +49,33 @@ Security and robustness patterns:
 Prompt/preprocessor conventions:
 - The plugin should not require a user-provided system prompt.
 - Internal context injection happens in `src/preprocessor.ts`.
-- Full context is injected on first use/change/refresh; compact reminder is used on intervening turns.
-- Explicit `$skill-name` activation must be treated as high-priority for the request and should work even when normal auto-injection is disabled.
-- `Max Skills in Context` should cap preprocessor gathering/injection work.
+- Normal prompt path should use deterministic routing from `src/skillRouter.ts`.
+- Normal prompt injection should emit `<routed_skills>` with a tiny candidate set, not broad `<available_skills>` catalogs.
+- Full `SKILL.md` bodies should not be injected for normal routed candidates; the model should call `read_skill_file` if needed.
+- Explicit `$skill-name` activation is the exception: resolve exact skill and expand stripped `SKILL.md` body before model reasoning.
+- `$skill-name` activation should work even when normal auto-injection is disabled.
+- `Max Skills in Context` should cap discovery work, while `DEFAULT_MAX_ROUTED_SKILLS` caps normal prompt injection.
 
 Diagnostics conventions:
 - Use `logDiagnostic` from `src/diagnostics.ts` for structured logs.
-- Default logs should be concise and high-value.
+- Default logs should be concise, human-readable, and route/tool focused.
 - Step/runtime traces should be debug-only or slow/error/timeout events.
 - Preserve request IDs across related tool steps.
+- Prefer wide/canonical route events over scattered logs.
 
-Docstrings/comments:
-- There are few inline comments/docstrings. Prefer readable function names and straightforward control flow. Add comments only where logic is non-obvious.
+Documentation conventions:
+- README should explain routed context, explicit `$skill` expansion, frontmatter metadata, command safety, timeouts, and diagnostics.
+- Avoid hard-coding a real user skill name as a special example. Use neutral placeholders such as `example-skill` or `create-plan` only as generic illustrations.
+- If behavior changes, update README and project memories in the same task when feasible.
 
 Testing conventions:
-- No test framework or test scripts are currently configured in `package.json`.
+- No formal test framework or test scripts are currently configured in `package.json`.
 - Use `npm run build` as the required verification step.
 - For focused validation, ad hoc Node smoke tests against compiled `dist/` modules are acceptable and have been used during development.
-- If tests are added later, add package scripts and update `suggested_commands` / `task_completion_checklist` memories.
+- Current important smoke-test targets:
+  - deterministic route selection and no-route behavior,
+  - max routed candidates <= 3,
+  - `$skill-name` expansion includes stripped body before model reasoning,
+  - `disable-model-invocation` excluded from automatic routing but usable explicitly,
+  - tool schemas reject traversal/control/malformed command inputs,
+  - command safety blocks dangerous commands by default.

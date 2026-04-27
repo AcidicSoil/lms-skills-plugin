@@ -4,15 +4,15 @@ A Claude-style internal skill system for LM Studio. When the plugin is active, i
 
 ## What it does
 
-`lms-plugin-skills` discovers local skill directories, tells the model which skills are available, and provides tools for reading skill instructions and supporting files.
+`lms-plugin-skills` discovers local skill directories, deterministically routes the current request to the smallest relevant skill set, and provides tools for reading skill instructions and supporting files.
 
-A skill is a directory containing a `SKILL.md` file. The model sees a compact list of available skills, then calls `read_skill_file` before doing work covered by a relevant skill.
+A skill is a directory containing a `SKILL.md` file. Normal requests receive only routed candidates; explicit `$skill-name` activations expand the matching `SKILL.md` body before the model begins reasoning.
 
 ## Key features
 
 - **No system prompt setup required** — the plugin uses an LM Studio prompt preprocessor to provide skills context internally.
-- **Efficient context injection** — full skills context is injected at startup, when skills change, and periodically; normal later turns receive a compact reminder.
-- **Explicit skill activation** — users can write `$skill-name` to force the model to locate, read, and use that skill for the request.
+- **Deterministic skill routing** — normal prompts inject only the top routed candidates, capped at three, instead of dumping every installed skill into context.
+- **Explicit skill expansion** — users can write `$skill-name` to expand that skill’s `SKILL.md` body into the prompt before the model starts reasoning.
 - **Exact skill lookup** — `read_skill_file("skill-name")` checks the matching skill directory directly before falling back to broader scans.
 - **Windows, WSL, and Both modes** — skill paths and file reads can be resolved in Windows, WSL, or both environments.
 - **Safe command execution defaults** — `run_command` is disabled by default and guarded by explicit safety modes.
@@ -159,7 +159,7 @@ Frontmatter behavior:
 - Descriptions are capped at 1,536 characters to keep high-level context useful without loading the full skill body.
 - The frontmatter is stripped from `read_skill_file` results for `SKILL.md`, so the model receives the detailed instruction body after discovery metadata has already been consumed.
 
-This mirrors the progressive-disclosure pattern: lightweight frontmatter is always available for selection, while the full markdown body is loaded only for relevant or explicitly activated skills.
+This mirrors the progressive-disclosure pattern: lightweight frontmatter is used for routing, normal routed skills load their body through `read_skill_file`, and explicit `$skill-name` activations expand their matching body immediately.
 
 ### `skill.json` optional legacy metadata
 
@@ -193,7 +193,7 @@ tags
 environment/display path
 ```
 
-The router scores exact name matches, tag matches, description/when-to-use token overlap, and path/name overlap. Skills with `disable-model-invocation: true` are excluded from automatic routing. The full `SKILL.md` body is not used for prompt injection; it is loaded only after the model calls `read_skill_file`.
+The router scores exact name matches, tag matches, description/when-to-use token overlap, and path/name overlap. Skills with `disable-model-invocation: true` are excluded from automatic routing. For normal routed candidates, the full `SKILL.md` body is not injected; the model loads it with `read_skill_file`. For explicit `$skill-name` activation, the matching `SKILL.md` body is expanded immediately before the model starts reasoning.
 
 Use `list_skills` with `mode: "route"` to inspect the same routing decision outside the prompt loop.
 
@@ -353,10 +353,10 @@ In WSL mode, `~` is resolved using the WSL/Linux home directory.
 ## Model workflow
 
 1. User sends a message.
-2. The prompt preprocessor supplies full skills context or a compact skills reminder.
-3. The model sees available skills or an explicit `$skill-name` activation.
-4. For matching or explicitly activated work, the model calls `read_skill_file("skill-name")`.
-5. The plugin resolves exact skill names directly when possible.
+2. The prompt preprocessor checks for explicit `$skill-name` tokens.
+3. If present, the plugin resolves the exact skill and expands the stripped `SKILL.md` body before model reasoning.
+4. If no explicit activation exists, the deterministic router scores skill metadata and injects up to three routed candidates, or only a compact reminder when no route is confident.
+5. For routed candidates, the model calls `read_skill_file("skill-name")` before doing covered work.
 6. The model follows `SKILL.md`; if needed, it calls `list_skill_files` and reads referenced supporting files.
 7. Shell commands are blocked unless command execution has been explicitly enabled.
 
