@@ -1,1 +1,0 @@
-Modelli di applicazione CLI per Python. Si attiva su: cli, riga di comando, typer, clic, argparse, terminale, rich, console, terminale ui.

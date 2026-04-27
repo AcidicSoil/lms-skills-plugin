@@ -1,3 +1,0 @@
-# asking-questions
-
-Guidance for asking clarifying questions when user requests are ambiguous, have multiple valid approaches, or require critical decisions. Use when implementation choices exist that could significantly affect outcomes.

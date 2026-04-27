@@ -1,1 +1,0 @@
-Patrones de aplicación CLI para Python. Activadores en: cli, línea de comando, mecanografiado, clic, argparse, terminal, rich, consola, terminal ui.
