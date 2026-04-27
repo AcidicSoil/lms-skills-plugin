@@ -12,6 +12,7 @@ A skill is a directory containing a `SKILL.md` file. The model sees a compact li
 
 - **No system prompt setup required** — the plugin uses an LM Studio prompt preprocessor to provide skills context internally.
 - **Efficient context injection** — full skills context is injected at startup, when skills change, and periodically; normal later turns receive a compact reminder.
+- **Explicit skill activation** — users can write `$skill-name` to force the model to locate, read, and use that skill for the request.
 - **Exact skill lookup** — `read_skill_file("skill-name")` checks the matching skill directory directly before falling back to broader scans.
 - **Windows, WSL, and Both modes** — skill paths and file reads can be resolved in Windows, WSL, or both environments.
 - **Safe command execution defaults** — `run_command` is disabled by default and guarded by explicit safety modes.
@@ -51,7 +52,34 @@ To avoid repeatedly growing chat history with the same full list, the plugin inj
 
 Manual system-prompt instructions are optional and should only be used for extra project-specific behavior beyond the plugin defaults.
 
-### 2. Skill tools
+### 2. Explicit skill activation
+
+Users can explicitly activate a skill in a prompt with `$skill-name` notation:
+
+```text
+Use $shell-helper-generator to create the helper.
+```
+
+When the preprocessor sees `$shell-helper-generator`, it resolves that skill directly and injects an `<explicit_skill_activation>` block before the request reaches the model.
+
+Explicit activations tell the model:
+
+- the named skill is intentional and should be treated as the highest-priority skill context for the request,
+- all other user text is secondary task context,
+- the model should call `read_skill_file` for the activated skill before doing covered work,
+- unresolved `$skill` tokens should be searched with `list_skills` before proceeding.
+
+The notation accepts skill-like names beginning with a letter and containing letters, numbers, `.`, `_`, or `-`, for example:
+
+```text
+$docx
+$shell-helper-generator
+$my.custom_skill
+```
+
+Explicit activation works even when the regular internal context is disabled, because the user is directly asking for a skill by name.
+
+### 3. Skill tools
 
 | Tool | Purpose |
 |---|---|
@@ -60,7 +88,7 @@ Manual system-prompt instructions are optional and should only be used for extra
 | `list_skill_files` | Explore files inside a skill directory. |
 | `run_command` | Execute shell commands only when explicitly enabled by the command safety setting. Disabled by default. |
 
-### 3. Runtime environments
+### 4. Runtime environments
 
 The plugin can resolve skills in different filesystem/runtime environments:
 
@@ -272,8 +300,8 @@ In WSL mode, `~` is resolved using the WSL/Linux home directory.
 
 1. User sends a message.
 2. The prompt preprocessor supplies full skills context or a compact skills reminder.
-3. The model sees available skills or knows the skills tools are available.
-4. For matching work, the model calls `read_skill_file("skill-name")`.
+3. The model sees available skills or an explicit `$skill-name` activation.
+4. For matching or explicitly activated work, the model calls `read_skill_file("skill-name")`.
 5. The plugin resolves exact skill names directly when possible.
 6. The model follows `SKILL.md`; if needed, it calls `list_skill_files` and reads referenced supporting files.
 7. Shell commands are blocked unless command execution has been explicitly enabled.

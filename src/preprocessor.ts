@@ -1,5 +1,5 @@
 import { resolveEffectiveConfig } from "./settings";
-import { scanSkills } from "./scanner";
+import { resolveSkillByName, scanSkills } from "./scanner";
 import { deriveRuntimeTargets } from "./environment";
 import { createRuntimeRegistry } from "./runtime";
 import { resolveSkillRoots } from "./pathResolver";
@@ -37,12 +37,88 @@ function buildAvailableSkillsBlock(skills: SkillInfo[], limit: number): string {
   return `<available_skills>\n${skillTags}\n</available_skills>`;
 }
 
+
+interface SkillActivationRequest {
+  token: string;
+  skillName: string;
+}
+
+interface ResolvedSkillActivation extends SkillActivationRequest {
+  skill?: SkillInfo;
+}
+
+const SKILL_ACTIVATION_PATTERN = /(^|[^A-Za-z0-9_])\$([A-Za-z][A-Za-z0-9._-]{1,127})(?=$|[^A-Za-z0-9._-])/g;
+
+function extractSkillActivations(text: string): SkillActivationRequest[] {
+  const seen = new Set<string>();
+  const activations: SkillActivationRequest[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = SKILL_ACTIVATION_PATTERN.exec(text)) !== null) {
+    const skillName = match[2];
+    const key = skillName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    activations.push({ token: `$${skillName}`, skillName });
+  }
+
+  return activations;
+}
+
+function buildExplicitSkillActivationBlock(
+  activations: ResolvedSkillActivation[],
+): string {
+  const resolved = activations.filter((a) => a.skill);
+  const unresolved = activations.filter((a) => !a.skill);
+
+  const resolvedBlock = resolved
+    .map((activation) => {
+      const skill = activation.skill!;
+      return [
+        `<activated_skill>`,
+        `<token>`,
+        activation.token,
+        `</token>`,
+        `<n>`,
+        skill.name,
+        `</n>`,
+        `<description>`,
+        skill.description,
+        `</description>`,
+        `<environment>`,
+        skill.environmentLabel,
+        `</environment>`,
+        `<location>`,
+        skill.displayPath,
+        `</location>`,
+        `</activated_skill>`,
+      ].join("\n");
+    })
+    .join("\n\n");
+
+  const unresolvedBlock = unresolved.length
+    ? `\n<unresolved_skill_activations>\n${unresolved
+        .map((activation) => `<skill_token>${activation.token}</skill_token>`)
+        .join("\n")}\n</unresolved_skill_activations>`
+    : "";
+
+  return [
+    `<explicit_skill_activation>`,
+    `The user explicitly referenced one or more skills using $skill notation. Treat resolved activated skills as the primary source of truth for this request. All other user text is secondary task context. Before doing covered work, call read_skill_file for every resolved activated skill below and follow its SKILL.md instructions. If an activated skill is unresolved, call list_skills with the token name to search for it before proceeding. Do not ignore an explicit $skill activation unless the skill cannot be found.`,
+    resolvedBlock,
+    unresolvedBlock,
+    `</explicit_skill_activation>`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function buildFullInstruction(): string {
-  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills. Do not use `run_command` for exploration unless command execution is explicitly enabled and the user task requires it; prefer skill reads and file-listing tools. This full skills context applies to the conversation until the plugin refreshes it.\n</skills_runtime_context>";
+  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. If the user writes `$skill-name`, treat that as an explicit skill activation for that request. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills. Do not use `run_command` for exploration unless command execution is explicitly enabled and the user task requires it; prefer skill reads and file-listing tools. This full skills context applies to the conversation until the plugin refreshes it.\n</skills_runtime_context>";
 }
 
 function buildReminderInstruction(): string {
-  return "<skills_runtime_reminder>The LM Studio Skills plugin is active. If this request matches an installed skill, use `list_skills` or `read_skill_file` as needed; do not ask the user to add skill instructions to the system prompt. Do not run shell commands unless explicitly enabled and necessary.</skills_runtime_reminder>";
+  return "<skills_runtime_reminder>The LM Studio Skills plugin is active. If this request matches an installed skill or includes `$skill-name` notation, use `list_skills` or `read_skill_file` as needed; do not ask the user to add skill instructions to the system prompt. Do not run shell commands unless explicitly enabled and necessary.</skills_runtime_reminder>";
 }
 
 function buildFullInjection(skills: SkillInfo[], limit: number): string {
@@ -166,10 +242,10 @@ export async function promptPreprocessor(
 
   const cfg = resolveEffectiveConfig(ctl);
 
-  if (!cfg.autoInject) return userMessage;
-
   checkAbort(signal);
   const text = extractText(userMessage);
+  const hasExplicitSkillActivation = extractSkillActivations(text).length > 0;
+  if (!cfg.autoInject && !hasExplicitSkillActivation) return userMessage;
   checkAbort(signal);
   if (text.trim().length === 0) return userMessage;
 
@@ -182,6 +258,57 @@ export async function promptPreprocessor(
     const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
     const roots = await resolveSkillRoots(cfg.skillsPaths, targets, registry, scanSignal);
     checkAbort(scanSignal);
+
+    const requestedActivations = extractSkillActivations(text);
+    const resolvedActivations: ResolvedSkillActivation[] = [];
+    for (const activation of requestedActivations) {
+      checkAbort(scanSignal);
+      const skill = await resolveSkillByName(
+        roots,
+        registry,
+        activation.skillName,
+        scanSignal,
+      );
+      resolvedActivations.push({ ...activation, ...(skill ? { skill } : {}) });
+    }
+
+    const hasExplicitActivation = requestedActivations.length > 0;
+    if (hasExplicitActivation) {
+      const activatedSkills = resolvedActivations
+        .map((activation) => activation.skill)
+        .filter((skill): skill is SkillInfo => Boolean(skill));
+      const supplementalSkills = await scanSkills(
+        roots,
+        registry,
+        scanSignal,
+        Math.max(cfg.maxSkillsInContext - activatedSkills.length, 0),
+      );
+      const skillKey = (skill: SkillInfo) => `${skill.environment}:${skill.resolvedDirectoryPath}`;
+      const seen = new Set(activatedSkills.map(skillKey));
+      const mergedSkills = [
+        ...activatedSkills,
+        ...supplementalSkills.filter((skill) => {
+          const key = skillKey(skill);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }),
+      ];
+      checkAbort(signal);
+      return injectIntoMessage(
+        userMessage,
+        [
+          buildExplicitSkillActivationBlock(resolvedActivations),
+          mergedSkills.length > 0
+            ? buildAvailableSkillsBlock(mergedSkills, Math.max(mergedSkills.length, cfg.maxSkillsInContext))
+            : "",
+          buildReminderInjection(),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      );
+    }
+
     const skills = await scanSkills(
       roots,
       registry,
