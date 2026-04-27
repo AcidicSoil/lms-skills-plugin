@@ -1,11 +1,7 @@
-import * as child_process from "child_process";
-import * as fs from "fs";
-import * as os from "os";
-import {
-  EXEC_DEFAULT_TIMEOUT_MS,
-  EXEC_MAX_TIMEOUT_MS,
-  EXEC_MAX_OUTPUT_BYTES,
-} from "./constants";
+import type { RuntimeTargetName } from "./environment";
+import { detectHostPlatform } from "./environment";
+import type { RuntimeRegistry } from "./runtime";
+import type { RuntimeExecOptions } from "./runtime/types";
 
 export type Platform = "windows" | "macos" | "linux";
 
@@ -22,175 +18,67 @@ export interface ExecResult {
   timedOut: boolean;
   shell: string;
   platform: Platform;
+  environment?: RuntimeTargetName;
 }
 
-export interface ExecOptions {
-  cwd?: string;
-  timeoutMs?: number;
-  shellPath?: string;
-  env?: Record<string, string>;
+export interface ExecOptions extends RuntimeExecOptions {
+  target?: RuntimeTargetName;
 }
 
-function detectPlatform(): Platform {
-  if (process.platform === "win32") return "windows";
-  if (process.platform === "darwin") return "macos";
-  return "linux";
+export function detectPlatform(): Platform {
+  return detectHostPlatform();
 }
 
-function resolveShell(override?: string): ShellInfo {
-  const platform = detectPlatform();
-
-  if (override && override.trim()) {
-    return { path: override.trim(), args: ["-c"], platform };
-  }
-
-  if (platform === "windows") {
-    const pwshCore = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
-    const pwshBuiltin =
-      "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
-
-    if (fs.existsSync(pwshCore)) {
-      return {
-        path: pwshCore,
-        args: [
-          "-NoProfile",
-          "-NonInteractive",
-          "-OutputEncoding",
-          "UTF8",
-          "-Command",
-        ],
-        platform,
-      };
-    }
-    if (fs.existsSync(pwshBuiltin)) {
-      return {
-        path: pwshBuiltin,
-        args: [
-          "-NoProfile",
-          "-NonInteractive",
-          "-OutputEncoding",
-          "UTF8",
-          "-Command",
-        ],
-        platform,
-      };
-    }
-    return { path: "cmd.exe", args: ["/c"], platform };
-  }
-
-  for (const sh of ["/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh"]) {
-    if (fs.existsSync(sh)) {
-      return { path: sh, args: ["-c"], platform };
-    }
-  }
-
-  return { path: "/bin/sh", args: ["-c"], platform };
+export function inferTargetFromCwd(cwd?: string): RuntimeTargetName | null {
+  if (!cwd) return null;
+  if (cwd.startsWith("WSL:") || cwd.startsWith("/")) return "wsl";
+  if (cwd.startsWith("Windows:") || /^[A-Za-z]:[\\/]/.test(cwd)) return "windows";
+  if (cwd.startsWith("\\\\wsl$\\") || cwd.startsWith("\\\\wsl.localhost\\")) return "wsl";
+  return null;
 }
 
-function resolveCwd(cwd?: string): string {
-  if (!cwd) return os.homedir();
-  const expanded = cwd.replace(/^~(?=[/\\]|$)/, os.homedir());
-  try {
-    if (fs.existsSync(expanded) && fs.statSync(expanded).isDirectory())
-      return expanded;
-  } catch {}
-  return os.homedir();
+function stripDisplayPath(cwd?: string): string | undefined {
+  if (!cwd) return undefined;
+  if (cwd.startsWith("WSL:")) return cwd.slice(4);
+  if (cwd.startsWith("Windows:")) return cwd.slice("Windows:".length);
+  return cwd;
 }
 
-function truncate(text: string, maxBytes: number): string {
-  const buf = Buffer.from(text, "utf-8");
-  if (buf.length <= maxBytes) return text;
-  return (
-    buf.slice(0, maxBytes).toString("utf-8") +
-    `\n[truncated - output exceeded ${maxBytes} bytes]`
-  );
-}
-
-function normalizeOutput(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
-
-export function execCommand(
+export async function execCommandForTarget(
+  registry: RuntimeRegistry,
+  target: RuntimeTargetName,
   command: string,
-  options: ExecOptions = {},
+  options: RuntimeExecOptions = {},
 ): Promise<ExecResult> {
-  return new Promise((resolve) => {
-    const shellInfo = resolveShell(options.shellPath);
-    const cwd = resolveCwd(options.cwd);
-    const timeoutMs = Math.min(
-      options.timeoutMs ?? EXEC_DEFAULT_TIMEOUT_MS,
-      EXEC_MAX_TIMEOUT_MS,
-    );
-
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      PYTHONUTF8: "1",
-      PYTHONIOENCODING: "utf-8",
-      ...(options.env ?? {}),
-    };
-
-    let proc: child_process.ChildProcess;
-
-    try {
-      proc = child_process.spawn(shellInfo.path, [...shellInfo.args, command], {
-        cwd,
-        env,
-        windowsHide: true,
-      });
-    } catch (spawnErr) {
-      resolve({
-        stdout: "",
-        stderr: spawnErr instanceof Error ? spawnErr.message : String(spawnErr),
-        exitCode: 1,
-        timedOut: false,
-        shell: shellInfo.path,
-        platform: shellInfo.platform,
-      });
-      return;
-    }
-
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-
-    proc.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf-8");
-    });
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf-8");
-    });
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        proc.kill("SIGKILL");
-      } catch {}
-    }, timeoutMs);
-
-    proc.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({
-        stdout: truncate(normalizeOutput(stdout), EXEC_MAX_OUTPUT_BYTES),
-        stderr: truncate(normalizeOutput(stderr), EXEC_MAX_OUTPUT_BYTES),
-        exitCode: code ?? 1,
-        timedOut,
-        shell: shellInfo.path,
-        platform: shellInfo.platform,
-      });
-    });
-
-    proc.on("error", (err) => {
-      clearTimeout(timer);
-      resolve({
-        stdout: "",
-        stderr: err.message,
-        exitCode: 1,
-        timedOut: false,
-        shell: shellInfo.path,
-        platform: shellInfo.platform,
-      });
-    });
+  const result = await registry.getRuntime(target).exec(command, {
+    ...options,
+    cwd: stripDisplayPath(options.cwd),
   });
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+    timedOut: result.timedOut,
+    shell: result.shell,
+    platform: detectPlatform(),
+    environment: result.environment,
+  };
 }
 
-export { resolveShell, detectPlatform };
+export async function execCommand(
+  command: string,
+  options: ExecOptions,
+  registry: RuntimeRegistry,
+  defaultTarget: RuntimeTargetName,
+): Promise<ExecResult> {
+  const target = options.target ?? inferTargetFromCwd(options.cwd) ?? defaultTarget;
+  return execCommandForTarget(registry, target, command, options);
+}
+
+export function resolveShell(): ShellInfo {
+  const platform = detectPlatform();
+  if (platform === "windows") {
+    return { path: "powershell.exe/cmd.exe", args: [], platform };
+  }
+  return { path: "bash", args: ["-lc"], platform };
+}

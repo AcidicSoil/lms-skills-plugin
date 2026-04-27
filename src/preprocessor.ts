@@ -1,5 +1,8 @@
 import { resolveEffectiveConfig } from "./settings";
 import { scanSkills } from "./scanner";
+import { deriveRuntimeTargets } from "./environment";
+import { createRuntimeRegistry } from "./runtime";
+import { resolveSkillRoots } from "./pathResolver";
 import { MIN_PROMPT_LENGTH, REINJECT_INTERVAL_MS } from "./constants";
 import type { PluginController } from "./pluginTypes";
 import type { SkillInfo } from "./types";
@@ -16,8 +19,11 @@ function buildAvailableSkillsBlock(skills: SkillInfo[], limit: number): string {
         `<description>`,
         s.description,
         `</description>`,
+        `<environment>`,
+        s.environmentLabel,
+        `</environment>`,
         `<location>`,
-        s.skillMdPath,
+        s.displayPath,
         `</location>`,
         `</skill>`,
       ].join("\n"),
@@ -28,7 +34,7 @@ function buildAvailableSkillsBlock(skills: SkillInfo[], limit: number): string {
 }
 
 function buildInstruction(): string {
-  return "You have access to a set of skills listed in <available_skills>. Each skill is a directory containing a SKILL.md file with instructions and best practices built from real trial and error. Before starting any task that matches a skill, call `read_skill_file` with the skill name or its location path to load its instructions - always do this before writing any code, creating files, or producing output the skill covers. Multiple skills may be relevant to a single task; read all of them before proceeding, do not limit yourself to one. After reading SKILL.md, if it references additional files, call `list_skill_files` to discover them, then read whichever ones apply. Use `list_skills` with a query to search for relevant skills by name and description when the task does not match anything in the list above - not all installed skills may be shown here.";
+  return "You have access to a set of skills listed in <available_skills>. Each skill is a directory containing a SKILL.md file with instructions and best practices built from real trial and error. Before starting any task that matches a skill, call `read_skill_file` with the skill name or its environment-prefixed location path to load its instructions - always do this before writing any code, creating files, or producing output the skill covers. Multiple skills may be relevant to a single task; read all of them before proceeding, do not limit yourself to one. After reading SKILL.md, if it references additional files, call `list_skill_files` to discover them, then read whichever ones apply. Use `list_skills` with a query to search for relevant skills by name and description when the task does not match anything in the list above - not all installed skills may be shown here.";
 }
 
 function buildInjection(skills: SkillInfo[], limit: number): string {
@@ -41,7 +47,7 @@ function buildInjection(skills: SkillInfo[], limit: number): string {
 
 function computeFingerprint(skills: SkillInfo[]): string {
   return skills
-    .map((s) => s.skillMdPath)
+    .map((s) => s.displayPath)
     .sort()
     .join("|");
 }
@@ -124,7 +130,10 @@ export async function promptPreprocessor(
   if (text.trim().length < MIN_PROMPT_LENGTH) return userMessage;
 
   try {
-    const skills = scanSkills(cfg.skillsPaths);
+    const registry = createRuntimeRegistry(cfg);
+    const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
+    const roots = await resolveSkillRoots(cfg.skillsPaths, targets, registry);
+    const skills = await scanSkills(roots, registry);
     if (skills.length === 0) return userMessage;
 
     const fingerprint = computeFingerprint(skills);

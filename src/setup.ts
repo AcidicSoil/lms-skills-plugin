@@ -24,3 +24,7 @@ export function bootstrapSkillsDir(skillsPath: string): void {
 
   copyDir(samplesDir, skillsPath);
 }
+
+export function bootstrapNativeSkillsDir(skillsPath: string): void {
+  bootstrapSkillsDir(skillsPath);
+}

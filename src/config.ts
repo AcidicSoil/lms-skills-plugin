@@ -44,12 +44,66 @@ export const configSchematics = createConfigSchematics()
     DEFAULT_MAX_SKILLS_IN_CONTEXT,
   )
   .field(
+    "skillsEnvironment",
+    "select",
+    {
+      displayName: "Skills Runtime Environment",
+      subtitle:
+        "Choose where skill paths are resolved and commands run: Windows, WSL, or both isolated environments.",
+      options: [
+        {
+          value: "windows",
+          displayName: "Windows - use native Windows paths and shell",
+        },
+        {
+          value: "wsl",
+          displayName: "WSL - use Linux paths and bash through WSL",
+        },
+        {
+          value: "both",
+          displayName: "Both - scan Windows and WSL separately",
+        },
+      ],
+    },
+    "windows",
+  )
+  .field(
     "skillsPath",
     "string",
     {
       displayName: "Skills Paths",
       subtitle:
-        'Semicolon-separated list of skill directories, loaded in order. Leave empty to use last saved paths. Enter "default" to reset to ~/.lmstudio/skills',
+        'Semicolon-separated list of skill directories, loaded in order. Leave empty to use last saved paths. Enter "default" to reset to the runtime default.',
+    },
+    "",
+  )
+  .field(
+    "wslDistro",
+    "string",
+    {
+      displayName: "WSL Distro (optional)",
+      subtitle:
+        "Optional WSL distribution name. Leave empty to use the default WSL distribution.",
+    },
+    "",
+  )
+  .field(
+    "windowsShellPath",
+    "string",
+    {
+      displayName: "Windows Shell Path (optional)",
+      subtitle:
+        "Override the Windows shell used by run_command. Leave empty to auto-detect PowerShell or cmd.",
+    },
+    "",
+  )
+  .field(
+    "wslShellPath",
+    "string",
+    {
+      displayName: "WSL Shell Path (optional)",
+      subtitle:
+        "Override the WSL shell used by run_command. Leave empty to use bash.",
     },
     "",
   )
@@ -57,9 +111,9 @@ export const configSchematics = createConfigSchematics()
     "shellPath",
     "string",
     {
-      displayName: "Shell Path (optional)",
+      displayName: "Legacy Shell Path (optional)",
       subtitle:
-        "Override the shell used by run_command. Leave empty to auto-detect (bash on Unix, pwsh/powershell/cmd on Windows).",
+        "Legacy Windows shell override retained for backward compatibility. Prefer Windows Shell Path.",
     },
     "",
   )
