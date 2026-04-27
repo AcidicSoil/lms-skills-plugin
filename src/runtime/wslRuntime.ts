@@ -9,6 +9,7 @@ import {
 } from "../constants";
 import { detectHostPlatform } from "../environment";
 import { checkAbort, createAbortError } from "../abort";
+import { createRequestId, logDiagnostic, serializeError } from "../diagnostics";
 import type {
   RuntimeAdapter,
   RuntimeDirectoryEntry,
@@ -68,6 +69,8 @@ function execRaw(
 ): Promise<RuntimeExecResult> {
   checkAbort(options.signal);
   return new Promise((resolve, reject) => {
+    const runtimeRequestId = createRequestId("wsl-runtime");
+    const startedAt = Date.now();
     const executable = commandExecutable();
     const shell = runtimeOptions.shellPath?.trim() || "bash";
     const timeoutMs = Math.min(
@@ -77,6 +80,18 @@ function execRaw(
     const wrappedCommand = options.cwd
       ? `cd ${quoteBash(options.cwd)} && ${command}`
       : command;
+    logDiagnostic({
+      event: "runtime_exec_start",
+      requestId: runtimeRequestId,
+      runtime: "wsl",
+      executable,
+      shell,
+      distro: runtimeOptions.distro || undefined,
+      timeoutMs,
+      hasCwd: Boolean(options.cwd),
+      commandPreview: command.slice(0, 180),
+    });
+
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       PYTHONUTF8: "1",
@@ -92,6 +107,13 @@ function execRaw(
         { env, windowsHide: true },
       );
     } catch (err) {
+      logDiagnostic({
+        event: "runtime_exec_spawn_error",
+        requestId: runtimeRequestId,
+        runtime: "wsl",
+        elapsedMs: Date.now() - startedAt,
+        error: serializeError(err),
+      });
       resolve({
         stdout: "",
         stderr: err instanceof Error ? err.message : String(err),
@@ -104,6 +126,12 @@ function execRaw(
     }
 
     const onAbort = () => {
+      logDiagnostic({
+        event: "runtime_exec_abort",
+        requestId: runtimeRequestId,
+        runtime: "wsl",
+        elapsedMs: Date.now() - startedAt,
+      });
       try { proc.kill("SIGTERM"); } catch {}
       reject(createAbortError(options.signal));
     };
@@ -132,6 +160,16 @@ function execRaw(
     proc.on("close", (code) => {
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
+      logDiagnostic({
+        event: "runtime_exec_complete",
+        requestId: runtimeRequestId,
+        runtime: "wsl",
+        elapsedMs: Date.now() - startedAt,
+        exitCode: code ?? 1,
+        timedOut,
+        stdoutBytes: stdout.length,
+        stderrBytes: stderr.length,
+      });
       if (options.signal?.aborted) {
         reject(createAbortError(options.signal));
         return;
@@ -149,6 +187,13 @@ function execRaw(
     proc.on("error", (err) => {
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
+      logDiagnostic({
+        event: "runtime_exec_error",
+        requestId: runtimeRequestId,
+        runtime: "wsl",
+        elapsedMs: Date.now() - startedAt,
+        error: serializeError(err),
+      });
       if (options.signal?.aborted) {
         reject(createAbortError(options.signal));
         return;

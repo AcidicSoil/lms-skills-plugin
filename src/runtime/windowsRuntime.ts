@@ -5,6 +5,7 @@ import * as os from "os";
 import * as path from "path";
 import { EXEC_DEFAULT_TIMEOUT_MS, EXEC_MAX_OUTPUT_BYTES, EXEC_MAX_TIMEOUT_MS } from "../constants";
 import { checkAbort, createAbortError } from "../abort";
+import { createRequestId, logDiagnostic, serializeError } from "../diagnostics";
 import type { RuntimeAdapter, RuntimeDirectoryEntry, RuntimeExecOptions, RuntimeExecResult, RuntimeFileStat } from "./types";
 
 function resolveWindowsShell(override?: string): string {
@@ -45,9 +46,21 @@ export function execWindowsCommand(
 ): Promise<RuntimeExecResult> {
   checkAbort(options.signal);
   return new Promise((resolve, reject) => {
+    const runtimeRequestId = createRequestId("windows-runtime");
+    const startedAt = Date.now();
     const shell = resolveWindowsShell(shellPath);
     const cwd = options.cwd ? expandWindowsPath(options.cwd) : os.homedir();
     const timeoutMs = Math.min(options.timeoutMs ?? EXEC_DEFAULT_TIMEOUT_MS, EXEC_MAX_TIMEOUT_MS);
+    logDiagnostic({
+      event: "runtime_exec_start",
+      requestId: runtimeRequestId,
+      runtime: "windows",
+      shell,
+      timeoutMs,
+      hasCwd: Boolean(options.cwd),
+      commandPreview: command.slice(0, 180),
+    });
+
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       PYTHONUTF8: "1",
@@ -59,11 +72,24 @@ export function execWindowsCommand(
     try {
       proc = child_process.spawn(shell, shellArgs(shell, command), { cwd, env, windowsHide: true });
     } catch (err) {
+      logDiagnostic({
+        event: "runtime_exec_spawn_error",
+        requestId: runtimeRequestId,
+        runtime: "windows",
+        elapsedMs: Date.now() - startedAt,
+        error: serializeError(err),
+      });
       resolve({ stdout: "", stderr: err instanceof Error ? err.message : String(err), exitCode: 1, timedOut: false, shell, platform: "windows", environment: "windows" });
       return;
     }
 
     const onAbort = () => {
+      logDiagnostic({
+        event: "runtime_exec_abort",
+        requestId: runtimeRequestId,
+        runtime: "windows",
+        elapsedMs: Date.now() - startedAt,
+      });
       try { proc.kill("SIGTERM"); } catch {}
       reject(createAbortError(options.signal));
     };
@@ -81,6 +107,16 @@ export function execWindowsCommand(
     proc.on("close", (code) => {
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
+      logDiagnostic({
+        event: "runtime_exec_complete",
+        requestId: runtimeRequestId,
+        runtime: "windows",
+        elapsedMs: Date.now() - startedAt,
+        exitCode: code ?? 1,
+        timedOut,
+        stdoutBytes: stdout.length,
+        stderrBytes: stderr.length,
+      });
       if (options.signal?.aborted) {
         reject(createAbortError(options.signal));
         return;
@@ -90,6 +126,13 @@ export function execWindowsCommand(
     proc.on("error", (err) => {
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
+      logDiagnostic({
+        event: "runtime_exec_error",
+        requestId: runtimeRequestId,
+        runtime: "windows",
+        elapsedMs: Date.now() - startedAt,
+        error: serializeError(err),
+      });
       if (options.signal?.aborted) {
         reject(createAbortError(options.signal));
         return;

@@ -21,8 +21,12 @@ import {
   listSkillDirectory,
   listAbsoluteDirectory,
 } from "./scanner";
+import { createRequestId, logDiagnostic, serializeError, timedStep } from "./diagnostics";
+import type { RuntimeRegistry } from "./runtime";
+import type { RuntimeTargetName } from "./environment";
+import type { ResolvedSkillRoot } from "./pathResolver";
 import type { PluginController } from "./pluginTypes";
-import type { DirectoryEntry } from "./types";
+import type { DirectoryEntry, EffectiveConfig } from "./types";
 
 function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
   if (entries.length === 0) return "Directory is empty.";
@@ -46,6 +50,87 @@ function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
   return lines.join("\n");
 }
 
+async function getRuntimeContext(
+  ctl: PluginController,
+  requestId: string,
+  toolName: string,
+): Promise<{
+  cfg: EffectiveConfig;
+  registry: RuntimeRegistry;
+  targets: RuntimeTargetName[];
+  roots: ResolvedSkillRoot[];
+}> {
+  const cfg = await timedStep(requestId, toolName, "resolve_config", async () =>
+    resolveEffectiveConfig(ctl),
+  );
+  const registry = await timedStep(requestId, toolName, "create_runtime_registry", async () =>
+    createRuntimeRegistry(cfg),
+  );
+  const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
+  logDiagnostic({
+    event: "runtime_context",
+    requestId,
+    tool: toolName,
+    skillsEnvironment: cfg.skillsEnvironment,
+    targets,
+    skillsPaths: cfg.skillsPaths,
+    autoInject: cfg.autoInject,
+    maxSkillsInContext: cfg.maxSkillsInContext,
+    wslDistro: cfg.wslDistro || undefined,
+    hasWindowsShellPath: Boolean(cfg.windowsShellPath),
+    hasWslShellPath: Boolean(cfg.wslShellPath),
+  });
+  const roots = await timedStep(
+    requestId,
+    toolName,
+    "resolve_skill_roots",
+    async () => resolveSkillRoots(cfg.skillsPaths, targets, registry, ctl.abortSignal),
+    { targetCount: targets.length, rawPathCount: cfg.skillsPaths.length },
+  );
+  logDiagnostic({
+    event: "roots_resolved",
+    requestId,
+    tool: toolName,
+    rootCount: roots.length,
+    roots: roots.map((r) => ({
+      environment: r.environment,
+      rawPath: r.rawPath,
+      resolvedPath: r.resolvedPath,
+      displayPath: r.displayPath,
+    })),
+  });
+  return { cfg, registry, targets, roots };
+}
+
+async function withToolLogging<T>(
+  toolName: string,
+  args: Record<string, unknown>,
+  fn: (requestId: string) => Promise<T>,
+): Promise<T> {
+  const requestId = createRequestId(toolName);
+  const startedAt = Date.now();
+  logDiagnostic({ event: "tool_start", requestId, tool: toolName, args });
+  try {
+    const result = await fn(requestId);
+    logDiagnostic({
+      event: "tool_complete",
+      requestId,
+      tool: toolName,
+      elapsedMs: Date.now() - startedAt,
+    });
+    return result;
+  } catch (error) {
+    logDiagnostic({
+      event: "tool_error",
+      requestId,
+      tool: toolName,
+      elapsedMs: Date.now() - startedAt,
+      error: serializeError(error),
+    });
+    throw error;
+  }
+}
+
 export async function toolsProvider(ctl: PluginController) {
   const listSkillsTool = tool({
     name: "list_skills",
@@ -64,92 +149,100 @@ export async function toolsProvider(ctl: PluginController) {
         .optional()
         .describe(`Maximum number of skills to return. Defaults to ${LIST_SKILLS_DEFAULT_LIMIT}.`),
     },
-    implementation: async ({ query, limit }, { status }) => {
-      const cfg = resolveEffectiveConfig(ctl);
-      const registry = createRuntimeRegistry(cfg);
-      const roots = await resolveSkillRoots(
-        cfg.skillsPaths,
-        deriveRuntimeTargets(cfg.skillsEnvironment),
-        registry,
-        ctl.abortSignal,
-      );
-      const cap = limit ?? LIST_SKILLS_DEFAULT_LIMIT;
+    implementation: async ({ query, limit }, { status }) =>
+      withToolLogging("list_skills", { query, limit }, async (requestId) => {
+        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skills");
+        const cap = limit ?? LIST_SKILLS_DEFAULT_LIMIT;
 
-      if (query && query.trim()) {
-        status(`Searching skills for "${query.trim()}"..`);
-        const results = await searchSkills(roots, registry, query.trim(), ctl.abortSignal);
+        if (query && query.trim()) {
+          status(`Searching skills for "${query.trim()}"..`);
+          const results = await timedStep(
+            requestId,
+            "list_skills",
+            "search_skills",
+            async () => searchSkills(roots, registry, query.trim(), ctl.abortSignal),
+            { query: query.trim(), rootCount: roots.length },
+          );
 
-        if (results.length === 0) {
+          if (results.length === 0) {
+            return {
+              query: query.trim(),
+              found: 0,
+              skills: [],
+              roots,
+              note: "No skills matched. Try a broader query or omit the query to list all skills.",
+            };
+          }
+
+          const page = results.slice(0, cap);
+          status(`Found ${results.length} match${results.length !== 1 ? "es" : ""}`);
+          logDiagnostic({ event: "list_skills_result", requestId, tool: "list_skills", total: results.length, returned: page.length });
+
           return {
             query: query.trim(),
-            found: 0,
-            skills: [],
+            total: results.length,
+            found: page.length,
+            skillsEnvironment: cfg.skillsEnvironment,
             roots,
-            note: "No skills matched. Try a broader query or omit the query to list all skills.",
+            ...(results.length > cap
+              ? { note: `Showing top ${cap} of ${results.length} matches.` }
+              : {}),
+            skills: page.map(({ skill, score }) => ({
+              name: skill.name,
+              description: skill.description,
+              tags: skill.tags.length > 0 ? skill.tags : undefined,
+              environment: skill.environment,
+              skillMdPath: skill.skillMdPath,
+              displayPath: skill.displayPath,
+              hasExtraFiles: skill.hasExtraFiles,
+              score: Math.round(score * 100) / 100,
+            })),
           };
         }
 
-        const page = results.slice(0, cap);
-        status(`Found ${results.length} match${results.length !== 1 ? "es" : ""}`);
+        status("Scanning skills directories..");
+        const skills = await timedStep(
+          requestId,
+          "list_skills",
+          "scan_skills",
+          async () => scanSkills(roots, registry, ctl.abortSignal),
+          { rootCount: roots.length },
+        );
+
+        if (skills.length === 0) {
+          return {
+            total: 0,
+            found: 0,
+            skillsEnvironment: cfg.skillsEnvironment,
+            roots,
+            skills: [],
+            note: "No skills found. Create skill directories with a SKILL.md file inside the configured skills paths.",
+          };
+        }
+
+        const page = skills.slice(0, cap);
+        status(`Found ${skills.length} skill${skills.length !== 1 ? "s" : ""}`);
+        logDiagnostic({ event: "list_skills_result", requestId, tool: "list_skills", total: skills.length, returned: page.length });
 
         return {
-          query: query.trim(),
-          total: results.length,
+          total: skills.length,
           found: page.length,
           skillsEnvironment: cfg.skillsEnvironment,
           roots,
-          ...(results.length > cap
-            ? { note: `Showing top ${cap} of ${results.length} matches.` }
+          ...(skills.length > cap
+            ? { note: `Showing ${cap} of ${skills.length} skills.` }
             : {}),
-          skills: page.map(({ skill, score }) => ({
-            name: skill.name,
-            description: skill.description,
-            tags: skill.tags.length > 0 ? skill.tags : undefined,
-            environment: skill.environment,
-            skillMdPath: skill.skillMdPath,
-            displayPath: skill.displayPath,
-            hasExtraFiles: skill.hasExtraFiles,
-            score: Math.round(score * 100) / 100,
+          skills: page.map((s) => ({
+            name: s.name,
+            description: s.description,
+            tags: s.tags.length > 0 ? s.tags : undefined,
+            environment: s.environment,
+            skillMdPath: s.skillMdPath,
+            displayPath: s.displayPath,
+            hasExtraFiles: s.hasExtraFiles,
           })),
         };
-      }
-
-      status("Scanning skills directories..");
-      const skills = await scanSkills(roots, registry, ctl.abortSignal);
-
-      if (skills.length === 0) {
-        return {
-          total: 0,
-          found: 0,
-          skillsEnvironment: cfg.skillsEnvironment,
-          roots,
-          skills: [],
-          note: "No skills found. Create skill directories with a SKILL.md file inside the configured skills paths.",
-        };
-      }
-
-      const page = skills.slice(0, cap);
-      status(`Found ${skills.length} skill${skills.length !== 1 ? "s" : ""}`);
-
-      return {
-        total: skills.length,
-        found: page.length,
-        skillsEnvironment: cfg.skillsEnvironment,
-        roots,
-        ...(skills.length > cap
-          ? { note: `Showing ${cap} of ${skills.length} skills.` }
-          : {}),
-        skills: page.map((s) => ({
-          name: s.name,
-          description: s.description,
-          tags: s.tags.length > 0 ? s.tags : undefined,
-          environment: s.environment,
-          skillMdPath: s.skillMdPath,
-          displayPath: s.displayPath,
-          hasExtraFiles: s.hasExtraFiles,
-        })),
-      };
-    },
+      }),
   });
 
   const readSkillFileTool = tool({
@@ -160,62 +253,106 @@ export async function toolsProvider(ctl: PluginController) {
       skill_name: z.string().min(1).describe("Skill name or absolute/display path."),
       file_path: z.string().optional().describe("Relative path inside the skill directory. Omit for SKILL.md."),
     },
-    implementation: async ({ skill_name, file_path }, { status }) => {
-      const cfg = resolveEffectiveConfig(ctl);
-      const registry = createRuntimeRegistry(cfg);
-      const roots = await resolveSkillRoots(
-        cfg.skillsPaths,
-        deriveRuntimeTargets(cfg.skillsEnvironment),
-        registry,
-        ctl.abortSignal,
-      );
-      status(`Reading ${skill_name}${file_path ? ` / ${file_path}` : ""}..`);
+    implementation: async ({ skill_name, file_path }, { status }) =>
+      withToolLogging("read_skill_file", { skill_name, file_path }, async (requestId) => {
+        const { registry, roots } = await getRuntimeContext(ctl, requestId, "read_skill_file");
+        status(`Reading ${skill_name}${file_path ? ` / ${file_path}` : ""}..`);
 
-      if (
-        skill_name.startsWith("WSL:") ||
-        skill_name.startsWith("Windows:") ||
-        path.isAbsolute(skill_name)
-      ) {
-        const result = await readAbsolutePath(skill_name, roots, registry, ctl.abortSignal);
-        if ("error" in result) return { success: false, error: result.error };
-        status(`Read ${Math.round(result.content.length / 1024)}KB`);
+        if (
+          skill_name.startsWith("WSL:") ||
+          skill_name.startsWith("Windows:") ||
+          path.isAbsolute(skill_name)
+        ) {
+          const result = await timedStep(
+            requestId,
+            "read_skill_file",
+            "read_absolute_path",
+            async () => readAbsolutePath(skill_name, roots, registry, ctl.abortSignal),
+            { skill_name, file_path },
+          );
+          if ("error" in result) return { success: false, error: result.error };
+          status(`Read ${Math.round(result.content.length / 1024)}KB`);
+          logDiagnostic({
+            event: "read_skill_file_result",
+            requestId,
+            tool: "read_skill_file",
+            mode: "absolute",
+            environment: result.environment,
+            resolvedPath: result.resolvedPath,
+            contentLength: result.content.length,
+          });
+          return {
+            success: true,
+            environment: result.environment,
+            filePath: result.resolvedPath,
+            displayPath: `${result.environment === "wsl" ? "WSL" : "Windows"}:${result.resolvedPath}`,
+            content: result.content,
+          };
+        }
+
+        const skill = await timedStep(
+          requestId,
+          "read_skill_file",
+          "resolve_skill_by_name",
+          async () => resolveSkillByName(roots, registry, skill_name, ctl.abortSignal),
+          { skill_name, rootCount: roots.length },
+        );
+
+        if (!skill) {
+          logDiagnostic({ event: "skill_not_found", requestId, tool: "read_skill_file", skill_name, rootCount: roots.length });
+          return {
+            success: false,
+            error: `Skill "${skill_name}" not found. Call list_skills to see available skills.`,
+          };
+        }
+
+        logDiagnostic({
+          event: "skill_resolved",
+          requestId,
+          tool: "read_skill_file",
+          requestedSkill: skill_name,
+          resolvedSkill: skill.name,
+          environment: skill.environment,
+          resolvedDirectoryPath: skill.resolvedDirectoryPath,
+          resolvedSkillMdPath: skill.resolvedSkillMdPath,
+        });
+
+        const result = await timedStep(
+          requestId,
+          "read_skill_file",
+          "read_skill_file_content",
+          async () => readSkillFile(skill, file_path, registry, ctl.abortSignal),
+          { skill: skill.name, file_path: file_path || "SKILL.md", environment: skill.environment },
+        );
+        if ("error" in result) return { success: false, skill: skill_name, error: result.error };
+
+        status(`Read ${Math.round(result.content.length / 1024)}KB from ${skill.name}`);
+        logDiagnostic({
+          event: "read_skill_file_result",
+          requestId,
+          tool: "read_skill_file",
+          mode: "skill",
+          skill: skill.name,
+          environment: skill.environment,
+          resolvedPath: result.resolvedPath,
+          contentLength: result.content.length,
+          hasExtraFiles: skill.hasExtraFiles,
+        });
+
         return {
           success: true,
-          environment: result.environment,
-          filePath: result.resolvedPath,
-          displayPath: `${result.environment === "wsl" ? "WSL" : "Windows"}:${result.resolvedPath}`,
+          skill: skill.name,
+          environment: skill.environment,
+          filePath: file_path || "SKILL.md",
+          resolvedPath: result.resolvedPath,
+          displayPath: `${skill.environment === "wsl" ? "WSL" : "Windows"}:${result.resolvedPath}`,
           content: result.content,
+          hasExtraFiles: skill.hasExtraFiles,
+          ...(skill.hasExtraFiles
+            ? { hint: "This skill has additional files. Call list_skill_files to explore them." }
+            : {}),
         };
-      }
-
-      const skill = await resolveSkillByName(roots, registry, skill_name, ctl.abortSignal);
-
-      if (!skill) {
-        return {
-          success: false,
-          error: `Skill "${skill_name}" not found. Call list_skills to see available skills.`,
-        };
-      }
-
-      const result = await readSkillFile(skill, file_path, registry, ctl.abortSignal);
-      if ("error" in result) return { success: false, skill: skill_name, error: result.error };
-
-      status(`Read ${Math.round(result.content.length / 1024)}KB from ${skill.name}`);
-
-      return {
-        success: true,
-        skill: skill.name,
-        environment: skill.environment,
-        filePath: file_path || "SKILL.md",
-        resolvedPath: result.resolvedPath,
-        displayPath: `${skill.environment === "wsl" ? "WSL" : "Windows"}:${result.resolvedPath}`,
-        content: result.content,
-        hasExtraFiles: skill.hasExtraFiles,
-        ...(skill.hasExtraFiles
-          ? { hint: "This skill has additional files. Call list_skill_files to explore them." }
-          : {}),
-      };
-    },
+      }),
   });
 
   const listSkillFilesTool = tool({
@@ -226,28 +363,75 @@ export async function toolsProvider(ctl: PluginController) {
       skill_name: z.string().min(1).describe("Skill name or absolute/display path."),
       sub_path: z.string().optional().describe("Optional relative sub-path within the skill directory."),
     },
-    implementation: async ({ skill_name, sub_path }, { status }) => {
-      const cfg = resolveEffectiveConfig(ctl);
-      const registry = createRuntimeRegistry(cfg);
-      const roots = await resolveSkillRoots(
-        cfg.skillsPaths,
-        deriveRuntimeTargets(cfg.skillsEnvironment),
-        registry,
-        ctl.abortSignal,
-      );
-      status(`Listing files in ${skill_name}..`);
+    implementation: async ({ skill_name, sub_path }, { status }) =>
+      withToolLogging("list_skill_files", { skill_name, sub_path }, async (requestId) => {
+        const { registry, roots } = await getRuntimeContext(ctl, requestId, "list_skill_files");
+        status(`Listing files in ${skill_name}..`);
 
-      if (
-        skill_name.startsWith("WSL:") ||
-        skill_name.startsWith("Windows:") ||
-        path.isAbsolute(skill_name)
-      ) {
-        const entries = await listAbsoluteDirectory(skill_name, roots, registry, ctl.abortSignal);
-        const formatted = formatDirEntries(entries, path.basename(skill_name));
-        status(`Found ${entries.length} entries`);
+        if (
+          skill_name.startsWith("WSL:") ||
+          skill_name.startsWith("Windows:") ||
+          path.isAbsolute(skill_name)
+        ) {
+          const entries = await timedStep(
+            requestId,
+            "list_skill_files",
+            "list_absolute_directory",
+            async () => listAbsoluteDirectory(skill_name, roots, registry, ctl.abortSignal),
+            { skill_name, sub_path },
+          );
+          const formatted = formatDirEntries(entries, path.basename(skill_name));
+          status(`Found ${entries.length} entries`);
+          logDiagnostic({ event: "list_skill_files_result", requestId, tool: "list_skill_files", mode: "absolute", entryCount: entries.length });
+          return {
+            success: true,
+            directoryPath: skill_name,
+            entryCount: entries.length,
+            tree: formatted,
+            entries: entries.map((e) => ({
+              name: e.name,
+              path: e.relativePath,
+              type: e.type,
+              environment: e.environment,
+              ...(e.sizeBytes !== undefined ? { sizeBytes: e.sizeBytes } : {}),
+            })),
+          };
+        }
+
+        const skill = await timedStep(
+          requestId,
+          "list_skill_files",
+          "resolve_skill_by_name",
+          async () => resolveSkillByName(roots, registry, skill_name, ctl.abortSignal),
+          { skill_name, rootCount: roots.length },
+        );
+
+        if (!skill) {
+          logDiagnostic({ event: "skill_not_found", requestId, tool: "list_skill_files", skill_name, rootCount: roots.length });
+          return {
+            success: false,
+            error: `Skill "${skill_name}" not found. Call list_skills to see available skills.`,
+          };
+        }
+
+        const entries = await timedStep(
+          requestId,
+          "list_skill_files",
+          "list_skill_directory",
+          async () => listSkillDirectory(skill, sub_path, registry, ctl.abortSignal),
+          { skill: skill.name, environment: skill.environment, sub_path },
+        );
+        const formatted = formatDirEntries(entries, skill.name);
+
+        status(`Found ${entries.length} entries in ${skill_name}`);
+        logDiagnostic({ event: "list_skill_files_result", requestId, tool: "list_skill_files", mode: "skill", skill: skill.name, environment: skill.environment, entryCount: entries.length });
+
         return {
           success: true,
-          directoryPath: skill_name,
+          skill: skill.name,
+          environment: skill.environment,
+          directoryPath: skill.directoryPath,
+          displayPath: `${skill.environment === "wsl" ? "WSL" : "Windows"}:${skill.directoryPath}`,
           entryCount: entries.length,
           tree: formatted,
           entries: entries.map((e) => ({
@@ -258,39 +442,7 @@ export async function toolsProvider(ctl: PluginController) {
             ...(e.sizeBytes !== undefined ? { sizeBytes: e.sizeBytes } : {}),
           })),
         };
-      }
-
-      const skill = await resolveSkillByName(roots, registry, skill_name, ctl.abortSignal);
-
-      if (!skill) {
-        return {
-          success: false,
-          error: `Skill "${skill_name}" not found. Call list_skills to see available skills.`,
-        };
-      }
-
-      const entries = await listSkillDirectory(skill, sub_path, registry, ctl.abortSignal);
-      const formatted = formatDirEntries(entries, skill.name);
-
-      status(`Found ${entries.length} entries in ${skill_name}`);
-
-      return {
-        success: true,
-        skill: skill.name,
-        environment: skill.environment,
-        directoryPath: skill.directoryPath,
-        displayPath: `${skill.environment === "wsl" ? "WSL" : "Windows"}:${skill.directoryPath}`,
-        entryCount: entries.length,
-        tree: formatted,
-        entries: entries.map((e) => ({
-          name: e.name,
-          path: e.relativePath,
-          type: e.type,
-          environment: e.environment,
-          ...(e.sizeBytes !== undefined ? { sizeBytes: e.sizeBytes } : {}),
-        })),
-      };
-    },
+      }),
   });
 
   const runCommandTool = tool({
@@ -310,54 +462,68 @@ export async function toolsProvider(ctl: PluginController) {
         .describe(`Timeout in milliseconds. Defaults to ${EXEC_DEFAULT_TIMEOUT_MS}ms.`),
       env: z.record(z.string()).optional().describe("Optional environment variables."),
     },
-    implementation: async ({ command, cwd, environment, timeout_ms, env }, { status }) => {
-      const cfg = resolveEffectiveConfig(ctl);
-      status(`Running ${environment ? `in ${environment}` : "command"}: ${command.slice(0, 60)}${command.length > 60 ? "\u2026" : ""}`);
+    implementation: async ({ command, cwd, environment, timeout_ms, env }, { status }) =>
+      withToolLogging(
+        "run_command",
+        { commandPreview: command.slice(0, 120), cwd, environment, timeout_ms, envKeys: env ? Object.keys(env) : [] },
+        async (requestId) => {
+          const cfg = await timedStep(requestId, "run_command", "resolve_config", async () => resolveEffectiveConfig(ctl));
+          status(`Running ${environment ? `in ${environment}` : "command"}: ${command.slice(0, 60)}${command.length > 60 ? "\u2026" : ""}`);
 
-      const registry = createRuntimeRegistry(cfg);
-      const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
-      const defaultTarget = targets.length === 1 ? targets[0] : undefined;
-      if (!environment && !defaultTarget && !cwd) {
-        status("Command target error");
-        return {
-          success: false,
-          error:
-            "Both runtime mode is active and no command target or cwd was provided.",
-          hint: "Pass environment as 'windows' or 'wsl', or provide an environment-specific cwd.",
-        };
-      }
+          const registry = await timedStep(requestId, "run_command", "create_runtime_registry", async () => createRuntimeRegistry(cfg));
+          const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
+          const defaultTarget = targets.length === 1 ? targets[0] : undefined;
+          logDiagnostic({ event: "runtime_context", requestId, tool: "run_command", skillsEnvironment: cfg.skillsEnvironment, targets, defaultTarget });
+          if (!environment && !defaultTarget && !cwd) {
+            status("Command target error");
+            return {
+              success: false,
+              error:
+                "Both runtime mode is active and no command target or cwd was provided.",
+              hint: "Pass environment as 'windows' or 'wsl', or provide an environment-specific cwd.",
+            };
+          }
 
-      const result = await execCommand(
-        command,
-        {
-          cwd,
-          timeoutMs: timeout_ms,
-          env,
-          signal: ctl.abortSignal,
-          target: environment,
+          const result = await timedStep(
+            requestId,
+            "run_command",
+            "exec_command",
+            async () =>
+              execCommand(
+                command,
+                {
+                  cwd,
+                  timeoutMs: timeout_ms,
+                  env,
+                  signal: ctl.abortSignal,
+                  target: environment,
+                },
+                registry,
+                environment ?? defaultTarget ?? targets[0],
+              ),
+            { target: environment ?? defaultTarget ?? targets[0], cwd },
+          );
+
+          status(result.timedOut ? "Timed out" : `Exit ${result.exitCode}`);
+          logDiagnostic({ event: "run_command_result", requestId, tool: "run_command", exitCode: result.exitCode, timedOut: result.timedOut, environment: result.environment, shell: result.shell, stdoutBytes: result.stdout.length, stderrBytes: result.stderr.length });
+
+          return {
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode,
+            timedOut: result.timedOut,
+            environment: result.environment,
+            platform: result.platform,
+            shell: result.shell,
+            ...(result.timedOut
+              ? { hint: "Command exceeded the timeout. Try increasing timeout_ms or splitting into smaller steps." }
+              : {}),
+            ...(result.exitCode !== 0 && !result.timedOut && result.stderr
+              ? { hint: "Command exited with a non-zero code. Check stderr for details." }
+              : {}),
+          };
         },
-        registry,
-        environment ?? defaultTarget ?? targets[0],
-      );
-
-      status(result.timedOut ? "Timed out" : `Exit ${result.exitCode}`);
-
-      return {
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-        timedOut: result.timedOut,
-        environment: result.environment,
-        platform: result.platform,
-        shell: result.shell,
-        ...(result.timedOut
-          ? { hint: "Command exceeded the timeout. Try increasing timeout_ms or splitting into smaller steps." }
-          : {}),
-        ...(result.exitCode !== 0 && !result.timedOut && result.stderr
-          ? { hint: "Command exited with a non-zero code. Check stderr for details." }
-          : {}),
-      };
-    },
+      ),
   });
 
   return [listSkillsTool, readSkillFileTool, listSkillFilesTool, runCommandTool];
