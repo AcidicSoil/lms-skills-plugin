@@ -7,6 +7,7 @@ import {
   EXEC_MAX_TIMEOUT_MS,
 } from "../constants";
 import { detectHostPlatform } from "../environment";
+import { checkAbort, createAbortError } from "../abort";
 import type {
   RuntimeAdapter,
   RuntimeDirectoryEntry,
@@ -64,7 +65,8 @@ function execRaw(
   options: RuntimeExecOptions = {},
   runtimeOptions: WslRuntimeOptions = {},
 ): Promise<RuntimeExecResult> {
-  return new Promise((resolve) => {
+  checkAbort(options.signal);
+  return new Promise((resolve, reject) => {
     const executable = commandExecutable();
     const shell = runtimeOptions.shellPath?.trim() || "bash";
     const timeoutMs = Math.min(
@@ -100,14 +102,22 @@ function execRaw(
       return;
     }
 
+    const onAbort = () => {
+      try { proc.kill("SIGTERM"); } catch {}
+      reject(createAbortError(options.signal));
+    };
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+
     let stdout = "";
     let stderr = "";
     let timedOut = false;
 
     proc.stdout?.on("data", (chunk: Buffer) => {
+      checkAbort(options.signal);
       stdout += chunk.toString("utf-8");
     });
     proc.stderr?.on("data", (chunk: Buffer) => {
+      checkAbort(options.signal);
       stderr += chunk.toString("utf-8");
     });
 
@@ -120,6 +130,11 @@ function execRaw(
 
     proc.on("close", (code) => {
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
+      if (options.signal?.aborted) {
+        reject(createAbortError(options.signal));
+        return;
+      }
       resolve({
         stdout: truncate(normalizeOutput(stdout), EXEC_MAX_OUTPUT_BYTES),
         stderr: truncate(normalizeOutput(stderr), EXEC_MAX_OUTPUT_BYTES),
@@ -132,6 +147,11 @@ function execRaw(
 
     proc.on("error", (err) => {
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
+      if (options.signal?.aborted) {
+        reject(createAbortError(options.signal));
+        return;
+      }
       resolve({
         stdout: "",
         stderr: err.message,
@@ -159,9 +179,11 @@ export async function probeWsl(
 
 export async function getWslHome(
   options: WslRuntimeOptions = {},
+  signal?: AbortSignal,
 ): Promise<string> {
+  checkAbort(signal);
   if (detectHostPlatform() === "linux") return os.homedir();
-  const result = await execRaw("printf %s \"$HOME\"", { timeoutMs: 5_000 }, options);
+  const result = await execRaw("printf %s \"$HOME\"", { timeoutMs: 5_000, signal }, options);
   if (result.exitCode !== 0) {
     throw new Error(result.stderr || "Unable to resolve WSL home directory.");
   }
@@ -180,23 +202,27 @@ export function createWslRuntime(options: WslRuntimeOptions = {}): RuntimeAdapte
   let cachedHome: Promise<string> | null = null;
   const shell = options.shellPath?.trim() || "bash";
 
-  async function home(): Promise<string> {
-    cachedHome ??= getWslHome(options);
+  async function home(signal?: AbortSignal): Promise<string> {
+    checkAbort(signal);
+    cachedHome ??= getWslHome(options, signal);
     return cachedHome;
   }
 
-  async function expandPath(rawPath: string): Promise<string> {
+  async function expandPath(rawPath: string, signal?: AbortSignal): Promise<string> {
+    checkAbort(signal);
     const trimmed = rawPath.trim();
-    const expanded = trimmed.replace(/^~(?=\/|$)/, await home());
+    const homeDir = await home(signal);
+    checkAbort(signal);
+    const expanded = trimmed.replace(/^~(?=\/|$)/, homeDir);
     if (path.posix.isAbsolute(expanded)) return path.posix.normalize(expanded);
-    return path.posix.normalize(path.posix.join(await home(), expanded));
+    return path.posix.normalize(path.posix.join(homeDir, expanded));
   }
 
-  async function stat(filePath: string): Promise<RuntimeFileStat> {
-    const resolved = await expandPath(filePath);
+  async function stat(filePath: string, signal?: AbortSignal): Promise<RuntimeFileStat> {
+    const resolved = await expandPath(filePath, signal);
     const result = await execRaw(
       `if [ -f ${quoteBash(resolved)} ]; then printf 'file:%s' "$(wc -c < ${quoteBash(resolved)})"; elif [ -d ${quoteBash(resolved)} ]; then printf 'dir:0'; else exit 2; fi`,
-      {},
+      { signal },
       options,
     );
     if (result.exitCode !== 0) throw new Error(result.stderr || `Path not found: ${resolved}`);
@@ -216,22 +242,22 @@ export function createWslRuntime(options: WslRuntimeOptions = {}): RuntimeAdapte
     displayName: "WSL",
     shell,
     expandPath,
-    async exists(filePath) {
-      const resolved = await expandPath(filePath);
-      const result = await execRaw(`test -e ${quoteBash(resolved)}`, {}, options);
+    async exists(filePath, signal) {
+      const resolved = await expandPath(filePath, signal);
+      const result = await execRaw(`test -e ${quoteBash(resolved)}`, { signal }, options);
       return result.exitCode === 0;
     },
     stat,
-    async readFile(filePath) {
-      const resolved = await expandPath(filePath);
-      const result = await execRaw(`cat ${quoteBash(resolved)}`, {}, options);
+    async readFile(filePath, signal) {
+      const resolved = await expandPath(filePath, signal);
+      const result = await execRaw(`cat ${quoteBash(resolved)}`, { signal }, options);
       if (result.exitCode !== 0) throw new Error(result.stderr || `Unable to read file: ${resolved}`);
       return result.stdout;
     },
-    async readDir(dirPath): Promise<RuntimeDirectoryEntry[]> {
-      const resolved = await expandPath(dirPath);
+    async readDir(dirPath, signal): Promise<RuntimeDirectoryEntry[]> {
+      const resolved = await expandPath(dirPath, signal);
       const script = `python3 - <<'PY'\nimport json, os\nroot=${JSON.stringify(resolved)}\nout=[]\nfor name in os.listdir(root):\n    p=os.path.join(root,name)\n    if os.path.isdir(p): out.append({'name':name,'type':'directory'})\n    elif os.path.isfile(p): out.append({'name':name,'type':'file','sizeBytes':os.path.getsize(p)})\nprint(json.dumps(out))\nPY`;
-      const result = await execRaw(script, {}, options);
+      const result = await execRaw(script, { signal }, options);
       if (result.exitCode !== 0) throw new Error(result.stderr || `Unable to list directory: ${resolved}`);
       return JSON.parse(result.stdout) as RuntimeDirectoryEntry[];
     },

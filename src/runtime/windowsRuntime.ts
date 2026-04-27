@@ -4,6 +4,7 @@ import * as fsSync from "fs";
 import * as os from "os";
 import * as path from "path";
 import { EXEC_DEFAULT_TIMEOUT_MS, EXEC_MAX_OUTPUT_BYTES, EXEC_MAX_TIMEOUT_MS } from "../constants";
+import { checkAbort, createAbortError } from "../abort";
 import type { RuntimeAdapter, RuntimeDirectoryEntry, RuntimeExecOptions, RuntimeExecResult, RuntimeFileStat } from "./types";
 
 function resolveWindowsShell(override?: string): string {
@@ -42,7 +43,8 @@ export function execWindowsCommand(
   options: RuntimeExecOptions = {},
   shellPath?: string,
 ): Promise<RuntimeExecResult> {
-  return new Promise((resolve) => {
+  checkAbort(options.signal);
+  return new Promise((resolve, reject) => {
     const shell = resolveWindowsShell(shellPath);
     const cwd = options.cwd ? expandWindowsPath(options.cwd) : os.homedir();
     const timeoutMs = Math.min(options.timeoutMs ?? EXEC_DEFAULT_TIMEOUT_MS, EXEC_MAX_TIMEOUT_MS);
@@ -61,21 +63,37 @@ export function execWindowsCommand(
       return;
     }
 
+    const onAbort = () => {
+      try { proc.kill("SIGTERM"); } catch {}
+      reject(createAbortError(options.signal));
+    };
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+
     let stdout = "";
     let stderr = "";
     let timedOut = false;
-    proc.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf-8"); });
-    proc.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf-8"); });
+    proc.stdout?.on("data", (chunk: Buffer) => { checkAbort(options.signal); stdout += chunk.toString("utf-8"); });
+    proc.stderr?.on("data", (chunk: Buffer) => { checkAbort(options.signal); stderr += chunk.toString("utf-8"); });
     const timer = setTimeout(() => {
       timedOut = true;
       try { proc.kill("SIGKILL"); } catch {}
     }, timeoutMs);
     proc.on("close", (code) => {
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
+      if (options.signal?.aborted) {
+        reject(createAbortError(options.signal));
+        return;
+      }
       resolve({ stdout: truncate(normalizeOutput(stdout), EXEC_MAX_OUTPUT_BYTES), stderr: truncate(normalizeOutput(stderr), EXEC_MAX_OUTPUT_BYTES), exitCode: code ?? 1, timedOut, shell, platform: "windows", environment: "windows" });
     });
     proc.on("error", (err) => {
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
+      if (options.signal?.aborted) {
+        reject(createAbortError(options.signal));
+        return;
+      }
       resolve({ stdout: "", stderr: err.message, exitCode: 1, timedOut: false, shell, platform: "windows", environment: "windows" });
     });
   });

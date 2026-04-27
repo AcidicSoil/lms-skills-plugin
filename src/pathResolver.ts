@@ -3,6 +3,7 @@ import type { RuntimeTargetName } from "./environment";
 import { formatEnvironmentLabel } from "./environment";
 import type { RuntimeRegistry } from "./runtime";
 import type { RuntimeAdapter } from "./runtime/types";
+import { checkAbort, isAbortError } from "./abort";
 
 export interface ResolvedSkillRoot {
   environment: RuntimeTargetName;
@@ -36,8 +37,11 @@ export async function resolveTargetPath(
   rawPath: string,
   target: RuntimeTargetName,
   runtime: RuntimeAdapter,
+  signal?: AbortSignal,
 ): Promise<ResolvedSkillRoot> {
-  const resolvedPath = await runtime.expandPath(rawPath);
+  checkAbort(signal);
+  const resolvedPath = await runtime.expandPath(rawPath, signal);
+  checkAbort(signal);
   return {
     environment: target,
     environmentLabel: formatEnvironmentLabel(target),
@@ -51,22 +55,28 @@ export async function resolveSkillRoots(
   rawPaths: string[],
   targets: RuntimeTargetName[],
   registry: RuntimeRegistry,
+  signal?: AbortSignal,
 ): Promise<ResolvedSkillRoot[]> {
+  checkAbort(signal);
   const parsed = parseRawSkillPaths(rawPaths);
   const seen = new Set<string>();
   const roots: ResolvedSkillRoot[] = [];
 
   for (const target of targets) {
+    checkAbort(signal);
     const runtime = registry.getRuntime(target);
     for (const rawPath of parsed) {
+      checkAbort(signal);
       try {
-        const root = await resolveTargetPath(rawPath, target, runtime);
+        const root = await resolveTargetPath(rawPath, target, runtime, signal);
         const key = `${target}:${normalizeForTarget(target, root.resolvedPath)}`;
         if (!seen.has(key)) {
           seen.add(key);
           roots.push(root);
         }
-      } catch {}
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+      }
     }
   }
 

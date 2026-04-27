@@ -4,6 +4,7 @@ import { deriveRuntimeTargets } from "./environment";
 import { createRuntimeRegistry } from "./runtime";
 import { resolveSkillRoots } from "./pathResolver";
 import { MIN_PROMPT_LENGTH, REINJECT_INTERVAL_MS } from "./constants";
+import { checkAbort, isAbortError } from "./abort";
 import type { PluginController } from "./pluginTypes";
 import type { SkillInfo } from "./types";
 
@@ -122,18 +123,26 @@ export async function promptPreprocessor(
   ctl: PluginController,
   userMessage: MessageInput,
 ): Promise<MessageInput> {
+  const signal = ctl.abortSignal;
+  checkAbort(signal);
+
   const cfg = resolveEffectiveConfig(ctl);
 
   if (!cfg.autoInject) return userMessage;
 
+  checkAbort(signal);
   const text = extractText(userMessage);
+  checkAbort(signal);
   if (text.trim().length < MIN_PROMPT_LENGTH) return userMessage;
 
   try {
+    checkAbort(signal);
     const registry = createRuntimeRegistry(cfg);
     const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
-    const roots = await resolveSkillRoots(cfg.skillsPaths, targets, registry);
-    const skills = await scanSkills(roots, registry);
+    const roots = await resolveSkillRoots(cfg.skillsPaths, targets, registry, signal);
+    checkAbort(signal);
+    const skills = await scanSkills(roots, registry, signal);
+    checkAbort(signal);
     if (skills.length === 0) return userMessage;
 
     const fingerprint = computeFingerprint(skills);
@@ -146,11 +155,13 @@ export async function promptPreprocessor(
     lastFingerprint = fingerprint;
     lastInjectedAt = now;
 
+    checkAbort(signal);
     return injectIntoMessage(
       userMessage,
       buildInjection(skills, cfg.maxSkillsInContext),
     );
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     return userMessage;
   }
 }

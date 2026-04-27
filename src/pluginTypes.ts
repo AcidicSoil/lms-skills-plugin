@@ -1,6 +1,7 @@
 import type { configSchematics } from "./config";
 
 export interface PluginController {
+  abortSignal?: AbortSignal;
   getPluginConfig(schematics: typeof configSchematics): {
     get(key: string): unknown;
   };

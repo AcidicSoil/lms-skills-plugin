@@ -14,18 +14,23 @@ import type { RuntimeRegistry } from "./runtime";
 import type { RuntimeAdapter } from "./runtime/types";
 import type { SkillInfo, SkillManifestFile, DirectoryEntry } from "./types";
 import type { RuntimeTargetName } from "./environment";
+import { checkAbort, isAbortError } from "./abort";
 
 async function readFileSafe(
   runtime: RuntimeAdapter,
   filePath: string,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   try {
-    const stat = await runtime.stat(filePath);
+    checkAbort(signal);
+    const stat = await runtime.stat(filePath, signal);
     if (stat.size <= MAX_FILE_SIZE_BYTES) {
-      return runtime.readFile(filePath);
+      return runtime.readFile(filePath, signal);
     }
 
-    const content = await runtime.readFile(filePath);
+    checkAbort(signal);
+    const content = await runtime.readFile(filePath, signal);
+    checkAbort(signal);
     const buf = Buffer.from(content, "utf-8");
     const headBytes = Math.floor(MAX_FILE_SIZE_BYTES * 0.8);
     const tailBytes = MAX_FILE_SIZE_BYTES - headBytes;
@@ -33,7 +38,8 @@ async function readFileSafe(
     const tail = buf.slice(buf.length - tailBytes).toString("utf-8").replace(/^.*?\uFFFD/, "");
     const omitted = Math.round((stat.size - MAX_FILE_SIZE_BYTES) / 1024);
     return `${head}\n\n[... ${omitted}KB omitted - middle of file truncated ...]\n\n${tail}`;
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     return null;
   }
 }
@@ -131,12 +137,16 @@ function extractBodyExcerpt(content: string): string {
 async function loadManifest(
   runtime: RuntimeAdapter,
   skillDir: string,
+  signal?: AbortSignal,
 ): Promise<SkillManifestFile | null> {
   const manifestPath = path.posix.join(skillDir, SKILL_MANIFEST_FILE);
   try {
-    if (!(await runtime.exists(manifestPath))) return null;
-    return JSON.parse(await runtime.readFile(manifestPath)) as SkillManifestFile;
-  } catch {
+    checkAbort(signal);
+    if (!(await runtime.exists(manifestPath, signal))) return null;
+    checkAbort(signal);
+    return JSON.parse(await runtime.readFile(manifestPath, signal)) as SkillManifestFile;
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     return null;
   }
 }
@@ -144,13 +154,17 @@ async function loadManifest(
 async function hasExtraFiles(
   runtime: RuntimeAdapter,
   skillDir: string,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   try {
-    const entries = await runtime.readDir(skillDir);
+    checkAbort(signal);
+    const entries = await runtime.readDir(skillDir, signal);
+    checkAbort(signal);
     return entries.some(
       (e) => e.name !== SKILL_ENTRY_POINT && e.name !== SKILL_MANIFEST_FILE,
     );
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     return false;
   }
 }
@@ -189,24 +203,27 @@ function isInsideTarget(
 async function scanSkillsRoot(
   root: ResolvedSkillRoot,
   registry: RuntimeRegistry,
+  signal?: AbortSignal,
 ): Promise<SkillInfo[]> {
   const runtime = registry.getRuntime(root.environment);
   try {
-    if (!(await runtime.exists(root.resolvedPath))) return [];
+    checkAbort(signal);
+    if (!(await runtime.exists(root.resolvedPath, signal))) return [];
 
     const skills: SkillInfo[] = [];
-    const entries = await runtime.readDir(root.resolvedPath);
+    const entries = await runtime.readDir(root.resolvedPath, signal);
 
     for (const entry of entries) {
+      checkAbort(signal);
       if (entry.type !== "directory") continue;
 
       const skillDir = joinForTarget(root.environment, root.resolvedPath, entry.name);
       const skillMdPath = joinForTarget(root.environment, skillDir, SKILL_ENTRY_POINT);
 
-      if (!(await runtime.exists(skillMdPath))) continue;
+      if (!(await runtime.exists(skillMdPath, signal))) continue;
 
-      const manifest = await loadManifest(runtime, skillDir);
-      const skillMdContent = await readFileSafe(runtime, skillMdPath);
+      const manifest = await loadManifest(runtime, skillDir, signal);
+      const skillMdContent = await readFileSafe(runtime, skillMdPath, signal);
 
       const description =
         manifest?.description ??
@@ -233,12 +250,13 @@ async function scanSkillsRoot(
         displayPath,
         environment: root.environment,
         environmentLabel: root.environmentLabel,
-        hasExtraFiles: await hasExtraFiles(runtime, skillDir),
+        hasExtraFiles: await hasExtraFiles(runtime, skillDir, signal),
       });
     }
 
     return skills;
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     return [];
   }
 }
@@ -246,12 +264,14 @@ async function scanSkillsRoot(
 export async function scanSkills(
   roots: ResolvedSkillRoot[],
   registry: RuntimeRegistry,
+  signal?: AbortSignal,
 ): Promise<SkillInfo[]> {
   const seen = new Set<string>();
   const merged: SkillInfo[] = [];
 
   for (const root of roots) {
-    for (const skill of await scanSkillsRoot(root, registry)) {
+    checkAbort(signal);
+    for (const skill of await scanSkillsRoot(root, registry, signal)) {
       const key = `${skill.environment}:${normalizeForTarget(skill.environment, skill.resolvedDirectoryPath)}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -341,16 +361,18 @@ export async function searchSkills(
   roots: ResolvedSkillRoot[],
   registry: RuntimeRegistry,
   query: string,
+  signal?: AbortSignal,
 ): Promise<SkillSearchResult[]> {
   const queryTokens = tokenize(query);
   if (queryTokens.length === 0) return [];
 
   const queryLower = query.toLowerCase().trim();
-  const allSkills = await scanSkills(roots, registry);
+  const allSkills = await scanSkills(roots, registry, signal);
   const idf = computeIdf(allSkills);
   const results: SkillSearchResult[] = [];
 
   for (const skill of allSkills) {
+    checkAbort(signal);
     const nameLower = skill.name.toLowerCase();
 
     if (nameLower === queryLower) {
@@ -409,10 +431,11 @@ export async function resolveSkillByName(
   roots: ResolvedSkillRoot[],
   registry: RuntimeRegistry,
   skillName: string,
+  signal?: AbortSignal,
 ): Promise<SkillInfo | null> {
   const lower = skillName.toLowerCase().trim();
   const display = parseDisplayPath(skillName);
-  const skills = await scanSkills(roots, registry);
+  const skills = await scanSkills(roots, registry, signal);
 
   if (display.environment) {
     return (
@@ -440,7 +463,9 @@ export async function readSkillFile(
   skill: SkillInfo,
   relativeFilePath: string | undefined,
   registry: RuntimeRegistry,
+  signal?: AbortSignal,
 ): Promise<{ content: string; resolvedPath: string; displayPath: string } | { error: string }> {
+  checkAbort(signal);
   const runtime = registry.getRuntime(skill.environment);
   const targetRel = relativeFilePath?.trim() || SKILL_ENTRY_POINT;
   const resolved = joinForTarget(
@@ -452,20 +477,20 @@ export async function readSkillFile(
   if (!isInsideTarget(skill.environment, resolved, skill.resolvedDirectoryPath)) {
     return { error: "Path traversal outside skill directory is not allowed." };
   }
-  if (!(await runtime.exists(resolved))) {
+  if (!(await runtime.exists(resolved, signal))) {
     return {
       error: `File not found: ${targetRel}. Use \`list_skill_files\` to see available files.`,
     };
   }
 
-  const stat = await runtime.stat(resolved);
+  const stat = await runtime.stat(resolved, signal);
   if (stat.isDirectory) {
     return {
       error: `"${targetRel}" is a directory. Use \`list_skill_files\` to explore it.`,
     };
   }
 
-  const content = await readFileSafe(runtime, resolved);
+  const content = await readFileSafe(runtime, resolved, signal);
   if (content === null) return { error: `Unable to read file: ${targetRel}` };
 
   return {
@@ -479,6 +504,7 @@ export async function readAbsolutePath(
   absolutePath: string,
   roots: ResolvedSkillRoot[],
   registry: RuntimeRegistry,
+  signal?: AbortSignal,
 ): Promise<
   | {
       content: string;
@@ -494,17 +520,18 @@ export async function readAbsolutePath(
     : roots;
 
   for (const root of candidateRoots) {
+    checkAbort(signal);
     const runtime = registry.getRuntime(root.environment);
-    const resolved = await runtime.expandPath(parsed.path);
+    const resolved = await runtime.expandPath(parsed.path, signal);
     if (!isInsideTarget(root.environment, resolved, root.resolvedPath)) continue;
-    if (!(await runtime.exists(resolved))) continue;
-    const stat = await runtime.stat(resolved);
+    if (!(await runtime.exists(resolved, signal))) continue;
+    const stat = await runtime.stat(resolved, signal);
     if (stat.isDirectory) {
       return {
         error: `"${resolved}" is a directory. Use \`list_skill_files\` to explore it.`,
       };
     }
-    const content = await readFileSafe(runtime, resolved);
+    const content = await readFileSafe(runtime, resolved, signal);
     if (content === null) return { error: `Unable to read file: ${resolved}` };
     return {
       content,
@@ -521,20 +548,23 @@ export async function listSkillDirectory(
   skill: SkillInfo,
   relativeSubPath: string | undefined,
   registry: RuntimeRegistry,
+  signal?: AbortSignal,
 ): Promise<DirectoryEntry[]> {
+  checkAbort(signal);
   const base = relativeSubPath
     ? joinForTarget(skill.environment, skill.resolvedDirectoryPath, relativeSubPath.trim())
     : skill.resolvedDirectoryPath;
 
   if (!isInsideTarget(skill.environment, base, skill.resolvedDirectoryPath)) return [];
 
-  return walkDirectory(skill.environment, registry.getRuntime(skill.environment), base, skill.resolvedDirectoryPath, 0);
+  return walkDirectory(skill.environment, registry.getRuntime(skill.environment), base, skill.resolvedDirectoryPath, 0, signal);
 }
 
 export async function listAbsoluteDirectory(
   absolutePath: string,
   roots: ResolvedSkillRoot[],
   registry: RuntimeRegistry,
+  signal?: AbortSignal,
 ): Promise<DirectoryEntry[]> {
   const parsed = parseDisplayPath(absolutePath);
   const candidateRoots = parsed.environment
@@ -542,13 +572,14 @@ export async function listAbsoluteDirectory(
     : roots;
 
   for (const root of candidateRoots) {
+    checkAbort(signal);
     const runtime = registry.getRuntime(root.environment);
-    const resolved = await runtime.expandPath(parsed.path);
+    const resolved = await runtime.expandPath(parsed.path, signal);
     if (!isInsideTarget(root.environment, resolved, root.resolvedPath)) continue;
-    if (!(await runtime.exists(resolved))) continue;
-    const stat = await runtime.stat(resolved);
+    if (!(await runtime.exists(resolved, signal))) continue;
+    const stat = await runtime.stat(resolved, signal);
     if (!stat.isDirectory) continue;
-    return walkDirectory(root.environment, runtime, resolved, resolved, 0);
+    return walkDirectory(root.environment, runtime, resolved, resolved, 0, signal);
   }
   return [];
 }
@@ -559,12 +590,14 @@ async function walkDirectory(
   dir: string,
   rootDir: string,
   depth: number,
+  signal?: AbortSignal,
 ): Promise<DirectoryEntry[]> {
+  checkAbort(signal);
   if (depth > MAX_DIRECTORY_DEPTH) return [];
 
   let dirEntries;
   try {
-    dirEntries = await runtime.readDir(dir);
+    dirEntries = await runtime.readDir(dir, signal);
   } catch {
     return [];
   }
@@ -572,6 +605,7 @@ async function walkDirectory(
   const entries: DirectoryEntry[] = [];
 
   for (const entry of dirEntries) {
+    checkAbort(signal);
     if (entries.length >= MAX_DIRECTORY_ENTRIES) break;
 
     const fullPath = joinForTarget(environment, dir, entry.name);
@@ -587,7 +621,7 @@ async function walkDirectory(
       });
       if (depth < MAX_DIRECTORY_DEPTH) {
         entries.push(
-          ...(await walkDirectory(environment, runtime, fullPath, rootDir, depth + 1)),
+          ...(await walkDirectory(environment, runtime, fullPath, rootDir, depth + 1, signal)),
         );
       }
     } else if (entry.type === "file") {

@@ -19,6 +19,7 @@ export interface RuntimeExecOptions {
   timeoutMs?: number;
   shellPath?: string;
   env?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 export interface RuntimeExecResult {
@@ -36,10 +37,10 @@ export interface RuntimeAdapter {
   label: "Windows" | "WSL";
   displayName: "Windows" | "WSL";
   shell: string;
-  expandPath(rawPath: string): Promise<string>;
-  exists(filePath: string): Promise<boolean>;
-  stat(filePath: string): Promise<RuntimeFileStat>;
-  readFile(filePath: string): Promise<string>;
-  readDir(dirPath: string): Promise<RuntimeDirectoryEntry[]>;
+  expandPath(rawPath: string, signal?: AbortSignal): Promise<string>;
+  exists(filePath: string, signal?: AbortSignal): Promise<boolean>;
+  stat(filePath: string, signal?: AbortSignal): Promise<RuntimeFileStat>;
+  readFile(filePath: string, signal?: AbortSignal): Promise<string>;
+  readDir(dirPath: string, signal?: AbortSignal): Promise<RuntimeDirectoryEntry[]>;
   exec(command: string, options?: RuntimeExecOptions): Promise<RuntimeExecResult>;
 }
