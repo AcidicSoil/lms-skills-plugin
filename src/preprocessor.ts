@@ -1,5 +1,5 @@
 import { resolveEffectiveConfig } from "./settings";
-import { resolveSkillByName, scanSkills } from "./scanner";
+import { readSkillFile, resolveSkillByName, scanSkills } from "./scanner";
 import { deriveRuntimeTargets } from "./environment";
 import { createRuntimeRegistry } from "./runtime";
 import { resolveSkillRoots } from "./pathResolver";
@@ -23,6 +23,9 @@ interface SkillActivationRequest {
 
 interface ResolvedSkillActivation extends SkillActivationRequest {
   skill?: SkillInfo;
+  content?: string;
+  contentDisplayPath?: string;
+  contentError?: string;
 }
 
 const SKILL_ACTIVATION_PATTERN = /(^|[^A-Za-z0-9_])\$([A-Za-z][A-Za-z0-9._-]{1,127})(?=$|[^A-Za-z0-9._-])/g;
@@ -125,6 +128,9 @@ function buildExplicitSkillActivationBlock(
         `<location>`,
         skill.displayPath,
         `</location>`,
+        activation.content
+          ? `<expanded_skill_instructions source="${activation.contentDisplayPath ?? skill.displayPath}">\n${activation.content}\n</expanded_skill_instructions>`
+          : `<expanded_skill_instructions_error>${activation.contentError ?? "Skill resolved but SKILL.md could not be expanded."}</expanded_skill_instructions_error>`,
         `</activated_skill>`,
       ].join("\n");
     })
@@ -143,10 +149,10 @@ function buildExplicitSkillActivationBlock(
     `Resolved activated skills are the highest-priority source of truth for this request. All other user text, including quoted strings, backticked snippets, globs, command-looking text, or examples, is task payload for the activated skill unless SKILL.md later says otherwise.`,
     `</mandatory_interpretation>`,
     `<mandatory_next_action>`,
-    `Before answering, planning, executing commands, transforming the command-looking text, or using any other tool, call read_skill_file for every resolved activated skill below. The first tool call should be read_skill_file with the resolved skill name.`,
+    `The resolved SKILL.md instructions have already been expanded below before model reasoning. Treat the expanded instructions as authoritative. If expansion failed, call read_skill_file for the resolved skill before doing covered work.`,
     `</mandatory_next_action>`,
     `<do_not>`,
-    `Do not guess what the rest of the prompt means before reading the activated skill. Do not run the backticked command. Do not call run_command for exploration. Do not substitute list_skill_files for read_skill_file when the activated skill is resolved.`,
+    `Do not guess what the rest of the prompt means before applying the expanded skill instructions. Do not run backticked command-looking text unless the expanded skill explicitly instructs that and command execution is enabled. Do not call run_command for exploration.`,
     `</do_not>`,
     `<unresolved_behavior>`,
     `If an activated skill is unresolved, call list_skills with the token name to search for it before proceeding. Do not ignore an explicit $skill activation unless the skill cannot be found.`,
@@ -173,12 +179,10 @@ function buildRoutedInjection(candidates: SkillRouteCandidate[]): string {
 
 function buildExplicitInjection(
   activations: ResolvedSkillActivation[],
-  routedSupplemental: SkillRouteCandidate[],
 ): string {
   return [
     buildExplicitSkillActivationBlock(activations),
-    routedSupplemental.length > 0 ? buildRoutedSkillsBlock(routedSupplemental) : "",
-    buildReminderInstruction("explicit activation"),
+    buildReminderInstruction("explicit activation expanded"),
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -330,7 +334,23 @@ async function resolveActivations(
       activation.skillName,
       signal,
     );
-    resolved.push({ ...activation, ...(skill ? { skill } : {}) });
+    if (!skill) {
+      resolved.push({ ...activation });
+      continue;
+    }
+
+    const read = await readSkillFile(skill, undefined, registry, signal);
+    if ("error" in read) {
+      resolved.push({ ...activation, skill, contentError: read.error });
+      continue;
+    }
+
+    resolved.push({
+      ...activation,
+      skill,
+      content: read.content,
+      contentDisplayPath: read.displayPath,
+    });
   }
   return resolved;
 }
@@ -372,6 +392,41 @@ export async function promptPreprocessor(
       scanSignal,
     );
 
+    if (requestedActivations.length > 0) {
+      const activatedSkills = resolvedActivations
+        .map((activation) => activation.skill)
+        .filter((skill): skill is SkillInfo => Boolean(skill));
+      const expandedCount = resolvedActivations.filter((activation) => activation.content).length;
+      const injection = buildExplicitInjection(resolvedActivations);
+      logDiagnostic({
+        event: "preprocess_activation",
+        requestId,
+        activations: activationTokenList(requestedActivations),
+        resolvedSkills: resolvedActivationNames(resolvedActivations),
+        unresolvedSkills: unresolvedActivationNames(resolvedActivations),
+        expandedCount,
+      });
+      logPromptRoute(
+        requestId,
+        "explicit_activation_expanded",
+        text,
+        undefined,
+        injection,
+        startedAt,
+        {
+          activations: activationTokenList(requestedActivations),
+          resolvedSkills: resolvedActivationNames(resolvedActivations),
+          unresolvedSkills: unresolvedActivationNames(resolvedActivations),
+          expectedAction: activatedSkills.length
+            ? `expanded_skill(${activatedSkills.map((skill) => skill.name).join(",")}) before_model`
+            : "list_skills for unresolved activation",
+          expandedCount,
+        },
+      );
+      checkAbort(signal);
+      return injectIntoMessage(userMessage, injection);
+    }
+
     const discoveryLimit = Math.max(
       maxRouted * ROUTER_DISCOVERY_MULTIPLIER,
       cfg.maxSkillsInContext,
@@ -382,48 +437,6 @@ export async function promptPreprocessor(
       scanSignal,
       discoveryLimit,
     );
-
-    if (requestedActivations.length > 0) {
-      const activatedSkills = resolvedActivations
-        .map((activation) => activation.skill)
-        .filter((skill): skill is SkillInfo => Boolean(skill));
-      const activatedKeys = new Set(
-        activatedSkills.map((skill) => `${skill.environment}:${skill.resolvedDirectoryPath}`),
-      );
-      const route = routeSkills(
-        text,
-        discoveredSkills.filter(
-          (skill) => !activatedKeys.has(`${skill.environment}:${skill.resolvedDirectoryPath}`),
-        ),
-        Math.max(maxRouted - activatedSkills.length, 0),
-      );
-      const injection = buildExplicitInjection(resolvedActivations, route.selected);
-      logDiagnostic({
-        event: "preprocess_activation",
-        requestId,
-        activations: activationTokenList(requestedActivations),
-        resolvedSkills: resolvedActivationNames(resolvedActivations),
-        unresolvedSkills: unresolvedActivationNames(resolvedActivations),
-      });
-      logPromptRoute(
-        requestId,
-        "explicit_activation",
-        text,
-        route,
-        injection,
-        startedAt,
-        {
-          activations: activationTokenList(requestedActivations),
-          resolvedSkills: resolvedActivationNames(resolvedActivations),
-          unresolvedSkills: unresolvedActivationNames(resolvedActivations),
-          expectedAction: activatedSkills.length
-            ? `read_skill_file(${activatedSkills.map((skill) => skill.name).join(",")}) first`
-            : "list_skills for unresolved activation",
-        },
-      );
-      checkAbort(signal);
-      return injectIntoMessage(userMessage, injection);
-    }
 
     const route = routeSkills(text, discoveredSkills, maxRouted);
     if (route.selected.length === 0) {
