@@ -158,7 +158,7 @@ function buildExplicitSkillActivationBlock(
     `</model_contract>`,
     `<next_action>`,
     expandedCount > 0
-      ? `Use the expanded skill instructions immediately and answer according to them. Do not call list_skills. Do not call read_skill_file for already-expanded skills. Treat <task_payload> as the user's input to the expanded skill.`
+      ? `Use the expanded skill instructions immediately and answer according to them. Do not call list_skills, read_skill_file, run_command, or web/search tools to resolve already-expanded skills. Treat <task_payload> as the user's input to the expanded skill.`
       : `Call list_skills for unresolved activations, then read the matching skill before doing covered work.`,
     hasResolvedFailures
       ? `For failed expansions only, call read_skill_file before doing covered work.`
@@ -190,12 +190,7 @@ function buildRoutedInjection(candidates: SkillRouteCandidate[]): string {
 function buildExplicitInjection(
   activations: ResolvedSkillActivation[],
 ): string {
-  return [
-    buildExplicitSkillActivationBlock(activations),
-    buildReminderInstruction("explicit activation expanded"),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  return buildExplicitSkillActivationBlock(activations);
 }
 
 function computeFingerprint(candidates: SkillRouteCandidate[]): string {

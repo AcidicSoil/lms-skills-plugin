@@ -14,15 +14,17 @@ Most important current behaviors:
   - YAML frontmatter is stripped,
   - the instruction body is injected as `<expanded_skill_instructions>` inside a `<skill_invocation_packet>` before the model starts reasoning,
   - the model-facing contract says the activated skill is already preloaded and should be treated as read/understood,
+  - the explicit next-action forbids `list_skills`, `read_skill_file`, `run_command`, and web/search tools for already-expanded skills,
   - the `$skill-name` token is removed from model-facing payload,
   - remaining user text is wrapped in `<task_payload for_expanded_skills="...">` and treated as input to the expanded skill.
 - Explicit `$skill-name` works even if normal internal context is disabled.
 - Explicit `$skill-name` can activate skills with `disable-model-invocation: true` because the user directly requested them.
+- Explicit activation injection now contains only the `<skill_invocation_packet>`; the generic runtime reminder is not appended, to avoid conflicting instructions that tell the model to read `$skill-name` after it was already expanded.
 - `SKILL.md` frontmatter is the primary metadata source for routing:
   - `name`, `description`, `when_to_use` / `when-to-use`, `tags`, `disable-model-invocation`, `user-invocable`, and related fields are parsed.
 - Metadata priority: `SKILL.md` frontmatter, then `skill.json`, then directory/markdown fallback.
 - `read_skill_file` strips frontmatter from `SKILL.md` responses.
-- `list_skills({ query, mode: "route" })` exposes the same router used by prompt injection.
+- `list_skills({ query, mode: "route" })` exposes the same router used by prompt injection, but now first attempts exact skill resolution before broad route scanning. This keeps exact skill names consistent with `$skill-name` preprocessor resolution and avoids expensive scans/timeouts when the query is already an exact skill.
 - `run_command` is disabled by default and protected by schema validation plus command safety policy.
 - Tool inputs are validated by Zod schemas in `src/toolSchemas.ts`.
 - Tool requests have timeout guardrails.
@@ -49,7 +51,7 @@ Key files:
 - `src/preprocessor.ts`: normal routed context, no-route reminder, explicit `$skill` expansion, context-injection audit logging.
 - `src/skillRouter.ts`: deterministic routing algorithm.
 - `src/scanner.ts`: skill discovery, frontmatter parsing, exact lookup, read/list helpers.
-- `src/toolsProvider.ts`: tool schemas/handlers and `list_skills(mode="route")`.
+- `src/toolsProvider.ts`: tool schemas/handlers and `list_skills(mode="route")`; route-mode exact match fast path.
 - `src/diagnostics.ts`: default human-readable logs, compact context proof logs, full context_content blocks, debug JSON logs.
 - `src/commandSafety.ts`: command execution policy.
 - `README.md`: should reflect routed context, explicit expansion, and context-injection proof logging.
@@ -66,3 +68,4 @@ Recommended smoke tests after routing/preprocessor/logging changes:
 - Disabled skill does not auto-route but can be explicitly expanded.
 - Logs contain `context kind=explicit_expanded ... sha=... payloadSha=...` and a matching `context_content` block for explicit activations.
 - Noisy internal WSL/runtime `exit=1 stdout=0B stderr=0B` completion lines should not flood default logs.
+- `list_skills({ query: "exact-skill-name", mode: "route" })` should return the exact skill directly instead of timing out or returning `total: 0`.

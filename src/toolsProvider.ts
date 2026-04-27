@@ -193,6 +193,53 @@ export async function toolsProvider(ctl: PluginController) {
           status(`Searching skills for "${trimmedQuery}"..`);
 
           if (mode === "route") {
+            const exactSkill = await timedStep(
+              requestId,
+              "list_skills",
+              "resolve_exact_skill_query_for_route",
+              async () => resolveSkillByName(roots, registry, trimmedQuery, toolSignal),
+              { query: trimmedQuery, rootCount: roots.length },
+            );
+
+            if (exactSkill) {
+              status(`Found exact skill ${exactSkill.name}`);
+              logDiagnostic({
+                event: "list_skills_exact_result",
+                requestId,
+                tool: "list_skills",
+                query: trimmedQuery,
+                mode: "route",
+                skill: exactSkill.name,
+                environment: exactSkill.environment,
+                resolvedDirectoryPath: exactSkill.resolvedDirectoryPath,
+              });
+              return {
+                query: trimmedQuery,
+                mode: "route",
+                total: 1,
+                found: 1,
+                threshold: 0,
+                queryTokens: trimmedQuery.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
+                exactMatch: true,
+                note: "Exact skill match resolved directly before route scanning.",
+                selected: [
+                  {
+                    name: exactSkill.name,
+                    description: exactSkill.description,
+                    tags: exactSkill.tags.length > 0 ? exactSkill.tags : undefined,
+                    environment: exactSkill.environment,
+                    skillMdPath: exactSkill.skillMdPath,
+                    displayPath: exactSkill.displayPath,
+                    hasExtraFiles: exactSkill.hasExtraFiles,
+                    score: 999,
+                    confidence: "exact",
+                    reasons: ["exact_skill_name_or_directory_match"],
+                    source: "exact",
+                  },
+                ],
+              };
+            }
+
             const skills = await timedStep(
               requestId,
               "list_skills",
