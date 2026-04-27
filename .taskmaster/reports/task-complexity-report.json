@@ -1,0 +1,93 @@
+{
+	"meta": {
+		"generatedAt": "2026-04-26T23:45:57.637Z",
+		"tasksAnalyzed": 10,
+		"totalTasks": 10,
+		"analysisCount": 10,
+		"thresholdScore": 5,
+		"projectName": "Task Master",
+		"usedResearch": true
+	},
+	"complexityAnalysis": [
+		{
+			"taskId": 1,
+			"taskTitle": "Establish Foundation Types and Environment Logic",
+			"complexityScore": 3,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Definition of SkillsEnvironment and RuntimeTargetName enums/types, 2) Implementation of deriveRuntimeTargets logic, 3) Definition of the RuntimeAdapter interface and updates to SkillInfo/PersistedSettings types.",
+			"reasoning": "This is a foundational task involving type definitions and pure logic for environment derivation. It has no dependencies and sets the contract for the rest of the system. While critical, the implementation is straightforward TypeScript work."
+		},
+		{
+			"taskId": 2,
+			"taskTitle": "Implement Windows Runtime Adapter",
+			"complexityScore": 4,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Path normalization and home directory expansion logic using path.win32 and os.homedir, 2) Filesystem operations implementation (stat, readFile, etc.), 3) Integration of existing shell detection into the adapter's exec method.",
+			"reasoning": "Implementation of a concrete adapter using Node.js built-ins. Complexity is moderate because it requires encapsulating existing shell logic and ensuring consistent behavior with the interface."
+		},
+		{
+			"taskId": 3,
+			"taskTitle": "Implement WSL Runtime Adapter",
+			"complexityScore": 7,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) WSL environment discovery (fetching $HOME via wsl.exe), 2) Command execution wrapper with proper bash escaping and quoting, 3) Mapping filesystem calls to wsl.exe bash commands (cat, ls, etc.), 4) Handling of WSL-specific error codes and output parsing.",
+			"reasoning": "Significantly more complex than the Windows adapter. It requires crossing the OS boundary via process execution for every filesystem operation, requiring robust string escaping, output parsing, and error handling for the wsl.exe CLI."
+		},
+		{
+			"taskId": 4,
+			"taskTitle": "Implement Environment-Aware Path Resolver",
+			"complexityScore": 5,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Semicolon-separated string parsing logic, 2) Multi-target resolution loop using adapters, 3) Implementation of ResolvedSkillRoot object creation and display path formatting.",
+			"reasoning": "Requires coordinating multiple adapters to resolve paths. The complexity lies in correctly handling the 'Both' environment mode where one input path might result in two different resolved locations."
+		},
+		{
+			"taskId": 5,
+			"taskTitle": "Refactor Command Executor for Target Routing",
+			"complexityScore": 6,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Implementation of RuntimeRegistry to manage adapter instances, 2) Updating the main execute function to accept target/context, 3) Implementing target inference logic based on current working directory.",
+			"reasoning": "Refactoring core execution logic is risky. It involves changing how the system decides where to run commands and ensuring that metadata (environment/shell) is correctly bubbled up to the user."
+		},
+		{
+			"taskId": 6,
+			"taskTitle": "Update Configuration and Settings Migration",
+			"complexityScore": 4,
+			"recommendedSubtasks": 2,
+			"expansionPrompt": "Break down into: 1) Schema updates in config.ts for new fields, 2) Implementation of the migration function for legacy shellPath in settings.ts.",
+			"reasoning": "Standard configuration work. The primary challenge is ensuring a seamless migration from the old single-shell setting to the new multi-environment settings without breaking existing installations."
+		},
+		{
+			"taskId": 7,
+			"taskTitle": "Refactor Skill Scanner for Environment Isolation",
+			"complexityScore": 6,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Updating the scan loop to iterate over ResolvedSkillRoots, 2) Decoupling discovery from Node.js fs by using the root's adapter, 3) Implementing deduplication and environment tagging for SkillInfo objects.",
+			"reasoning": "The scanner is a central component. Refactoring it to be environment-agnostic (using adapters instead of direct fs calls) is a major architectural shift that requires careful handling of path overlaps."
+		},
+		{
+			"taskId": 8,
+			"taskTitle": "Update Skill File Operations",
+			"complexityScore": 5,
+			"recommendedSubtasks": 2,
+			"expansionPrompt": "Break down into: 1) Refactoring readSkillFile and listSkillDirectory to look up adapters by SkillInfo metadata, 2) Updating path authorization logic to be environment-aware.",
+			"reasoning": "This task focuses on security and correctness. Ensuring that a WSL skill cannot be 'read' by the Windows adapter (and vice-versa) is critical for maintaining the integrity of the environment isolation."
+		},
+		{
+			"taskId": 9,
+			"taskTitle": "Integrate Environment Metadata into Tools and Prompts",
+			"complexityScore": 4,
+			"recommendedSubtasks": 2,
+			"expansionPrompt": "Break down into: 1) Updating tool response schemas (list_skills, run_command), 2) Modifying the preprocessor to inject environment labels into the system prompt.",
+			"reasoning": "Mainly integration work. It involves surfacing the information already gathered in previous tasks to the LLM and the end-user. Requires attention to detail in prompt engineering."
+		},
+		{
+			"taskId": 10,
+			"taskTitle": "Update Bootstrap Logic and Add Diagnostics",
+			"complexityScore": 5,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Refactoring setup.ts to use adapters for directory/file creation, 2) Implementing wsl.exe availability checks (probeWsl), 3) Adding user-facing diagnostic error messages for environment issues.",
+			"reasoning": "Crucial for UX. It ensures the system fails gracefully if WSL is missing and that the initial setup correctly populates both Windows and WSL environments as requested."
+		}
+	]
+}
