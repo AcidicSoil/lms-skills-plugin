@@ -302,16 +302,27 @@ function logContextInjection(
   payload: string | undefined,
   extra: Record<string, unknown> = {},
 ): void {
+  const injectionSha256 = sha256Short(injection);
   logDiagnostic({
     event: "context_injection",
     requestId,
     kind,
     injectionChars: injection.length,
-    injectionSha256: sha256Short(injection),
+    injectionSha256,
     injectionPreview: contentPreview(injection),
     payloadChars: payload?.length ?? 0,
     payloadSha256: payload ? sha256Short(payload) : "-",
     payloadPreview: payload ? contentPreview(payload) : "-",
+    ...extra,
+  });
+  logDiagnostic({
+    event: "context_injection_content",
+    requestId,
+    kind,
+    injectedContext: injection,
+    injectedContextChars: injection.length,
+    injectedContextSha256: injectionSha256,
+    taskPayload: payload,
     ...extra,
   });
 }

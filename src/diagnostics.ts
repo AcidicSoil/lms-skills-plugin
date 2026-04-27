@@ -27,6 +27,7 @@ function shouldLog(event: DiagnosticEvent): boolean {
   switch (event.event) {
     case "prompt_context":
     case "context_injection":
+    case "context_injection_content":
     case "prompt_route":
     case "preprocess_decision":
     case "preprocess_activation":
@@ -54,7 +55,6 @@ function shouldLog(event: DiagnosticEvent): boolean {
     case "runtime_exec_complete":
       return (
         event.timedOut === true ||
-        event.exitCode !== 0 ||
         (typeof event.elapsedMs === "number" && event.elapsedMs >= SLOW_RUNTIME_MS)
       );
     default:
@@ -150,6 +150,15 @@ function formatContextInjection(event: DiagnosticEvent): string {
   return `context kind=${quote(event.kind)} packet=${quote(event.packet)} skills=${quote(event.skills ?? event.routedSkills)} unresolved=${quote(event.unresolvedSkills)} inject=${quote(event.injectionChars)}ch sha=${quote(event.injectionSha256)} preview="${quote(event.injectionPreview)}" payload=${quote(event.payloadChars)}ch payloadSha=${quote(event.payloadSha256)} payload="${quote(event.payloadPreview)}"${id(event)}`;
 }
 
+function formatContextInjectionContent(event: DiagnosticEvent): string {
+  const injected = String(event.injectedContext ?? "");
+  const payload = event.taskPayload === undefined ? undefined : String(event.taskPayload);
+  const payloadBlock = payload === undefined
+    ? ""
+    : `\n---BEGIN task_payload---\n${payload}\n---END task_payload---`;
+  return `context_content kind=${quote(event.kind)} packet=${quote(event.packet)} chars=${quote(event.injectedContextChars)} sha=${quote(event.injectedContextSha256)}${id(event)}\n---BEGIN injected_context---\n${injected}\n---END injected_context---${payloadBlock}`;
+}
+
 function formatHumanEvent(event: DiagnosticEvent): string {
   const prefix = `[lms-skills]`;
   switch (event.event) {
@@ -157,6 +166,8 @@ function formatHumanEvent(event: DiagnosticEvent): string {
       return `${prefix} ${formatPromptContext(event)}`;
     case "context_injection":
       return `${prefix} ${formatContextInjection(event)}`;
+    case "context_injection_content":
+      return `${prefix} ${formatContextInjectionContent(event)}`;
     case "prompt_route":
       return `${prefix} route mode=${quote(event.mode)} top=${quote(event.topSkill)} score=${quote(event.topScore)} confidence=${quote(event.topConfidence)} selected=${quote(event.selected)} rejectedBest=${quote(event.rejectedBest)} action=${quote(event.expectedAction)} input="${quote(event.inputPreview)}" inject=${quote(event.injectionChars)}ch${elapsed(event)}${id(event)}`;
     case "preprocess_activation":

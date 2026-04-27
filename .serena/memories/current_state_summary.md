@@ -1,6 +1,6 @@
 # Current State Summary
 
-As of the latest sync, `lms-plugin-skills` is a routed, context-safe LM Studio skills plugin with explicit skill expansion and context-injection proof logging.
+As of the latest sync, `lms-plugin-skills` is a routed, context-safe LM Studio skills plugin with explicit skill expansion and full context-injection audit logging.
 
 Most important current behaviors:
 - No manual system prompt is required.
@@ -29,12 +29,12 @@ Most important current behaviors:
 - Default logs are human-readable route/tool/context summaries; JSON logs require `LMS_SKILLS_DEBUG=1`.
 
 Context-injection proof logging:
-- Every preprocessor injection logs a `context` line.
+- Every preprocessor injection logs a compact `context` line and a full `context_content` block.
 - `kind=explicit_expanded` proves a `$skill-name` was expanded.
 - `kind=routed` proves routed candidates were injected.
 - `kind=reminder` proves only compact reminder context was injected.
 - `kind=fallback` proves fallback context after scan/route issue.
-- Context proof logs include:
+- Compact context proof logs include:
   - packet type (`skill_invocation_packet`, `routed_skills`, etc.),
   - selected/expanded skill names,
   - source paths for expanded/routed skills when available,
@@ -42,13 +42,15 @@ Context-injection proof logging:
   - short SHA-256 hash of injected context,
   - compact injection preview,
   - payload character count/hash/preview.
+- Full context proof logs use `context_content` and print the complete injected context between `---BEGIN injected_context---` / `---END injected_context---`, plus the task payload when present. This is intended to prove exactly what model-facing context the preprocessor produced at activation/routing time.
+- Default runtime subprocess completion logs are quieter: internal `runtime_exec_complete` events are no longer printed solely because `exitCode !== 0`; timeout and slow-runtime completions still print. Higher-level tool/route errors remain logged.
 
 Key files:
 - `src/preprocessor.ts`: normal routed context, no-route reminder, explicit `$skill` expansion, context-injection audit logging.
 - `src/skillRouter.ts`: deterministic routing algorithm.
 - `src/scanner.ts`: skill discovery, frontmatter parsing, exact lookup, read/list helpers.
 - `src/toolsProvider.ts`: tool schemas/handlers and `list_skills(mode="route")`.
-- `src/diagnostics.ts`: default human-readable logs, context proof logs, debug JSON logs.
+- `src/diagnostics.ts`: default human-readable logs, compact context proof logs, full context_content blocks, debug JSON logs.
 - `src/commandSafety.ts`: command execution policy.
 - `README.md`: should reflect routed context, explicit expansion, and context-injection proof logging.
 
@@ -62,4 +64,5 @@ Recommended smoke tests after routing/preprocessor/logging changes:
 - Explicit expansion strips frontmatter and does not include unrelated skills.
 - Explicit payload preserves shell variables like `$HOME` but removes the `$skill-name` activation token.
 - Disabled skill does not auto-route but can be explicitly expanded.
-- Logs contain `context kind=explicit_expanded ... sha=... payloadSha=...` for explicit activations.
+- Logs contain `context kind=explicit_expanded ... sha=... payloadSha=...` and a matching `context_content` block for explicit activations.
+- Noisy internal WSL/runtime `exit=1 stdout=0B stderr=0B` completion lines should not flood default logs.
