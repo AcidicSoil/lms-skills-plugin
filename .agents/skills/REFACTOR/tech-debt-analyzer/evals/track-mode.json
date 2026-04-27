@@ -1,0 +1,13 @@
+{
+  "skills": ["tech-debt-analyzer"],
+  "query": "/tech-debt-analyzer track",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates tech-debt-analyzer skill",
+    "Agent runs a fresh scan",
+    "Agent loads previous baseline from ~/.claude/tech-debt/",
+    "Agent computes delta: new items, resolved items, changed severities",
+    "Agent presents comparison with trend indicators",
+    "Agent does NOT implement any fixes"
+  ]
+}

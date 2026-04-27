@@ -1,0 +1,14 @@
+{
+  "skills": ["security-scanner"],
+  "query": "/security-scanner scan",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to scan mode",
+    "Agent triages files by security relevance (HIGH/MEDIUM/LOW)",
+    "Agent runs secrets-detector.py for secrets scanning",
+    "Agent runs dependency-checker.py if lockfiles exist",
+    "Agent maps findings to CWE IDs and OWASP Top 10 categories",
+    "Agent assigns severity and confidence scores to each finding",
+    "Agent presents findings grouped by severity with remediation guidance"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "skills": ["test-architect"],
+  "query": "/test-architect design src/auth/login.py",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates test-architect skill in design mode",
+    "Agent reads the target file to map the test surface",
+    "Agent classifies complexity based on dependencies and state",
+    "Agent designs a test pyramid with unit, integration, and e2e layers",
+    "Agent lists specific test cases with descriptions and rationale",
+    "Agent recommends appropriate test framework for the project",
+    "Agent does NOT run any tests or modify source code"
+  ]
+}

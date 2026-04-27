@@ -1,0 +1,16 @@
+{
+  "skills": ["tech-debt-analyzer"],
+  "query": "/tech-debt-analyzer roadmap Create a 3-quarter tech debt reduction roadmap for our project",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates tech-debt-analyzer skill",
+    "Agent dispatches to Roadmap mode",
+    "Agent reads previous baseline from ~/.claude/tech-debt/ (prompts for scan if none exists)",
+    "Agent groups debt items into phased milestones: Quick Wins, Structural, Maintenance, Strategic",
+    "Agent maps phases to quarterly milestones across 3 quarters",
+    "Agent includes dependency ordering between debt items within and across phases",
+    "Agent provides estimated effort and success criteria for each phase",
+    "Agent includes progress metrics for tracking remediation over time",
+    "Agent does NOT implement any fixes"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review",
+  "files": ["src/api/routes.py", "src/api/middleware.py", "src/auth/login.py", "src/auth/tokens.py", "src/db/models.py", "src/workers/tasks.py"],
+  "expected_behavior": [
+    "Agent dispatches 3 Pass A subagents with different file orderings (discovery, reversed, LOC-sorted)",
+    "Each Pass A subagent scans all files but in its assigned order",
+    "Majority voting is applied: files flagged by 2+ of 3 subagents get priority routing to Pass B",
+    "Files flagged by only 1 subagent are included in Pass B at lower priority",
+    "Files flagged by 0 subagents are skipped in Pass B (quick scan only)",
+    "The deterministic ordering diversity achieves perspective diversity without requiring RNG"
+  ]
+}

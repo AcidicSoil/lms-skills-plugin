@@ -1,0 +1,60 @@
+{
+  "skill_name": "add-badges",
+  "evals": [
+    {
+      "id": "empty-help-gallery",
+      "prompt": "/add-badges",
+      "expected_output": "A help response that shows the usage gallery and write boundary.",
+      "files": [],
+      "assertions": [
+        "Agent dispatches to the empty-args handler.",
+        "Agent shows examples for dry-run, include/readme targeting, replace/yes, and removal-only requests.",
+        "Agent explains that insertion requires approval unless --yes is explicit."
+      ]
+    },
+    {
+      "id": "dry-run-preview",
+      "prompt": "/add-badges --profile active --dry-run",
+      "expected_output": "A preview-only response that stops before editing any README.",
+      "files": ["README.md"],
+      "assertions": [
+        "Agent runs the normal badge workflow through preview.",
+        "Agent stops after presenting the proposed block and diff.",
+        "Agent does not write files in dry-run mode."
+      ]
+    },
+    {
+      "id": "replace-write-boundary",
+      "prompt": "/add-badges --replace",
+      "expected_output": "A response that previews consolidation and asks before modifying the README.",
+      "files": ["README.md"],
+      "assertions": [
+        "Agent recognizes that --replace may consolidate scattered badges.",
+        "Agent shows what would move before writing.",
+        "Agent requires approval unless --yes is also present."
+      ]
+    },
+    {
+      "id": "approval-required-write",
+      "prompt": "/add-badges --profile mature",
+      "expected_output": "A response that presents the candidate badge block and asks before insertion.",
+      "files": ["README.md"],
+      "assertions": [
+        "Agent runs detect and select before insertion.",
+        "Agent presents the proposed badge block.",
+        "Agent pauses for approval before writing because --yes is absent."
+      ]
+    },
+    {
+      "id": "missing-required-info",
+      "prompt": "/add-badges add a CI badge for this repo",
+      "expected_output": "A response that asks for the missing repo or workflow details rather than guessing.",
+      "files": [],
+      "assertions": [
+        "Agent identifies that required badge inputs are missing.",
+        "Agent asks for the missing repo or workflow information.",
+        "Agent does not bypass missing-info prompts even if a later write flag would exist."
+      ]
+    }
+  ]
+}

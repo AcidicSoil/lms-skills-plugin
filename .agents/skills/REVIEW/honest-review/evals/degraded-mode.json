@@ -1,0 +1,14 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review",
+  "files": [],
+  "expected_behavior": [
+    "Agent checks tool availability during Wave 0 triage",
+    "When research tools are unavailable, agent enters degraded mode",
+    "Agent applies confidence ceilings per degraded mode table in research-playbook.md",
+    "Agent reports degraded mode status in review header",
+    "Agent reports all findings as 'unconfirmed' when all research tools are unavailable",
+    "Agent still runs Judge reconciliation (Wave 3) with adjusted confidence thresholds",
+    "Only P0/S0 findings survive the confidence filter in fully degraded mode"
+  ]
+}

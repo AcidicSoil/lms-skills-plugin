@@ -1,0 +1,12 @@
+{
+  "skills": ["simplify"],
+  "query": "Profile this endpoint and tell me why it is slow under load.",
+  "files": [],
+  "expected_behavior": [
+    "Agent does NOT activate simplify for a perf-only investigation",
+    "Agent recognizes profiling and perf tuning as outside simplify scope",
+    "Agent redirects to performance-profiler instead of attempting a simplification pass",
+    "Agent names performance-profiler explicitly as the better fit",
+    "Agent keeps the refusal concise and avoids mixing in simplification advice"
+  ]
+}

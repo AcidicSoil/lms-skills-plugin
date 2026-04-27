@@ -1,0 +1,10 @@
+{
+  "skills": ["shell-scripter"],
+  "query": "Write a Python script that parses JSON files and outputs CSV",
+  "files": [],
+  "expected_behavior": [
+    "Agent does NOT invoke shell-scripter skill",
+    "Agent recognizes this as a Python task, not a shell scripting task",
+    "Agent may invoke python-conventions or handle directly"
+  ]
+}

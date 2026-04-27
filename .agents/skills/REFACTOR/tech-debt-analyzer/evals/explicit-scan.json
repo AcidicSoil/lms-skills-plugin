@@ -1,0 +1,16 @@
+{
+  "skills": ["tech-debt-analyzer"],
+  "query": "/tech-debt-analyzer scan",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates tech-debt-analyzer skill",
+    "Agent runs complexity-scanner.py on the codebase",
+    "Agent runs dead-code-detector.py on the codebase",
+    "Agent runs dependency-staleness-checker.py on the codebase",
+    "Agent runs pattern-consistency-checker.py on the codebase",
+    "Agent performs AI-augmented analysis for documentation, test, and infrastructure debt",
+    "Agent presents findings grouped by category with confidence scores",
+    "Agent stores baseline at ~/.claude/tech-debt/",
+    "Agent does NOT implement any fixes"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "skills": ["changelog-writer"],
+  "query": "/changelog-writer generate",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates changelog-writer skill",
+    "Agent dispatches to Mode 1: Generate Changelog",
+    "Agent runs commit-classifier.py to parse and classify git commits",
+    "Agent runs changelog-formatter.py to produce Keep a Changelog formatted output",
+    "Agent rewrites terse commit messages into user-readable descriptions",
+    "Agent groups entries by section (Added, Changed, Fixed, etc.)",
+    "Agent prominently calls out any breaking changes"
+  ]
+}

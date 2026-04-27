@@ -1,0 +1,11 @@
+{
+  "skills": ["changelog-writer"],
+  "query": "Help me write better commit messages for my feature branch",
+  "files": [],
+  "expected_behavior": [
+    "Agent does NOT activate changelog-writer skill",
+    "Agent recognizes this is about writing commits, not generating changelogs",
+    "Agent may suggest git-workflow skill instead",
+    "Agent does NOT run commit-classifier.py or changelog-formatter.py"
+  ]
+}

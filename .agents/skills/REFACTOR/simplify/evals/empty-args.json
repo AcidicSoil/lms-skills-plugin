@@ -1,0 +1,12 @@
+{
+  "skills": ["simplify"],
+  "query": "/simplify",
+  "files": [],
+  "expected_behavior": [
+    "Agent handles empty arguments explicitly",
+    "Agent presents a mode menu for analyze, apply, and explain",
+    "Agent gives example invocations or guidance for supplying a target",
+    "Agent does not silently guess a target or start editing",
+    "Agent does not read or modify files before the user picks a mode or target"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "skills": ["simplify"],
+  "query": "Simplify the recent auth changes if it looks safe.",
+  "files": [],
+  "expected_behavior": [
+    "Agent recognizes a vague active-diff request as insufficiently specific for auto-apply.",
+    "Agent treats the weak proof boundary as a reason to analyze first or ask before editing.",
+    "Agent keeps the simplify contract behavior-preserving and narrow."
+  ]
+}

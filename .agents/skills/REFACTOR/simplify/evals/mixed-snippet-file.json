@@ -1,0 +1,10 @@
+{
+  "skills": ["simplify"],
+  "query": "Simplify this snippet, and if it matches src/auth/session.py just update the file too: if (user) { return user.name; } else { return null; }",
+  "files": ["src/auth/session.py"],
+  "expected_behavior": [
+    "Agent recognizes that the request mixes a pasted snippet with a file-backed target.",
+    "Agent does not auto-apply until the user clarifies whether the snippet is illustrative or the actual edit scope.",
+    "Agent asks or falls back to analyze instead of silently editing the file."
+  ]
+}

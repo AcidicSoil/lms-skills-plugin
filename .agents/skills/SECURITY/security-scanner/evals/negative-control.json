@@ -1,0 +1,11 @@
+{
+  "skills": ["security-scanner"],
+  "query": "Review my pull request and tell me if the code quality is good. Check for design issues, naming conventions, and test coverage gaps.",
+  "files": [],
+  "expected_behavior": [
+    "Agent does NOT activate security-scanner skill",
+    "Agent recognizes this as a code review task, not a security audit",
+    "Agent redirects to honest-review skill instead",
+    "Agent does NOT run secrets detection or SAST patterns for this request"
+  ]
+}

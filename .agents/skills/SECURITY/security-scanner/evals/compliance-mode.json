@@ -1,0 +1,13 @@
+{
+  "skills": ["security-scanner"],
+  "query": "/security-scanner compliance soc2",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates security-scanner skill in compliance mode",
+    "Agent validates the standard is 'soc2'",
+    "Agent runs compliance-scorer.py with --standard soc2",
+    "Agent presents compliance scorecard with PASS/FAIL/PARTIAL controls",
+    "Agent states explicitly that this is a heuristic scan, not a certification audit",
+    "Agent does NOT claim the codebase is SOC2 compliant or certified"
+  ]
+}

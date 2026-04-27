@@ -1,0 +1,15 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review",
+  "files": [],
+  "expected_behavior": [
+    "Agent detects changes in session via git diff --name-only HEAD",
+    "Agent dispatches to Mode 1: Session Review (changes exist)",
+    "Agent runs Wave 0 triage: risk-stratify changed files as HIGH/MEDIUM/LOW",
+    "Agent keeps the full content-adaptive team even on small scoped reviews and does not fall back to inline-only mode",
+    "Agent applies at least 2 creative review lenses per scope",
+    "Agent spawns research subagents (Wave 2) to validate non-trivial findings with external evidence",
+    "Agent runs 8-step Judge protocol (Wave 3) to normalize, deduplicate, and rank findings",
+    "Agent presents findings with confidence scores and citations before offering to implement fixes"
+  ]
+}

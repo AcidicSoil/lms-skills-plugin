@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tech Debt Dashboard</title>
+<style>
+:root {
+  --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3;
+  --dim: #8b949e; --accent: #58a6ff; --green: #3fb950; --yellow: #d29922;
+  --orange: #db6d28; --red: #f85149; --purple: #bc8cff;
+  --radius: 8px; --gap: 16px;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff; --card: #f6f8fa; --border: #d0d7de; --text: #1f2328;
+    --dim: #656d76; --accent: #0969da; --green: #1a7f37; --yellow: #9a6700;
+    --orange: #bc4c00; --red: #cf222e; --purple: #8250df;
+  }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: var(--gap); }
+h1 { font-size: 1.5rem; margin-bottom: var(--gap); }
+h2 { font-size: 1.1rem; color: var(--dim); margin-bottom: 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--gap); margin-bottom: var(--gap); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--gap); }
+.metric { text-align: center; }
+.metric .value { font-size: 2.5rem; font-weight: 700; }
+.metric .label { color: var(--dim); font-size: 0.85rem; margin-top: 4px; }
+.severity-CRITICAL { color: var(--red); }
+.severity-HIGH { color: var(--orange); }
+.severity-MEDIUM { color: var(--yellow); }
+.severity-LOW { color: var(--dim); }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+th { color: var(--dim); font-weight: 600; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+.badge-CRITICAL { background: var(--red); color: #fff; }
+.badge-HIGH { background: var(--orange); color: #fff; }
+.badge-MEDIUM { background: var(--yellow); color: #000; }
+.badge-LOW { background: var(--border); color: var(--text); }
+.pie-container { display: flex; justify-content: center; align-items: center; gap: 24px; }
+.pie-legend { list-style: none; }
+.pie-legend li { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85rem; }
+.pie-legend .dot { width: 12px; height: 12px; border-radius: 50%; }
+canvas { max-width: 200px; max-height: 200px; }
+.trend { display: flex; align-items: center; gap: 6px; }
+.trend-up { color: var(--red); }
+.trend-down { color: var(--green); }
+.trend-stable { color: var(--dim); }
+.empty { text-align: center; padding: 40px; color: var(--dim); }
+</style>
+</head>
+<body>
+<script id="data" type="application/json">{"items":[],"summary":{}}</script>
+<script>
+(function() {
+  "use strict";
+  var escH = function(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; };
+
+  var data;
+  try { data = JSON.parse(document.getElementById("data").textContent); }
+  catch(e) { document.body.innerHTML = '<div class="empty">Error loading data: ' + escH(String(e)) + '</div>'; return; }
+
+  var items = data.items || [];
+  var summary = data.summary || {};
+  var prev = data.previous_summary || null;
+
+  // Header
+  var html = '<h1>Tech Debt Dashboard</h1>';
+
+  // Summary metrics
+  html += '<div class="grid">';
+  html += '<div class="card metric"><div class="value">' + (summary.debt_score || 0) + '</div><div class="label">Debt Score</div>';
+  if (prev) {
+    var delta = (summary.debt_score || 0) - (prev.debt_score || 0);
+    var cls = delta > 0 ? 'trend-up' : delta < 0 ? 'trend-down' : 'trend-stable';
+    var arrow = delta > 0 ? '&#9650;' : delta < 0 ? '&#9660;' : '&#9654;';
+    html += '<div class="trend ' + cls + '">' + arrow + ' ' + Math.abs(delta) + ' from previous</div>';
+  }
+  html += '</div>';
+  html += '<div class="card metric"><div class="value">' + items.length + '</div><div class="label">Total Items</div></div>';
+  html += '<div class="card metric"><div class="value">' + items.filter(function(i){return i.severity==="CRITICAL"||i.severity==="HIGH"}).length + '</div><div class="label">Critical + High</div></div>';
+  html += '<div class="card metric"><div class="value">' + (summary.total_files || 0) + '</div><div class="label">Files Scanned</div></div>';
+  html += '</div>';
+
+  // Category breakdown (pie chart area)
+  var cats = {};
+  var catColors = {design: 'var(--accent)', test: 'var(--purple)', documentation: 'var(--yellow)', dependency: 'var(--orange)', infrastructure: 'var(--green)'};
+  items.forEach(function(item) {
+    var c = item.category || 'unknown';
+    cats[c] = (cats[c] || 0) + 1;
+  });
+
+  html += '<div class="grid">';
+  html += '<div class="card"><h2>Debt by Category</h2><div class="pie-container">';
+  html += '<ul class="pie-legend">';
+  Object.keys(cats).sort().forEach(function(cat) {
+    html += '<li><span class="dot" style="background:' + (catColors[cat] || 'var(--dim)') + '"></span>' + escH(cat) + ': ' + cats[cat] + '</li>';
+  });
+  html += '</ul></div></div>';
+
+  // Severity breakdown
+  var sevs = {CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0};
+  items.forEach(function(item) { if (sevs.hasOwnProperty(item.severity)) sevs[item.severity]++; });
+  html += '<div class="card"><h2>Debt by Severity</h2>';
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">';
+  ["CRITICAL","HIGH","MEDIUM","LOW"].forEach(function(sev) {
+    html += '<div class="metric"><div class="value severity-' + sev + '">' + sevs[sev] + '</div><div class="label">' + sev + '</div></div>';
+  });
+  html += '</div></div>';
+  html += '</div>';
+
+  // Items table
+  html += '<div class="card"><h2>Prioritized Backlog</h2>';
+  if (items.length === 0) {
+    html += '<div class="empty">No debt items found. Codebase is clean!</div>';
+  } else {
+    html += '<table><thead><tr><th>Location</th><th>Category</th><th>Severity</th><th>Confidence</th><th>Description</th></tr></thead><tbody>';
+    items.sort(function(a,b) {
+      var sw = {CRITICAL:4,HIGH:3,MEDIUM:2,LOW:1};
+      return (sw[b.severity]||0) - (sw[a.severity]||0) || (b.confidence||0) - (a.confidence||0);
+    });
+    items.forEach(function(item) {
+      html += '<tr>';
+      html += '<td><code>' + escH(item.location || 'unknown') + '</code></td>';
+      html += '<td>' + escH(item.category || '') + '</td>';
+      html += '<td><span class="badge badge-' + escH(item.severity || '') + '">' + escH(item.severity || '') + '</span></td>';
+      html += '<td>' + (item.confidence || 0).toFixed(2) + '</td>';
+      html += '<td>' + escH(item.description || '') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+
+  // Complexity heatmap
+  if (data.complexity_files && data.complexity_files.length > 0) {
+    html += '<div class="card"><h2>Complexity Heatmap</h2>';
+    html += '<table><thead><tr><th>File</th><th>Functions</th><th>Avg CC</th><th>Max CC</th><th>High Risk</th></tr></thead><tbody>';
+    data.complexity_files.sort(function(a,b) { return (b.max_cc||0) - (a.max_cc||0); }).slice(0,20).forEach(function(f) {
+      var risk = f.max_cc > 10 ? 'severity-HIGH' : f.max_cc > 5 ? 'severity-MEDIUM' : '';
+      html += '<tr>';
+      html += '<td><code>' + escH(f.path) + '</code></td>';
+      html += '<td>' + (f.function_count || 0) + '</td>';
+      html += '<td>' + (f.avg_cc || 0).toFixed(1) + '</td>';
+      html += '<td class="' + risk + '">' + (f.max_cc || 0) + '</td>';
+      html += '<td>' + (f.high_risk || 0) + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  document.body.innerHTML = html;
+})();
+</script>
+</body>
+</html>

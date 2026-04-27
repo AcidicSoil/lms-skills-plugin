@@ -1,0 +1,18 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review",
+  "files": [
+    "packages/auth/src/login.ts",
+    "packages/api/src/routes.ts",
+    "packages/shared/src/utils.ts"
+  ],
+  "expected_behavior": [
+    "Agent detects monorepo workspace structure during Wave 0 triage",
+    "Agent scopes reviewers to their respective workspace packages",
+    "Agent flags cross-package imports that bypass workspace boundaries",
+    "Agent adjusts review depth per package based on independent risk stratification",
+    "Agent checks for AGENTS.md/CLAUDE.md convention files and validates code against declared conventions",
+    "Agent runs standard Judge reconciliation with cross-package deduplication",
+    "Agent presents findings organized by package with cross-cutting issues elevated"
+  ]
+}

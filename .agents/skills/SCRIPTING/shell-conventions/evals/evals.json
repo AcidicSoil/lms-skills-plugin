@@ -1,0 +1,82 @@
+{
+  "skill_name": "shell-conventions",
+  "evals": [
+    {
+      "id": "active-shell-file-trigger",
+      "prompt": "Please clean up this existing bash script for quoting and portability issues.",
+      "expected_output": "An active-mode conventions response focused on shell portability and safety.",
+      "files": ["script.sh"],
+      "assertions": [
+        "Agent treats shell-file editing as an active auto-invoke case.",
+        "Agent applies shell portability, shebang, quoting, and command-validation conventions.",
+        "Agent keeps the work scoped to conventions rather than generating a new script design."
+      ]
+    },
+    {
+      "id": "active-makefile-trigger",
+      "prompt": "Review this Makefile for target hygiene, .PHONY usage, and recipe correctness.",
+      "expected_output": "An active-mode conventions response for Makefile work.",
+      "files": ["Makefile"],
+      "assertions": [
+        "Agent treats Makefile editing as an active auto-invoke case.",
+        "Agent applies Makefile conventions such as .PHONY, task-oriented names, idempotence, and $$ escaping.",
+        "Agent does not broaden into automation redesign."
+      ]
+    },
+    {
+      "id": "empty-help-summary",
+      "prompt": "/shell-conventions",
+      "expected_output": "A concise summary of active, empty/help, and check behaviors plus trigger boundaries.",
+      "files": [],
+      "assertions": [
+        "Agent dispatches to the empty-args handler.",
+        "Agent summarizes the three public entry paths: active auto-invoke, empty/help, and check.",
+        "Agent names the main non-trigger cases such as CI YAML and script generation."
+      ]
+    },
+    {
+      "id": "check-mode",
+      "prompt": "/shell-conventions check",
+      "expected_output": "A conventions-only verification response.",
+      "files": ["script.sh"],
+      "assertions": [
+        "Agent dispatches to check mode based on the check keyword.",
+        "Agent reports convention compliance and violations without widening into full rewrites.",
+        "Agent follows the verification-only contract."
+      ]
+    },
+    {
+      "id": "ci-yaml-false-trigger",
+      "prompt": "Please update this GitHub Actions workflow YAML to speed up CI.",
+      "expected_output": "A redirect because CI workflow YAML is out of scope.",
+      "files": ["ci.yml"],
+      "assertions": [
+        "Agent recognizes CI workflow YAML as out of scope for shell-conventions.",
+        "Agent redirects to devops-engineer instead of applying shell conventions.",
+        "Agent does not treat inline shell snippets inside CI YAML as a shell-conventions trigger."
+      ]
+    },
+    {
+      "id": "redirect-script-generation",
+      "prompt": "Create a new deployment shell script that builds, tags, and pushes images.",
+      "expected_output": "A redirect because script generation is out of scope.",
+      "files": [],
+      "assertions": [
+        "Agent recognizes new script generation as out of scope for shell-conventions.",
+        "Agent redirects to shell-scripter instead of generating the script.",
+        "Agent preserves shell-conventions as a conventions-only skill."
+      ]
+    },
+    {
+      "id": "mixed-python-shell-nontrigger",
+      "prompt": "Fix this Python CLI and also clean up one shell command in the docs.",
+      "expected_output": "A response that avoids treating incidental shell work as the primary task.",
+      "files": ["tool.py"],
+      "assertions": [
+        "Agent recognizes that shell is incidental rather than the primary task.",
+        "Agent does not auto-trigger shell-conventions as the main skill.",
+        "Agent keeps mixed-task non-trigger behavior explicit."
+      ]
+    }
+  ]
+}

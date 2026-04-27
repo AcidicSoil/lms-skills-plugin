@@ -1,0 +1,468 @@
+# Technology Stack - Task Management SaaS Platform
+
+metadata:
+  project: Task Management SaaS
+  version: "1.0"
+  date: "2025-01-15"
+  team_size: 5
+  project_type: fullstack
+  complexity_score: 55
+
+# Core Framework
+frontend:
+  framework:
+    name: Next.js 14 (App Router)
+    version: "^14.0.0"
+    rationale: |
+      - Server-side rendering for SEO
+      - API routes for backend logic (no separate backend needed)
+      - React Server Components for performance
+      - Team has React expertise (4/5 developers)
+      - Excellent TypeScript support
+      - Vercel deployment (one-click)
+    alternatives_considered:
+      - Remix (smaller ecosystem, team learning curve)
+      - SvelteKit (team doesn't know Svelte)
+      - Vanilla React + Express (more setup, separate frontend/backend)
+    decision_adr: ADR-001
+
+  ui_library:
+    name: shadcn/ui + Radix UI
+    version: Latest
+    rationale: |
+      - Unstyled components (full design control)
+      - Accessible by default (WCAG compliance)
+      - Copy-paste components (no package dependency)
+      - Tailwind CSS compatible
+      - Modern design patterns
+    alternatives_considered:
+      - Material-UI (heavier, opinionated design)
+      - Ant Design (not as customizable)
+      - Chakra UI (good but larger bundle)
+    decision_adr: ADR-002
+
+  styling:
+    name: Tailwind CSS
+    version: "^3.4.0"
+    rationale: |
+      - Utility-first (fast development)
+      - Tree-shaking (small production bundles)
+      - Consistent design system
+      - Team familiar with Tailwind
+      - Excellent dark mode support
+    plugins:
+      - "@tailwindcss/typography"
+      - "@tailwindcss/forms"
+    config_file: tailwind.config.ts
+
+  state_management:
+    client_state:
+      name: Zustand
+      version: "^4.4.0"
+      rationale: |
+        - Lightweight (1KB gzipped)
+        - Simple API (easy to learn)
+        - No boilerplate (unlike Redux)
+        - Perfect for global UI state (theme, sidebar, modals)
+      decision_adr: ADR-003
+
+    server_state:
+      name: TanStack Query (React Query)
+      version: "^5.0.0"
+      rationale: |
+        - Automatic caching and revalidation
+        - Optimistic updates
+        - Pagination and infinite scroll
+        - Excellent DevTools
+        - Separates server state from client state
+      decision_adr: ADR-003
+
+  forms:
+    name: React Hook Form
+    version: "^7.48.0"
+    rationale: |
+      - Performant (minimal re-renders)
+      - TypeScript-first
+      - Flexible validation (Zod integration)
+      - Small bundle size (9KB)
+    validation:
+      name: Zod
+      version: "^3.22.0"
+      rationale: "TypeScript schema validation, runtime type checking"
+
+  rich_text_editor:
+    name: Tiptap
+    version: "^2.1.0"
+    rationale: |
+      - Headless (full control over UI)
+      - Extensible (custom nodes/marks)
+      - Collaborative editing ready (Y.js integration)
+      - Modern ProseMirror wrapper
+    decision_adr: ADR-004
+
+# Backend
+backend:
+  runtime:
+    name: Node.js
+    version: "20 LTS"
+    rationale: |
+      - Next.js requirement
+      - JavaScript/TypeScript across stack (code sharing)
+      - Large ecosystem
+      - Good performance for I/O-bound operations
+
+  api:
+    name: Next.js API Routes
+    version: N/A (Next.js built-in)
+    rationale: |
+      - Integrated with frontend (no separate server)
+      - TypeScript end-to-end
+      - File-based routing
+      - Serverless deployment option
+    decision_adr: ADR-001
+
+  api_validation:
+    name: Zod
+    version: "^3.22.0"
+    rationale: "Share schemas between client and server, runtime validation"
+
+  authentication:
+    name: NextAuth.js (Auth.js)
+    version: "^5.0.0"
+    rationale: |
+      - Next.js native integration
+      - OAuth providers (Google, GitHub)
+      - Email/password support
+      - JWT + Database sessions
+      - Free (no SaaS cost)
+    alternatives_considered:
+      - Clerk ($25/month for 1K MAU - too expensive for MVP)
+      - Auth0 ($150/month - overkill)
+      - Custom auth (security risk, time-consuming)
+    decision_adr: ADR-005
+
+# Database
+database:
+  primary:
+    name: PostgreSQL
+    version: "15"
+    hosting: AWS RDS Multi-AZ
+    instance: db.t3.medium (2 vCPU, 4 GB RAM)
+    storage: 100 GB GP3 SSD (autoscaling)
+    rationale: |
+      - Relational data (users, teams, projects, tasks)
+      - ACID transactions (orders, payments)
+      - Full-text search built-in
+      - Team SQL expertise (all 5 developers)
+      - Proven at scale (Instagram, Notion)
+      - Cost-effective ($200/month vs MongoDB $400/month)
+    decision_adr: ADR-006
+
+  orm:
+    name: Prisma
+    version: "^5.7.0"
+    rationale: |
+      - Type-safe database access
+      - Auto-generated TypeScript types
+      - Migration management
+      - Excellent Next.js integration
+      - Query introspection and optimization
+    decision_adr: ADR-007
+
+  migrations:
+    tool: Prisma Migrate
+    strategy: |
+      - All migrations in source control (git)
+      - CI/CD runs migrations automatically
+      - No manual SQL (schema defined in schema.prisma)
+      - Rollback via git revert
+
+  caching:
+    name: Upstash Redis
+    version: Redis 7
+    rationale: |
+      - Serverless Redis (pay-per-request)
+      - Session storage
+      - API response caching
+      - Rate limiting counters
+      - Scales automatically
+    cost: "$0.20 per 100K commands (variable cost)"
+    decision_adr: ADR-008
+
+# File Storage
+storage:
+  name: AWS S3
+  region: us-east-1
+  cdn: CloudFront
+  rationale: |
+    - Scalable object storage
+    - Cheap ($0.023/GB/month)
+    - CloudFront CDN (global edge caching)
+    - Signed URLs for secure uploads
+    - Lifecycle policies (move old files to Glacier)
+  decision_adr: ADR-009
+
+# External Services
+integrations:
+  payments:
+    name: Stripe
+    rationale: |
+      - Industry standard
+      - PCI compliance handled
+      - Subscriptions support
+      - Excellent documentation
+      - Webhooks for events
+    cost: "2.9% + $0.30 per transaction"
+    decision_adr: ADR-010
+
+  email:
+    name: Resend
+    rationale: |
+      - Modern email API
+      - React Email templates
+      - Great DX (TypeScript SDK)
+      - Affordable ($20/month for 50K emails)
+    alternatives_considered:
+      - SendGrid (more complex API)
+      - AWS SES (harder to use)
+      - Postmark (more expensive)
+    decision_adr: ADR-011
+
+  analytics:
+    name: PostHog
+    rationale: |
+      - Open-source (self-hostable)
+      - Product analytics + session replay
+      - Feature flags
+      - A/B testing
+      - GDPR-friendly (can self-host in EU)
+    cost: "Free tier: 1M events/month"
+    decision_adr: ADR-012
+
+  error_tracking:
+    name: Sentry
+    rationale: |
+      - Industry standard
+      - Source maps support
+      - Performance monitoring
+      - Free tier: 5K errors/month
+    decision_adr: ADR-013
+
+  monitoring:
+    name: Datadog
+    rationale: |
+      - APM (Application Performance Monitoring)
+      - Logs aggregation
+      - Infrastructure metrics
+      - Alerting (PagerDuty integration)
+    cost: "$15/host/month"
+    alternatives_considered:
+      - CloudWatch (limited APM)
+      - New Relic (more expensive)
+      - Grafana + Prometheus (self-managed complexity)
+    decision_adr: ADR-014
+
+# Development Tools
+development:
+  language:
+    name: TypeScript
+    version: "^5.3.0"
+    rationale: |
+      - Type safety across stack
+      - Better DX (autocomplete, refactoring)
+      - Catches bugs at compile-time
+      - Team preference (all 5 developers)
+
+  package_manager:
+    name: pnpm
+    version: "^8.0.0"
+    rationale: |
+      - Faster than npm/yarn (efficient disk usage)
+      - Monorepo support
+      - Strict dependency resolution
+
+  linting:
+    name: ESLint
+    version: "^8.55.0"
+    config: |
+      - next/core-web-vitals
+      - @typescript-eslint
+      - prettier
+
+  formatting:
+    name: Prettier
+    version: "^3.1.0"
+    rationale: "Consistent code formatting, no debates"
+
+  testing:
+    unit:
+      name: Vitest
+      version: "^1.0.0"
+      rationale: "Faster than Jest, Vite-compatible"
+
+    integration:
+      name: Playwright
+      version: "^1.40.0"
+      rationale: |
+        - End-to-end testing
+        - Multi-browser support
+        - Great debugging tools
+
+  git_hooks:
+    name: Husky
+    version: "^8.0.0"
+    hooks:
+      - pre-commit: lint-staged (ESLint + Prettier)
+      - pre-push: run tests
+
+# Deployment
+deployment:
+  platform:
+    name: Vercel
+    tier: Pro ($20/month)
+    rationale: |
+      - Zero-config Next.js deployment
+      - Git integration (auto-deploy on push)
+      - Preview deployments for PRs
+      - Edge functions
+      - Excellent DX
+    alternatives_considered:
+      - AWS (ECS/Fargate) - more complex setup
+      - Railway - less mature
+      - Self-hosted - requires DevOps expertise
+    decision_adr: ADR-015
+
+  cicd:
+    name: GitHub Actions
+    rationale: |
+      - Integrated with GitHub
+      - Free for public repos (2000 min/month for private)
+      - Simple YAML config
+      - Marketplace for actions
+    pipeline:
+      - Lint (ESLint)
+      - Type check (tsc)
+      - Unit tests (Vitest)
+      - E2E tests (Playwright)
+      - Build
+      - Deploy (Vercel)
+
+  domains:
+    registrar: Cloudflare
+    rationale: "Cheap domains, free DNS, DDoS protection"
+
+# Infrastructure Costs (Monthly)
+costs:
+  vercel: $20
+  aws_rds: $200
+  upstash_redis: $20
+  aws_s3_cloudfront: $30
+  datadog: $60
+  resend: $20
+  stripe: "Variable (2.9% + $0.30 per transaction)"
+  domains: $10
+  total_fixed: $360
+  notes: |
+    - Total: ~$360/month + variable (Stripe fees)
+    - Expected revenue: $5K/month (target 200 paying users @ $25/month)
+    - Infrastructure cost: 7.2% of revenue (acceptable)
+
+# Scaling Strategy
+scaling:
+  current: "MVP (100 users)"
+  phase_1:
+    users: "1,000 users"
+    changes:
+      - Add PostgreSQL read replica
+      - Increase RDS instance to db.t3.large
+    cost_increase: "+$150/month"
+
+  phase_2:
+    users: "10,000 users"
+    changes:
+      - Multi-region deployment (US + EU)
+      - Redis cluster (ElastiCache)
+      - CDN optimization
+      - Add 2 read replicas
+    cost_increase: "+$500/month"
+
+  phase_3:
+    users: "100,000 users"
+    changes:
+      - Consider microservices architecture
+      - Database sharding
+      - Kubernetes for orchestration
+      - Dedicated infrastructure team
+    cost_increase: "+$2,000/month"
+    notes: "Likely need to raise funding at this scale"
+
+# Security
+security:
+  ssl: "CloudFlare + Vercel (auto-renewing Let's Encrypt)"
+  secrets_management: "Vercel Environment Variables (encrypted)"
+  compliance:
+    - GDPR: "Data export/deletion via API, EU region deployment planned"
+    - SOC2: "Not required for MVP, plan for Series A"
+    - PCI: "Stripe handles (no card data stored)"
+
+# Documentation
+documentation:
+  architecture: "docs/architecture.md (this document)"
+  adrs: "docs/adrs/ (Architecture Decision Records)"
+  api: "OpenAPI spec (auto-generated from Zod schemas)"
+  runbooks: "docs/runbooks/ (deployment, incident response)"
+  code: "JSDoc + TSDoc (inline documentation)"
+
+# Team & Expertise
+team:
+  size: 5
+  roles:
+    - "1 Tech Lead (Fullstack, 8 years)"
+    - "2 Frontend Developers (React, 3-5 years)"
+    - "1 Backend Developer (Node.js, 4 years)"
+    - "1 Full-Stack Developer (2 years)"
+  expertise:
+    typescript: 5/5
+    react: 4/5
+    nextjs: 3/5
+    postgresql: 4/5
+    aws: 2/5
+  training_needed:
+    - "Next.js App Router (2-3 days)"
+    - "Prisma ORM (1-2 days)"
+    - "tRPC (if we add it) - 2-3 days"
+
+# Risk Assessment
+risks:
+  - risk: "Next.js App Router is relatively new (launched 2023)"
+    mitigation: "Large community, well-documented, Vercel backing"
+    severity: Low
+
+  - risk: "Vercel vendor lock-in"
+    mitigation: "Can self-host Next.js on AWS if needed, plan exit strategy"
+    severity: Medium
+
+  - risk: "Team has limited AWS experience"
+    mitigation: "Use managed services (RDS, S3), hire DevOps consultant if needed"
+    severity: Low
+
+  - risk: "PostgreSQL vertical scaling limits"
+    mitigation: "Read replicas for scaling, sharding plan if >100K users"
+    severity: Low
+
+  - risk: "Cost overruns if traffic spikes"
+    mitigation: "Set CloudWatch billing alerts, implement rate limiting"
+    severity: Medium
+
+# Future Considerations
+future:
+  - "Real-time collaboration (Y.js + WebSockets) - Phase 2"
+  - "Mobile app (React Native with shared tRPC API) - Phase 3"
+  - "AI features (OpenAI API integration) - Phase 3"
+  - "Multi-tenancy (team workspaces) - Phase 2"
+  - "Advanced analytics (Cube.js for BI) - Phase 3"
+
+# Last Updated
+last_updated: "2025-01-15"
+updated_by: "Tech Lead"
+version: "1.0.0"

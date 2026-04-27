@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{TITLE}}</title>
+  {{BEAGLE_SHARED_HEAD}}
+</head>
+<body>
+  <div class="page-progress" aria-hidden="true"></div>
+  <main class="beagle-shell-frame">
+    <header class="ve-card">
+      <h1>{{TITLE}}</h1>
+      <p>{{SUBTITLE}}</p>
+      <div class="beagle-inline-list">{{HEADER_CHIPS}}</div>
+    </header>
+
+    <nav id="toc" class="toc" aria-label="table of contents">
+      <a href="#summary">Compliance summary</a>
+      <a href="#matrix">Matrix</a>
+      <a href="#board">Board</a>
+      <a href="#scenarios">Scenarios</a>
+      <a href="#queue">Queue</a>
+    </nav>
+
+    <section id="summary" class="ve-card">
+      <h2>Compliance summary</h2>
+      <div class="beagle-lane-grid">{{SUMMARY_STATS}}</div>
+    </section>
+
+    <section id="matrix" class="ve-card">
+      <h2>Chosen skill compliance matrix</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Skill</th>
+            <th>Use when</th>
+            <th>Surfaces</th>
+            <th>Verdict</th>
+            <th>Evidence</th>
+            <th>Gap</th>
+          </tr>
+        </thead>
+        <tbody>{{COMPLIANCE_ROWS}}</tbody>
+      </table>
+    </section>
+
+    <section id="board" class="ve-card">
+      <h2>Phase and task board</h2>
+      <div class="beagle-lane-grid">{{PHASE_TASK_BOARD}}</div>
+    </section>
+
+    <section id="evidence" class="ve-card">
+      <h2>Evidence stack</h2>
+      <h3>Verified facts</h3>
+      <div class="beagle-lane-grid">{{VERIFIED_FACTS_HTML}}</div>
+      <h3>Inferred conclusions</h3>
+      <div class="beagle-lane-grid">{{INFERRED_CONCLUSIONS_HTML}}</div>
+      <h3>Residual risks</h3>
+      <div class="beagle-lane-grid">{{RESIDUAL_RISKS_HTML}}</div>
+    </section>
+
+    <section id="scenarios" class="ve-card">
+      <h2>Per-scenario audit lanes</h2>
+      <div class="beagle-lane-grid">{{SCENARIO_AUDIT_LANES}}</div>
+    </section>
+
+    <section id="queue" class="ve-card">
+      <h2>Execution readiness queue</h2>
+      <ul>{{ACTION_QUEUE}}</ul>
+    </section>
+  </main>
+</body>
+</html>

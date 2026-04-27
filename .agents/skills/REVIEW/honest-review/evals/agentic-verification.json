@@ -1,0 +1,13 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review src/auth/",
+  "files": ["src/auth/login.py", "src/auth/tokens.py"],
+  "expected_behavior": [
+    "Agent uses tool calls (Grep, Read) to verify assumptions before reporting findings",
+    "Agent reads the actual source file at cited line numbers to confirm code matches the finding",
+    "Agent greps for usage patterns claimed in findings across the codebase",
+    "Findings where the cited code does not match the claim are discarded as hallucinated",
+    "Self-verification (Wave 3.5) includes agentic tool calls, not just LLM reasoning",
+    "The three-phase review pattern is followed: Flag (hypothesize) then Verify (tool calls) then Validate (research)"
+  ]
+}

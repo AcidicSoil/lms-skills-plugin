@@ -1,0 +1,13 @@
+{
+  "skills": ["simplify"],
+  "query": "/simplify explain src/auth/session.py",
+  "files": ["src/auth/session.py"],
+  "expected_behavior": [
+    "Agent dispatches to Mode C: Explain based on the 'explain' keyword",
+    "Agent treats src/auth/session.py as the target scope",
+    "Agent reads references/simplification-taxonomy.md to describe sources of complexity",
+    "Agent reads references/output-formats.md to structure the Explain response",
+    "Agent distinguishes safe simplifications from risky or semantic ones",
+    "Agent does NOT edit files in Explain mode"
+  ]
+}

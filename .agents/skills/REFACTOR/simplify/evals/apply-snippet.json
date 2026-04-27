@@ -1,0 +1,12 @@
+{
+  "skills": ["simplify"],
+  "query": "/simplify apply if (user) { return user.name; } else { return null; }",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to Mode B: Apply for a pasted snippet target.",
+    "Agent treats the pasted snippet as the whole scope instead of assuming a repo-backed file target.",
+    "Agent applies only behavior-preserving simplification to the snippet.",
+    "Agent uses invariant reasoning or manual explanation for verification when project checks are unavailable.",
+    "Agent does not invent unrelated filesystem edits or broader repo scope."
+  ]
+}

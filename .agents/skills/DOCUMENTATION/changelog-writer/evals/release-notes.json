@@ -1,0 +1,14 @@
+{
+  "skills": ["changelog-writer"],
+  "query": "/changelog-writer release v2.0.0",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates changelog-writer skill in release mode",
+    "Agent determines commit range from previous tag to v2.0.0",
+    "Agent runs commit-classifier.py with appropriate --since and --until flags",
+    "Agent groups changes by user impact: Highlights, Improvements, Bug Fixes, Breaking Changes",
+    "Agent rewrites commit messages into user-facing language",
+    "Agent credits contributors from git log",
+    "Agent includes code examples for headline features"
+  ]
+}

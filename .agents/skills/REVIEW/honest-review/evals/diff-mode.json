@@ -1,0 +1,11 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review diff agents",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to diff or delta mode.",
+    "Agent compares current review state against the previous stored review.",
+    "Agent reports new, resolved, and recurring findings separately.",
+    "Every new finding keeps the reasoning-first output order."
+  ]
+}

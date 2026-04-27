@@ -1,0 +1,17 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review src/auth/",
+  "files": ["src/auth/login.py", "src/auth/middleware.py", "src/auth/tokens.py"],
+  "expected_behavior": [
+    "Agent dispatches to scoped review of src/auth/ directory",
+    "Agent applies Adversary lens (mandatory for security-sensitive code) plus at least 1 other lens",
+    "Every reported finding includes a confidence score between 0.0 and 1.0",
+    "Findings with confidence < 0.3 are discarded (unless P0/S0)",
+    "Findings between 0.3-0.7 are marked as 'unconfirmed' in the report",
+    "Every non-trivial finding includes research evidence with cited source (Context7, WebSearch, or gh)",
+    "Agent acknowledges at least one strength in the reviewed code (minimum 1 per scope)",
+    "Agent maintains positive-to-constructive ratio targeting 3:1",
+    "Every reported finding includes a reasoning chain (WHY) before the finding statement (WHAT)",
+    "Every finding includes a citation anchor [file:start-end] that has been mechanically verified against source"
+  ]
+}

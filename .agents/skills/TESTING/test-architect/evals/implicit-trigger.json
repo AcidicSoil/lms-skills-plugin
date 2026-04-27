@@ -1,0 +1,14 @@
+{
+  "skills": ["test-architect"],
+  "query": "I need to figure out what tests to write for our new payment processing module. It handles Stripe webhooks and has a lot of edge cases around idempotency and retry logic.",
+  "files": [],
+  "expected_behavior": [
+    "Agent recognizes this as a test design task and activates test-architect",
+    "Agent enters design mode for the payment processing module",
+    "Agent identifies security-sensitive code requiring thorough coverage",
+    "Agent maps edge cases: idempotency, retry logic, webhook verification",
+    "Agent recommends integration tests for Stripe webhook handling",
+    "Agent suggests property-based testing for idempotency invariants",
+    "Agent does NOT run tests or modify source code"
+  ]
+}

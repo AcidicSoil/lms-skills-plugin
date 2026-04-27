@@ -1,0 +1,818 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://beagle-strategy.dev/schemas/artifact-ir.schema.json",
+  "title": "BeagleStrategyIR",
+  "description": "Typed intermediate representation for Beagle integration strategy artifacts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "strategy_type",
+    "meta",
+    "source_inputs",
+    "target_project",
+    "operating_model",
+    "installation",
+    "repo_grounding",
+    "mandatory_gates",
+    "scenarios",
+    "skill_mapping",
+    "chosen_skills",
+    "evidence_model",
+    "implementation_plan",
+    "implementation_tasks",
+    "anti_goals",
+    "decisions",
+    "next_steps"
+  ],
+  "properties": {
+    "strategy_type": {
+      "type": "string",
+      "enum": [
+        "beagle_integration_strategy"
+      ]
+    },
+    "meta": {
+      "$ref": "#/$defs/meta"
+    },
+    "source_inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourceInput"
+      },
+      "minItems": 1
+    },
+    "target_project": {
+      "$ref": "#/$defs/targetProject"
+    },
+    "operating_model": {
+      "$ref": "#/$defs/operatingModel"
+    },
+    "installation": {
+      "$ref": "#/$defs/installation"
+    },
+    "repo_grounding": {
+      "$ref": "#/$defs/repoGrounding"
+    },
+    "mandatory_gates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gate"
+      },
+      "minItems": 1
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/scenario"
+      },
+      "minItems": 1
+    },
+    "skill_mapping": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/skillMapping"
+      },
+      "minItems": 1
+    },
+    "chosen_skills": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/chosenSkill"
+      },
+      "minItems": 1
+    },
+    "evidence_model": {
+      "$ref": "#/$defs/evidenceModel"
+    },
+    "implementation_plan": {
+      "$ref": "#/$defs/implementationPlan"
+    },
+    "implementation_tasks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/implementationTask"
+      },
+      "minItems": 1
+    },
+    "anti_goals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/antiGoal"
+      },
+      "minItems": 1
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/decision"
+      },
+      "minItems": 1
+    },
+    "next_steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nextStep"
+      },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "subtitle",
+        "created_at",
+        "source_project",
+        "strategy_id"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subtitle": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "strategy_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "sourceInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "summary"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "targetProject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "summary"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "primary_language": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repo_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "operatingModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "principles"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "principles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "installation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "scope",
+        "steps"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "agents_only"
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "inspectedSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "kind",
+        "finding"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "finding": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "repoGrounding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "inspected_surfaces"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inspected_surfaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inspectedSurface"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "when",
+        "skills",
+        "target_focus",
+        "outcome"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "when": {
+          "type": "string",
+          "minLength": 1
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "target_focus": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "when",
+        "steps",
+        "target_focus",
+        "repo_surfaces",
+        "governing_skills",
+        "required_artifacts",
+        "verification",
+        "acceptance_criteria",
+        "outcome"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "when": {
+          "type": "string",
+          "minLength": 1
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "target_focus": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repo_surfaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "governing_skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "required_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "verification": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "acceptance_criteria": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "outcome": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "skillMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_group",
+        "use_for",
+        "project_surfaces",
+        "why"
+      ],
+      "properties": {
+        "skill_group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "use_for": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_surfaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "why": {
+          "type": "string",
+          "minLength": 1
+        },
+        "avoid_when": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "chosenSkill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_id",
+        "use_when",
+        "project_surfaces",
+        "why_chosen",
+        "audit_expectations"
+      ],
+      "properties": {
+        "skill_id": {
+          "type": "string",
+          "pattern": "^beagle-[a-z0-9]+:[a-z0-9][a-z0-9-]*$"
+        },
+        "use_when": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_surfaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "why_chosen": {
+          "type": "string",
+          "minLength": 1
+        },
+        "audit_expectations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "evidenceStatement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "followUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "action"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mitigation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "evidenceModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default_verification_commands",
+        "verified_facts",
+        "inferred_conclusions",
+        "recommended_follow_ups",
+        "residual_risks"
+      ],
+      "properties": {
+        "default_verification_commands": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "verified_facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceStatement"
+          },
+          "minItems": 1
+        },
+        "inferred_conclusions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceStatement"
+          },
+          "minItems": 1
+        },
+        "recommended_follow_ups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/followUp"
+          },
+          "minItems": 1
+        },
+        "residual_risks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/risk"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "implementationPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "phases"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/implementationPhase"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "implementationPhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "goal",
+        "deliverables",
+        "required_skills",
+        "exit_criteria"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deliverables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "required_skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "exit_criteria": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "implementationTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "phase_id",
+        "title",
+        "summary",
+        "required_skills",
+        "acceptance_criteria"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "phase_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "acceptance_criteria": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "antiGoal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement",
+        "rationale"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "nextStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "owner"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

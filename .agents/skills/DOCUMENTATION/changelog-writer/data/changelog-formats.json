@@ -1,0 +1,45 @@
+{
+  "formats": {
+    "keepachangelog": {
+      "name": "Keep a Changelog",
+      "description": "Standard changelog format based on keepachangelog.com",
+      "version_header": "## [{version}] - {date}",
+      "unreleased_header": "## [Unreleased]",
+      "section_order": ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"],
+      "entry_prefix": "- ",
+      "scope_format": "**{scope}**: ",
+      "breaking_section": "### BREAKING CHANGES",
+      "date_format": "YYYY-MM-DD",
+      "type_mapping": {
+        "feat": "Added",
+        "fix": "Fixed",
+        "refactor": "Changed",
+        "perf": "Changed",
+        "docs": "Changed",
+        "chore": "Changed",
+        "test": "Changed",
+        "ci": "Changed",
+        "build": "Changed",
+        "style": "Changed",
+        "revert": "Removed"
+      }
+    },
+    "github": {
+      "name": "GitHub Releases",
+      "description": "GitHub-style release notes with highlights and contributors",
+      "version_header": "# {version}",
+      "section_order": ["Breaking Changes", "What's New", "Bug Fixes", "Other Changes", "Contributors"],
+      "entry_prefix": "- ",
+      "hash_suffix": true,
+      "include_contributors": true
+    },
+    "simple": {
+      "name": "Simple",
+      "description": "Minimal bullet-point list of changes",
+      "version_header": "# {version} ({date})",
+      "entry_prefix": "- ",
+      "breaking_prefix": "**BREAKING** ",
+      "flat": true
+    }
+  }
+}

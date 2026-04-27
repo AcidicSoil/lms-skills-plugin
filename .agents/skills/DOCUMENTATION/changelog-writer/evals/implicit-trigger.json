@@ -1,0 +1,13 @@
+{
+  "skills": ["changelog-writer"],
+  "query": "Generate a changelog for the last release",
+  "files": [],
+  "expected_behavior": [
+    "Agent recognizes this as a changelog generation request",
+    "Agent activates changelog-writer skill",
+    "Agent dispatches to Mode 1: Generate Changelog",
+    "Agent identifies the last tag as the baseline",
+    "Agent runs commit-classifier.py and changelog-formatter.py",
+    "Agent produces formatted changelog output"
+  ]
+}

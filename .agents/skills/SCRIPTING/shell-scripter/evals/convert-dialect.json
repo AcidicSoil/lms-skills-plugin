@@ -1,0 +1,12 @@
+{
+  "skills": ["shell-scripter"],
+  "query": "/shell-scripter convert scripts/setup.sh fish",
+  "files": ["scripts/setup.sh"],
+  "expected_behavior": [
+    "Agent dispatches to convert mode",
+    "Agent reads the source script and identifies bash dialect",
+    "Agent runs dialect-converter.py with --from bash --to fish",
+    "Agent presents the converted script with a change summary table",
+    "Agent warns about constructs with no fish equivalent (e.g., arrays, process substitution)"
+  ]
+}

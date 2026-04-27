@@ -1,0 +1,113 @@
+<!DOCTYPE html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Honest Review</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#1a1a2e;--bd:#2d3a5a;--tx:#e2e8f0;--t2:#8892a8;--ac:#7c83db;--p0:#ef4444;--p1:#f97316;--p2:#eab308;--p3:#3b82f6;--ok:#22c55e;--g:.75rem;--r:8px;color-scheme:dark}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--tx);line-height:1.5;padding:var(--g);max-width:1200px;margin:0 auto}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(at 20% 30%,rgba(124,131,219,.07),transparent 60%)}
+h1,h2,h3{font-weight:700}h1{font-size:1.3rem}h2{font-size:1rem;margin-bottom:.3rem}h3{font-size:.88rem}
+.m{font-family:ui-monospace,monospace}.x{font-size:.7rem;color:var(--t2)}.y{font-size:.76rem}
+.c{background:rgba(28,37,65,.65);border:1px solid var(--bd);border-radius:var(--r);padding:var(--g);margin-bottom:var(--g);animation:fi .3s ease-out both}
+.hd{display:flex;align-items:center;flex-wrap:wrap;gap:.4rem var(--g);margin-bottom:var(--g)}.hd h1{flex:1}
+.b{display:inline-flex;align-items:center;padding:.12em .5em;border-radius:999px;font-size:.68rem;font-weight:700;text-transform:uppercase}
+.bs{background:var(--ac);color:#fff}.ba{background:var(--p1);color:#1a1a2e}.bf{background:var(--p2);color:#1a1a2e}
+.p{display:inline-block;padding:.08em .4em;border-radius:999px;font-size:.68rem;border:1px solid var(--bd);color:var(--t2)}
+[class^=g]{color:#fff}.gP0,.gS0{background:var(--p0)}.gP1,.gS1{background:var(--p1);color:#1a1a2e}.gP2,.gS2{background:var(--p2);color:#1a1a2e}.gP3,.gS3{background:var(--p3)}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{text-align:left;padding:.4rem;border-bottom:2px solid var(--bd);color:var(--t2);font-size:.7rem;text-transform:uppercase;font-weight:600;cursor:pointer;user-select:none}
+th:hover{color:var(--tx)}td{padding:.3rem .4rem;border-bottom:1px solid rgba(45,58,90,.5)}
+tr:last-child td{border-bottom:none}tr.fr{cursor:pointer}tr:hover td{background:rgba(124,131,219,.04)}
+.cb{display:inline-flex;align-items:center;gap:.2rem;width:100%}.ct{flex:1;height:5px;background:rgba(45,58,90,.8);border-radius:3px;overflow:hidden}.cf{height:100%;border-radius:3px}
+.fd{max-height:0;overflow:hidden;transition:max-height .2s}.fd.op{max-height:500px}.fd dl{padding:.4rem .5rem;font-size:.76rem;color:var(--t2)}.fd dt{font-weight:600;color:var(--tx);margin-top:.2rem}.fd dd{margin-left:.4rem}
+.hm{display:grid;gap:2px;margin:.4rem 0}.hc{aspect-ratio:1;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:.55rem;font-weight:700;color:#fff}
+.st li{font-size:.8rem;padding:.1rem 0;list-style:none}.st li::before{content:"+";color:var(--ok);font-weight:700;margin-right:.3rem}
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:.4rem}.sv{text-align:center;padding:.4rem}.sn{font-size:1.3rem;font-weight:700;line-height:1}.sl{font-size:.7rem;color:var(--t2);text-transform:uppercase}
+.dc{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--g)}
+.dn h3,.dr h3,.du h3{padding:.3rem .4rem;border-radius:var(--r) var(--r) 0 0;font-size:.8rem;border:1px solid}
+.dn h3{background:rgba(239,68,68,.15);color:var(--p0);border-color:rgba(239,68,68,.3)}.dr h3{background:rgba(34,197,94,.1);color:var(--ok);border-color:rgba(34,197,94,.25)}.du h3{background:rgba(234,179,8,.1);color:var(--p2);border-color:rgba(234,179,8,.25)}
+.di{font-size:.76rem;padding:.3rem .4rem;border-bottom:1px solid rgba(45,58,90,.4)}.di:last-child{border-bottom:none}
+.ds{display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-bottom:var(--g)}.dx{font-size:1.1rem;font-weight:700;padding:.2rem .6rem;border-radius:var(--r)}
+.dx-n,.dx-r,.dx-u{border:1px solid}.dx-n{color:var(--p0);background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.2)}.dx-r{color:var(--ok);background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.25)}.dx-u{color:var(--p2);background:rgba(234,179,8,.08);border-color:rgba(234,179,8,.2)}
+.dm{margin-bottom:.5rem;padding:.4rem;border-left:3px solid var(--ac)}.dm h3{color:var(--ac);margin-bottom:.2rem}.cd{border-left-color:var(--p1)}.cd h3{color:var(--p1)}
+.ri{display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem}.rl{flex:0 0 110px;font-size:.76rem;color:var(--t2)}.rt{flex:1;height:7px;background:rgba(45,58,90,.8);border-radius:4px;overflow:hidden}.rf{height:100%;border-radius:4px}
+.rw{display:flex;justify-content:center;padding:.5rem 0}
+@keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media print{body{background:#fff!important;color:#111;padding:0}body::before{display:none}.c{background:#fff;border:1px solid #ccc;break-inside:avoid;animation:none}.fd{max-height:none!important;overflow:visible}th{cursor:default}[class^=g],.hc,.cf,.rf{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+@media(max-width:768px){.dc{grid-template-columns:1fr}.hd{flex-direction:column}.rl{flex:0 0 80px}}
+</style></head><body>
+<main id="app"></main>
+<script id="data" type="application/json">{}</script>
+<script>(()=>{"use strict";
+const D=JSON.parse(document.getElementById("data").textContent),q=document.getElementById("app");
+const _=document.createElement("p"),e=s=>{if(s==null)return"";_.textContent=s;return _.innerHTML};
+const isDiff=!!D.diff,isA=D.mode==="audit",SO={P0:0,S0:1,P1:2,S1:3,P2:4,S2:5,P3:6,S3:7};
+const sc=s=>/0$/.test(s)?"--p0":/1$/.test(s)?"--p1":/2$/.test(s)?"--p2":"--p3";
+const cc=c=>c>=.8?"--ok":c>=.5?"--p2":"--p0";
+let sK=null,sA=true,fi=(D.findings||[]).slice(),ex=new Set;
+function render(){let h='<header class="hd"><h1>'+e(D.project||"Honest Review")+'</h1><span class="b '+(isDiff?"bf":isA?"ba":"bs")+'">'+(isDiff?"Diff":isA?"Audit":"Session")+"</span><div style='display:flex;flex-wrap:wrap;gap:.2rem'>";
+for(const k of["date","commit","scope"])D[k]&&(h+='<span class="p'+(k==="commit"?" m":"")+'">'+e(D[k])+"</span>");
+h+="</div></header>";if(isDiff)h+=vDiff();else{h+=vFiles()+vStr()+vTbl()+vHeat();if(isA)h+=vRadar()+vDoms()+vRecs();h+=vRisk()+vStats()}
+q.innerHTML=h;q.querySelectorAll(".c").forEach((c,i)=>c.style.animationDelay=i*40+"ms");
+q.querySelectorAll("th[data-k]").forEach(t=>t.onclick=()=>{const k=t.dataset.k;sK===k?sA=!sA:(sK=k,sA=true);
+const gv={id:f=>f.id||"",sv:f=>SO[f.priority]??99,co:f=>f.confidence??0,fi:f=>f.location||"",su:f=>f.description||"",lv:f=>f.level||""};
+fi.sort((a,b)=>{const g=gv[k]||(()=>0),u=g(a),v=g(b);return typeof u==="string"?(sA?1:-1)*u.localeCompare(v):sA?u-v:v-u});render()});
+q.querySelectorAll("tr.fr").forEach(r=>r.onclick=()=>{const id=r.dataset.id,d=r.nextElementSibling?.querySelector(".fd");ex.has(id)?ex.delete(id):ex.add(id);d?.classList.toggle("op")})}
+function vFiles(){const f=D.files_reviewed;if(!f||!f.length)return"";let h='<section class="c"><h2>Files ('+f.length+")</h2><ul style=list-style:none>";
+for(const x of f){const c=x.risk==="HIGH"?"--p0":x.risk==="MEDIUM"?"--p2":"--ok";h+='<li class=y style="display:flex;align-items:center;gap:.3rem;padding:.06rem 0"><span style="width:7px;height:7px;border-radius:50%;background:var('+c+')"></span><span class=m>'+e(x.path)+"</span>";
+if(x.status)h+='<span class=p>'+e(x.status)+"</span>";if(x.risk)h+='<span style="font-size:.62rem;color:var('+c+');font-weight:600">'+e(x.risk)+"</span>";h+="</li>"}return h+"</ul></section>"}
+function vStr(){const s=D.strengths;if(!s||!s.length)return"";let h='<section class="c" style="border-left:3px solid var(--ok)"><h2 style=color:var(--ok)>Strengths</h2><ul class=st>';
+for(const x of s)h+="<li>"+e(x)+"</li>";return h+"</ul></section>"}
+function vTbl(){if(!fi.length)return"";let h='<section class=c><h2>Findings</h2><div style=overflow-x:auto><table><thead><tr>';
+for(const[k,l]of[["id","ID"],["sv","Sev"],["co","Conf"],["fi","File"],["su","Summary"],["lv","Level"]])h+='<th data-k='+k+(sK===k?' style=color:var(--ac)':"")+">"+l+(sK===k?(sA?" \u25B2":" \u25BC"):"")+"</th>";
+h+="</tr></thead><tbody>";for(const f of fi){const cv=f.confidence??0,p=f.priority||"P3";
+h+='<tr class=fr data-id="'+e(f.id)+'" tabindex=0><td class=m>'+e(f.id||"--")+'</td><td><span class="b g'+e(p)+'">'+e(p)+'</span></td><td><div class=cb><div class=ct><div class=cf style="width:'+(cv*100|0)+"%;background:var("+cc(cv)+')"></div></div><span class="m x" style="min-width:1.8rem;text-align:right;font-weight:600">'+cv.toFixed(2)+"</span></div></td><td class='m x' style='max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' title='"+e(f.location)+"'>"+e(f.location||"--")+"</td><td>"+e(f.description||f.category||"--")+"</td><td>"+e(f.level||"--")+"</td></tr>";
+h+='<tr><td colspan=6 style="padding:0;border:none"><div class="fd'+(ex.has(f.id)?" op":"")+'"><dl>';
+for(const[l,v]of[["Evidence",f.evidence],["Impact",f.impact],["Fix",f.fix],["Effort",f.effort]])v&&(h+="<dt>"+l+"</dt><dd>"+e(v)+"</dd>");
+h+="</dl></div></td></tr>"}return h+"</tbody></table></div></section>"}
+function vHeat(){if(fi.length<2)return"";const sv=["P0","P1","P2","P3","S0","S1","S2"],bn=[".9+",".7-.9",".5-.7",".3-.5","<.3"],cr=[[.9,1.01],[.7,.9],[.5,.7],[.3,.5],[0,.3]];
+const mx=cr.map(r=>sv.map(p=>fi.filter(f=>f.priority===p&&(f.confidence||0)>=r[0]&&(f.confidence||0)<r[1]).length)),mc=Math.max(1,...mx.flat());
+let h='<section class=c><h2>Severity / Confidence</h2><div class=hm style="grid-template-columns:45px repeat(7,1fr)"><div></div>';
+for(const p of sv)h+='<div class=x style="text-align:center;font-weight:600">'+p+"</div>";
+for(let r=0;r<5;r++){h+='<div class=x style="display:flex;align-items:center;">'+bn[r]+"</div>";
+for(let c=0;c<7;c++){const n=mx[r][c],i=n/mc,rgb=SO[sv[c]]<=1?"239,68,68":SO[sv[c]]<=3?"249,115,22":SO[sv[c]]<=5?"234,179,8":"59,130,246";
+h+='<div class=hc style="background:'+(n?"rgba("+rgb+","+(.15+i*.7).toFixed(2)+")":"rgba(45,58,90,.3)")+'">'+(n||"")+"</div>"}}
+return h+"</div></section>"}
+function vStats(){const s=D.statistics;if(!s)return"";const it=[[s.total,"Total"],[s.reported,"Reported"],[s.discarded,"Discarded"]];
+if(s.by_severity)for(const[k,v]of Object.entries(s.by_severity))v>0&&it.push([v,k]);
+if(s.by_level)for(const[k,v]of Object.entries(s.by_level))v>0&&it.push([v,k]);
+s.coverage&&it.push([s.coverage,"Cov"]);s.research_validations&&it.push([s.research_validations,"Res"]);
+let h='<section class=c><h2>Statistics</h2><div class=sg>';
+for(const[v,l]of it)v!=null&&(h+='<div class=sv><div class=sn'+(/^[PS]\d$/.test(l)?" style=color:var("+sc(l)+")":"")+">"+e(v)+'</div><div class=sl>'+e(l)+"</div></div>");
+return h+"</div></section>"}
+function vRisk(){const r=D.risk_indicators;if(!r||!r.length)return"";let h='<section class=c><h2>Risk Indicators</h2>';
+for(const x of r){const pc=(x.value||0)*100;h+='<div class=ri><span class=rl>'+e(x.label)+'</span><div class=rt><div class=rf style="width:'+pc.toFixed(0)+"%;background:var("+(pc>70?"--p0":pc>40?"--p2":"--ok")+')"></div></div><span class="m x" style="flex:0 0 2rem;text-align:right;font-weight:600">'+pc.toFixed(0)+"%</span></div>"}
+return h+"</section>"}
+function vRadar(){const h=D.health;if(!h)return"";const ax="Correctness,Design,Efficiency,Security,Architecture".split(","),vl=[h.correctness||0,h.design||0,h.efficiency||0,h.security||0,h.architecture||0],n=5,C=100,R=65,W=2*Math.PI/n,T=1,P=(a,r)=>(C+r*Math.cos(a)).toFixed(T)+","+(C+r*Math.sin(a)).toFixed(T);
+let o='<section class=c><h2>Health Radar</h2><div class=rw><svg viewBox="0 0 200 200" width=240 height=240>';
+for(const s of[.25,.5,.75,1]){let p="";for(let i=0;i<n;i++)p+=P(-Math.PI/2+i*W,R*s)+" ";o+='<polygon points="'+p.trim()+'" fill=none stroke="rgba(45,58,90,.6)" stroke-width=.5/>'}
+let dp="";for(let i=0;i<n;i++){const a=-Math.PI/2+i*W;o+='<line x1='+C+' y1='+C+' x2='+(C+R*Math.cos(a)).toFixed(T)+' y2='+(C+R*Math.sin(a)).toFixed(T)+' stroke="rgba(45,58,90,.4)" stroke-width=.3/>';
+dp+=P(a,R*vl[i])+" "}
+o+='<polygon points="'+dp.trim()+'" fill="rgba(124,131,219,.15)" stroke=var(--ac) stroke-width=1.5/>';
+for(let i=0;i<n;i++){const a=-Math.PI/2+i*W,x=C+R*vl[i]*Math.cos(a),y=C+R*vl[i]*Math.sin(a),lx=C+(R+15)*Math.cos(a),ly=C+(R+15)*Math.sin(a),an=Math.cos(a)<-.1?"end":Math.cos(a)>.1?"start":"middle";
+o+='<circle cx='+x.toFixed(T)+' cy='+y.toFixed(T)+' r=3 fill=var(--ac)/><text x='+lx.toFixed(T)+' y='+ly.toFixed(T)+' text-anchor='+an+' dy=.35em fill=var(--t2) font-size=6.5>'+e(ax[i])+'</text><text x='+lx.toFixed(T)+' y='+(ly+8).toFixed(T)+' text-anchor='+an+' dy=.35em fill=var(--tx) font-size=6 font-weight=700>'+(vl[i]*100|0)+"%</text>"}
+return o+"</svg></div></section>"}
+function vDoms(){if(!D.domains||!D.domains.length)return"";let h='<section class=c><h2>Domain Analysis</h2>';
+for(const d of D.domains){h+='<div class=dm><h3>'+e(d.name)+"</h3>";
+if(d.files?.length)h+='<p class=x>'+d.files.length+"f: "+e(d.files.slice(0,3).join(", "))+(d.files.length>3?" +"+(d.files.length-3):"")+"</p>";
+if(d.findings?.length)h+='<p class=x>'+e(d.findings.join(", "))+"</p>";h+="</div>"}h+="</section>";
+const cf=D.cross_domain_findings;if(cf?.length){h+='<section class=c><h2 style=color:var(--p1)>Cross-Domain Findings</h2>';
+for(const f of cf){h+='<div class="dm cd"><div style="display:flex;align-items:center;gap:.3rem;flex-wrap:wrap"><span class="b g'+(f.priority||"P2")+'">'+e(f.priority||"--")+'</span><span class="m x">'+e(f.id)+"</span>";
+if(f.domains)for(const d of f.domains)h+='<span class=p>'+e(d)+"</span>";h+="</div>";
+f.description&&(h+='<p class=y>'+e(f.description)+"</p>");f.evidence&&(h+='<p class=x>'+e(f.evidence)+"</p>");h+="</div>"}h+="</section>"}return h}
+function vRecs(){const r=D.recommendations;if(!r?.length)return"";let h='<section class=c><h2>Recommendations</h2><ol style="padding-left:1rem;font-size:.8rem">';
+for(const x of r)h+="<li>"+e(x)+"</li>";return h+"</ol></section>"}
+function vDiff(){if(!D.diff)return"";const sm=D.summary||{};
+let h='<div class=ds><span class="dx dx-n">+'+(sm.new_count||0)+' New</span><span class="dx dx-r">-'+(sm.resolved_count||0)+' Resolved</span><span class="dx dx-u">~'+(sm.recurring_count||0)+" Recurring</span></div>";
+if(D.baseline_date||D.current_date)h+='<p class=x style="text-align:center;margin-bottom:var(--g)">'+e(D.baseline_date||"?")+"\u2192"+e(D.current_date||"?")+"</p>";
+h+='<div class=dc>';function col(items,cls,lbl){let o='<div class="c '+cls+'"><h3>'+e(lbl)+" ("+(items||[]).length+")</h3>";
+if(!items?.length)return o+'<p class=x style=padding:.3rem>None</p></div>';
+for(const f of items){o+='<div class=di><div style="display:flex;align-items:center;gap:.2rem"><span class="b g'+(f.priority||"P3")+'" style=font-size:.58rem>'+e(f.priority||"--")+'</span><span class="m x">'+e(f.id||"")+"</span>";
+if(f.confidence!=null)o+='<span class=x>('+f.confidence.toFixed(2)+")</span>";
+o+="</div><p class=y>"+e(f.description||f.category||"--")+"</p>";if(f.location)o+='<p class="m x">'+e(f.location)+"</p>";o+="</div>"}return o+"</div>"}
+return h+col(D.diff.new,"dn","New")+col(D.diff.resolved,"dr","Resolved")+col(D.diff.recurring,"du","Recurring")+"</div>"}
+render()})();
+</script></body></html>

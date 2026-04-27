@@ -1,0 +1,13 @@
+{
+  "skills": ["simplify"],
+  "query": "Can you walk me through why src/routes/session.ts feels harder to follow than it needs to be?",
+  "files": ["src/routes/session.ts"],
+  "expected_behavior": [
+    "Agent recognizes an explanation-first request and routes to Mode C: Explain",
+    "Agent treats src/routes/session.ts as the target scope",
+    "Agent reads references/simplification-taxonomy.md to describe sources of complexity",
+    "Agent reads references/output-formats.md to structure the Explain response",
+    "Agent distinguishes safer simplifications from risky or semantic ones",
+    "Agent does NOT edit files in Explain mode"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review wagents/cli.py",
+  "files": ["wagents/cli.py"],
+  "expected_behavior": [
+    "Agent dispatches to Scoped Review mode based on a file path argument",
+    "Agent performs triage on the specified file, classifying its risk level",
+    "Agent reviews at all three abstraction levels: Correctness (error handling, boundary conditions, security), Design (abstraction quality, coupling, cohesion), Efficiency (algorithmic complexity, resource usage)",
+    "Agent applies at least 2 creative lenses from the lens catalog (Inversion, Deletion, Newcomer, Incident, Evolution, Adversary)",
+    "Agent validates every non-trivial finding with research evidence (Context7, WebSearch, or gh)",
+    "Agent maintains a positive-to-constructive ratio of 3:1, acknowledging strengths alongside issues",
+    "Agent presents findings ranked by score = severity_weight x confidence x blast_radius",
+    "Agent never implements fixes without explicit user approval (approval gate)"
+  ]
+}

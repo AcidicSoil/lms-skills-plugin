@@ -1,0 +1,70 @@
+{
+  "frameworks": {
+    "pytest": {
+      "language": "python",
+      "file_pattern": "test_*.py or *_test.py",
+      "function_pattern": "test_*",
+      "class_pattern": "Test*",
+      "assertion_style": "assert statement (plain Python)",
+      "fixtures": {
+        "decorator": "@pytest.fixture",
+        "scopes": ["function", "class", "module", "session"],
+        "conftest": "conftest.py for shared fixtures"
+      },
+      "parametrize": "@pytest.mark.parametrize('param', [values])",
+      "skip": "@pytest.mark.skip(reason='...')",
+      "xfail": "@pytest.mark.xfail(reason='...')",
+      "markers": "@pytest.mark.slow, @pytest.mark.integration",
+      "plugins": ["pytest-cov", "pytest-mock", "pytest-asyncio", "pytest-xdist", "hypothesis"],
+      "property_testing": "hypothesis",
+      "example": {
+        "unit": "def test_add():\n    assert add(1, 2) == 3",
+        "parametrized": "@pytest.mark.parametrize('a,b,expected', [(1,2,3), (0,0,0)])\ndef test_add(a, b, expected):\n    assert add(a, b) == expected",
+        "fixture": "@pytest.fixture\ndef db():\n    conn = create_connection()\n    yield conn\n    conn.close()"
+      }
+    },
+    "jest": {
+      "language": "javascript/typescript",
+      "file_pattern": "*.test.{js,ts,jsx,tsx} or *.spec.{js,ts,jsx,tsx}",
+      "function_pattern": "test('...') or it('...')",
+      "group_pattern": "describe('...')",
+      "assertion_style": "expect().toBe/toEqual/toThrow",
+      "fixtures": {
+        "setup": "beforeEach/beforeAll",
+        "teardown": "afterEach/afterAll",
+        "mocking": "jest.fn(), jest.mock()"
+      },
+      "parametrize": "test.each([[1,2,3], [0,0,0]])('add(%i,%i)', (a,b,expected) => ...)",
+      "skip": "test.skip('...')",
+      "todo": "test.todo('...')",
+      "plugins": ["@testing-library/react", "@testing-library/jest-dom"],
+      "property_testing": "fast-check",
+      "example": {
+        "unit": "test('adds numbers', () => {\n  expect(add(1, 2)).toBe(3);\n});",
+        "parametrized": "test.each([[1,2,3],[0,0,0]])('add(%i,%i)=%i', (a,b,expected) => {\n  expect(add(a,b)).toBe(expected);\n});",
+        "mock": "const mockFn = jest.fn().mockReturnValue(42);"
+      }
+    },
+    "vitest": {
+      "language": "javascript/typescript",
+      "file_pattern": "*.test.{js,ts,jsx,tsx} or *.spec.{js,ts,jsx,tsx}",
+      "function_pattern": "test('...') or it('...')",
+      "group_pattern": "describe('...')",
+      "assertion_style": "expect().toBe/toEqual (Chai-compatible)",
+      "fixtures": {
+        "setup": "beforeEach/beforeAll",
+        "teardown": "afterEach/afterAll",
+        "mocking": "vi.fn(), vi.mock()"
+      },
+      "parametrize": "test.each([[1,2,3]])('add(%i,%i)', (a,b,expected) => ...)",
+      "skip": "test.skip('...')",
+      "todo": "test.todo('...')",
+      "plugins": ["@testing-library/react", "@vitest/coverage-v8"],
+      "property_testing": "fast-check",
+      "example": {
+        "unit": "test('adds numbers', () => {\n  expect(add(1, 2)).toBe(3);\n});",
+        "mock": "const mockFn = vi.fn().mockReturnValue(42);"
+      }
+    }
+  }
+}

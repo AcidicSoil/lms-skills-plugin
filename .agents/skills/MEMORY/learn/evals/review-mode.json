@@ -1,0 +1,12 @@
+{
+  "skills": ["learn"],
+  "query": "/learn review",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to 'review' mode based on the keyword in arguments",
+    "Agent shows pending learnings that have been captured but not yet promoted",
+    "Agent displays the frequency count for each pending learning (how many times the correction has been observed)",
+    "Agent identifies which learnings have reached the promotion threshold (3+ occurrences across 2+ sessions)",
+    "Agent suggests next steps: promote high-frequency learnings or audit for stale/contradictory entries"
+  ]
+}
