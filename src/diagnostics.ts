@@ -25,6 +25,10 @@ function shouldLog(event: DiagnosticEvent): boolean {
   if (DEBUG_LOGGING) return true;
 
   switch (event.event) {
+    case "prompt_context":
+    case "preprocess_decision":
+    case "preprocess_activation":
+    case "preprocess_fallback":
     case "tool_start":
     case "tool_complete":
     case "tool_error":
@@ -124,9 +128,31 @@ function toolArgs(event: DiagnosticEvent): string {
   return "";
 }
 
+function formatPromptContext(event: DiagnosticEvent): string {
+  const context = quote(event.context);
+  const reason = quote(event.reason);
+  const skills = Array.isArray(event.skills)
+    ? (event.skills.length ? event.skills.join(",") : "-")
+    : quote(event.skills);
+  const unresolved = Array.isArray(event.unresolved)
+    ? (event.unresolved.length ? event.unresolved.join(",") : "-")
+    : quote(event.unresolved);
+  const action = quote(event.expectedAction);
+  const preview = quote(event.inputPreview);
+  return `prompt context=${context} reason=${reason} skills=${skills} unresolved=${unresolved} action=${action} input="${preview}"${elapsed(event)}${id(event)}`;
+}
+
 function formatHumanEvent(event: DiagnosticEvent): string {
   const prefix = `[lms-skills]`;
   switch (event.event) {
+    case "prompt_context":
+      return `${prefix} ${formatPromptContext(event)}`;
+    case "preprocess_activation":
+      return `${prefix} prompt activation tokens=${quote(event.activations)} resolved=${quote(event.resolvedSkills)} unresolved=${quote(event.unresolvedSkills)} action=read_skill_file_first${id(event)}`;
+    case "preprocess_decision":
+      return `${prefix} prompt context=${quote(event.mode)} skills=${quote(event.skillCount)} activations=${quote(event.activations)} resolved=${quote(event.resolvedSkills)} input=${quote(event.messageChars)}ch inject=${quote(event.injectionChars)}ch${elapsed(event)}${id(event)}`;
+    case "preprocess_fallback":
+      return `${prefix} prompt fallback reason=${quote(event.reason)} activations=${quote(event.activations)}${elapsed(event)}${id(event)}`;
     case "tool_start":
       return `${prefix} ${event.tool} start${toolArgs(event)} timeout=${event.timeoutMs ?? "-"}ms${id(event)}`;
     case "tool_complete":

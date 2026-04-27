@@ -19,7 +19,7 @@ export const SKILL_MANIFEST_FILE = "skill.json";
 export const RESET_TO_DEFAULT_SENTINEL = "default";
 
 export const MAX_FILE_SIZE_BYTES = 102_400;
-export const MAX_DESCRIPTION_CHARS = 500;
+export const MAX_DESCRIPTION_CHARS = 1_536;
 export const BODY_EXCERPT_CHARS = 2_000;
 export const MAX_DIRECTORY_DEPTH = 3;
 export const MAX_DIRECTORY_ENTRIES = 200;

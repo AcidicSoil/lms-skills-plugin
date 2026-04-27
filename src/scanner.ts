@@ -12,7 +12,7 @@ import { parseDisplayPath, formatDisplayPath } from "./pathResolver";
 import type { ResolvedSkillRoot } from "./pathResolver";
 import type { RuntimeRegistry } from "./runtime";
 import type { RuntimeAdapter } from "./runtime/types";
-import type { SkillInfo, SkillManifestFile, DirectoryEntry } from "./types";
+import type { SkillInfo, SkillManifestFile, SkillFrontmatter, DirectoryEntry } from "./types";
 import type { RuntimeTargetName } from "./environment";
 import { checkAbort, isAbortError } from "./abort";
 
@@ -42,6 +42,192 @@ async function readFileSafe(
     if (isAbortError(error)) throw error;
     return null;
   }
+}
+
+
+interface ParsedSkillMarkdown {
+  frontmatter: SkillFrontmatter | null;
+  markdown: string;
+}
+
+function unquoteYamlValue(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\'/g, "'");
+  }
+  return trimmed;
+}
+
+function parseBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return undefined;
+  if (/^(true|yes|on)$/i.test(value.trim())) return true;
+  if (/^(false|no|off)$/i.test(value.trim())) return false;
+  return undefined;
+}
+
+function parseStringList(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    return value.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+  }
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    return trimmed
+      .slice(1, -1)
+      .split(",")
+      .map((v) => unquoteYamlValue(v).trim())
+      .filter(Boolean);
+  }
+  return trimmed.split(/\s+/).filter(Boolean);
+}
+
+function normalizeFrontmatterKey(key: string): keyof SkillFrontmatter | null {
+  switch (key.trim().toLowerCase().replace(/_/g, "-")) {
+    case "name":
+      return "name";
+    case "description":
+      return "description";
+    case "when-to-use":
+    case "when-to_use":
+      return "whenToUse";
+    case "tags":
+      return "tags";
+    case "disable-model-invocation":
+      return "disableModelInvocation";
+    case "user-invocable":
+      return "userInvocable";
+    case "allowed-tools":
+      return "allowedTools";
+    case "context":
+      return "context";
+    case "agent":
+      return "agent";
+    case "model":
+      return "model";
+    case "effort":
+      return "effort";
+    case "argument-hint":
+      return "argumentHint";
+    case "arguments":
+      return "arguments";
+    default:
+      return null;
+  }
+}
+
+function assignFrontmatterValue(
+  frontmatter: SkillFrontmatter,
+  key: string,
+  rawValue: unknown,
+): void {
+  const normalizedKey = normalizeFrontmatterKey(key);
+  if (!normalizedKey) return;
+
+  if (normalizedKey === "disableModelInvocation" || normalizedKey === "userInvocable") {
+    const parsed = parseBoolean(rawValue);
+    if (parsed !== undefined) {
+      (frontmatter as Record<string, unknown>)[normalizedKey] = parsed;
+    }
+    return;
+  }
+
+  if (normalizedKey === "tags" || normalizedKey === "allowedTools" || normalizedKey === "arguments") {
+    const parsed = parseStringList(rawValue);
+    if (parsed) {
+      (frontmatter as Record<string, unknown>)[normalizedKey] = parsed;
+    }
+    return;
+  }
+
+  if (typeof rawValue === "string" && rawValue.trim()) {
+    (frontmatter as Record<string, unknown>)[normalizedKey] = rawValue.trim();
+  }
+}
+
+function parseFrontmatterYaml(yaml: string): SkillFrontmatter | null {
+  const frontmatter: SkillFrontmatter = {};
+  const lines = yaml.replace(/\r\n/g, "\n").split("\n");
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.trim() || line.trim().startsWith("#")) continue;
+    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (!match) continue;
+
+    const [, key, rest] = match;
+    const value = rest.trim();
+
+    if (value === "|" || value === ">") {
+      const blockLines: string[] = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const next = lines[j];
+        if (/^[A-Za-z0-9_-]+:\s*/.test(next)) break;
+        blockLines.push(next.replace(/^\s{2,}/, ""));
+        j += 1;
+      }
+      assignFrontmatterValue(
+        frontmatter,
+        key,
+        value === ">" ? blockLines.join(" ").replace(/\s+/g, " ") : blockLines.join("\n"),
+      );
+      i = j - 1;
+      continue;
+    }
+
+    if (!value) {
+      const listItems: string[] = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const item = lines[j].trim().match(/^-\s+(.+)$/);
+        if (!item) break;
+        listItems.push(unquoteYamlValue(item[1]));
+        j += 1;
+      }
+      if (listItems.length > 0) {
+        assignFrontmatterValue(frontmatter, key, listItems);
+        i = j - 1;
+        continue;
+      }
+    }
+
+    if (value.startsWith("[") && value.endsWith("]")) {
+      assignFrontmatterValue(frontmatter, key, value);
+    } else {
+      assignFrontmatterValue(frontmatter, key, unquoteYamlValue(value));
+    }
+  }
+
+  return Object.keys(frontmatter).length > 0 ? frontmatter : null;
+}
+
+function parseSkillMarkdown(content: string): ParsedSkillMarkdown {
+  const normalized = content.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+  if (!normalized.startsWith("---\n")) {
+    return { frontmatter: null, markdown: content };
+  }
+
+  const closing = normalized.indexOf("\n---\n", 4);
+  if (closing === -1) {
+    return { frontmatter: null, markdown: content };
+  }
+
+  const yaml = normalized.slice(4, closing);
+  const markdown = normalized.slice(closing + "\n---\n".length);
+  return { frontmatter: parseFrontmatterYaml(yaml), markdown };
+}
+
+function combineDescription(description?: string, whenToUse?: string): string | undefined {
+  const parts = [description, whenToUse]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+  if (parts.length === 0) return undefined;
+  return parts.join(" ").replace(/\s+/g, " ").slice(0, MAX_DESCRIPTION_CHARS);
 }
 
 function extractDescription(content: string): string {
@@ -214,23 +400,44 @@ async function buildSkillInfoFromDirectory(
 
   const manifest = await loadManifest(runtime, skillDir, signal);
   const skillMdContent = await readFileSafe(runtime, skillMdPath, signal);
+  const parsedSkillMd = skillMdContent
+    ? parseSkillMarkdown(skillMdContent)
+    : { frontmatter: null, markdown: "" };
+  const frontmatter = parsedSkillMd.frontmatter;
+  const markdownContent = parsedSkillMd.markdown;
 
-  const description =
-    manifest?.description ??
-    (skillMdContent
-      ? extractDescription(skillMdContent)
-      : "No description available.");
-  const bodyExcerpt = skillMdContent ? extractBodyExcerpt(skillMdContent) : "";
-  const tags = Array.isArray(manifest?.tags)
+  const frontmatterDescription = combineDescription(
+    frontmatter?.description,
+    frontmatter?.whenToUse,
+  );
+  const markdownDescription = markdownContent
+    ? extractDescription(markdownContent)
+    : "No description available.";
+  const description = frontmatterDescription ?? manifest?.description ?? markdownDescription;
+  const bodyExcerpt = markdownContent ? extractBodyExcerpt(markdownContent) : "";
+  const manifestTags = Array.isArray(manifest?.tags)
     ? manifest.tags.filter((t): t is string => typeof t === "string")
     : [];
+  const frontmatterTags = Array.isArray(frontmatter?.tags) ? frontmatter.tags : [];
+  const tags = frontmatterTags.length > 0 ? frontmatterTags : manifestTags;
+  const metadataSource = frontmatterDescription || frontmatter?.name
+    ? "frontmatter"
+    : manifest?.description || manifest?.name
+      ? "skill.json"
+      : markdownDescription !== "No description available."
+        ? "markdown"
+        : "fallback";
 
   const displayPath = formatDisplayPath(root.environment, skillMdPath);
   return {
-    name: manifest?.name ?? fallbackName,
+    name: frontmatter?.name ?? manifest?.name ?? fallbackName,
     description,
     bodyExcerpt,
     tags,
+    frontmatter: frontmatter ?? undefined,
+    metadataSource,
+    disableModelInvocation: frontmatter?.disableModelInvocation ?? false,
+    userInvocable: frontmatter?.userInvocable ?? true,
     skillMdPath: displayPath,
     directoryPath: formatDisplayPath(root.environment, skillDir),
     resolvedSkillMdPath: skillMdPath,
@@ -623,9 +830,12 @@ export async function readSkillFile(
 
   const content = await readFileSafe(runtime, resolved, signal);
   if (content === null) return { error: `Unable to read file: ${targetRel}` };
+  const returnedContent = targetRel === SKILL_ENTRY_POINT
+    ? parseSkillMarkdown(content).markdown
+    : content;
 
   return {
-    content,
+    content: returnedContent,
     resolvedPath: resolved,
     displayPath: formatDisplayPath(skill.environment, resolved),
   };
@@ -664,8 +874,13 @@ export async function readAbsolutePath(
     }
     const content = await readFileSafe(runtime, resolved, signal);
     if (content === null) return { error: `Unable to read file: ${resolved}` };
+    const returnedContent = (root.environment === "windows"
+      ? path.win32.basename(resolved)
+      : path.posix.basename(resolved)) === SKILL_ENTRY_POINT
+        ? parseSkillMarkdown(content).markdown
+        : content;
     return {
-      content,
+      content: returnedContent,
       resolvedPath: resolved,
       displayPath: formatDisplayPath(root.environment, resolved),
       environment: root.environment,

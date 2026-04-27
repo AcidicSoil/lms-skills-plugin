@@ -57,10 +57,10 @@ Manual system-prompt instructions are optional and should only be used for extra
 Users can explicitly activate a skill in a prompt with `$skill-name` notation:
 
 ```text
-Use $shell-helper-generator to create the helper.
+Use $example-skill to create the helper.
 ```
 
-When the preprocessor sees `$shell-helper-generator`, it resolves that skill directly and injects an `<explicit_skill_activation>` block before the request reaches the model.
+When the preprocessor sees `$example-skill`, it resolves that skill directly and injects an `<explicit_skill_activation>` block before the request reaches the model.
 
 Explicit activations tell the model:
 
@@ -75,7 +75,7 @@ The notation accepts skill-like names beginning with a letter and containing let
 
 ```text
 $docx
-$shell-helper-generator
+$example-skill
 $my.custom_skill
 ```
 
@@ -131,11 +131,37 @@ A skill is any subdirectory inside a configured skills path that contains a `SKI
 
 ### `SKILL.md`
 
-`SKILL.md` is the required entry point for a skill. It should explain when to use the skill and what steps the model should follow.
+`SKILL.md` is the required entry point for a skill. Claude-style YAML frontmatter at the top of `SKILL.md` is used as the high-level discovery context injected into `<available_skills>`.
 
-### `skill.json` optional metadata
+```md
+---
+name: example-skill
+description: Use this skill when the user needs a clear, complete example workflow.
+when_to_use: Trigger when the request matches the workflow this skill implements.
+tags: [examples, workflow]
+disable-model-invocation: false
+---
 
-Place `skill.json` in a skill directory to override display metadata:
+# Example Skill
+
+Detailed instructions go here. This body is loaded when the model calls `read_skill_file`.
+```
+
+Frontmatter behavior:
+
+- `name` overrides the directory name in high-level context.
+- `description` is the primary trigger text shown to the model before it reads the full skill.
+- `when_to_use` / `when-to-use` is appended to `description` in the high-level skill listing.
+- `tags` are used for search/scoring.
+- `disable-model-invocation: true` keeps the skill out of automatic `<available_skills>` context, while still allowing explicit `$skill-name` activation.
+- Descriptions are capped at 1,536 characters to keep high-level context useful without loading the full skill body.
+- The frontmatter is stripped from `read_skill_file` results for `SKILL.md`, so the model receives the detailed instruction body after discovery metadata has already been consumed.
+
+This mirrors the progressive-disclosure pattern: lightweight frontmatter is always available for selection, while the full markdown body is loaded only for relevant or explicitly activated skills.
+
+### `skill.json` optional legacy metadata
+
+Place `skill.json` in a skill directory to override display metadata when `SKILL.md` frontmatter is absent:
 
 ```json
 {
@@ -145,7 +171,7 @@ Place `skill.json` in a skill directory to override display metadata:
 }
 ```
 
-If `skill.json` is absent, the plugin uses the directory name and extracts the description from the first paragraph of `SKILL.md`.
+Metadata priority is: `SKILL.md` frontmatter first, then `skill.json`, then the directory name plus the first paragraph of the markdown body.
 
 ---
 
@@ -263,9 +289,9 @@ The plugin emits concise structured logs prefixed with `[lms-skills]`.
 Default logs are human-readable request summaries, such as:
 
 ```text
-[lms-skills] read_skill_file start skill=shell-helper-generator file=- timeout=30000ms id=read_skill_file-...
-[lms-skills] read_skill_file resolved shell-helper-generator -> shell-helper-generator env=wsl id=read_skill_file-...
-[lms-skills] read_skill_file read skill=shell-helper-generator mode=skill env=wsl bytes=2048 id=read_skill_file-...
+[lms-skills] read_skill_file start skill=example-skill file=- timeout=30000ms id=read_skill_file-...
+[lms-skills] read_skill_file resolved example-skill -> example-skill env=wsl id=read_skill_file-...
+[lms-skills] read_skill_file read skill=example-skill mode=skill env=wsl bytes=2048 id=read_skill_file-...
 [lms-skills] read_skill_file done 42ms id=read_skill_file-...
 ```
 

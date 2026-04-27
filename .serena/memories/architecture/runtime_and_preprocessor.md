@@ -39,6 +39,6 @@ Explicit skill activation:
 - Explicit activation works even if regular internal context is disabled, because the user directly requested a skill.
 
 Important behavior expectations:
-- `$shell-helper-generator` should cause the model to call `read_skill_file("shell-helper-generator")` before doing covered work.
+- `$example-skill` should cause the model to call `read_skill_file("example-skill")` before doing covered work.
 - If an explicit `$skill` token is unresolved, the model is instructed to use `list_skills` with that token name.
 - Do not reintroduce mandatory system-prompt setup; README and settings should continue to state no system prompt is required.

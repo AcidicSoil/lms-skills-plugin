@@ -8,6 +8,7 @@ import {
   PREPROCESSOR_SCAN_TIMEOUT_MS,
 } from "./constants";
 import { checkAbort, isAbortError } from "./abort";
+import { createRequestId, logDiagnostic, serializeError } from "./diagnostics";
 import type { PluginController } from "./pluginTypes";
 import type { SkillInfo } from "./types";
 
@@ -63,6 +64,25 @@ function extractSkillActivations(text: string): SkillActivationRequest[] {
   }
 
   return activations;
+}
+
+
+function activationTokenList(activations: SkillActivationRequest[]): string {
+  return activations.map((activation) => activation.token).join(",") || "-";
+}
+
+function resolvedActivationNames(activations: ResolvedSkillActivation[]): string {
+  return activations
+    .filter((activation) => activation.skill)
+    .map((activation) => activation.skill!.name)
+    .join(",") || "-";
+}
+
+function unresolvedActivationNames(activations: ResolvedSkillActivation[]): string {
+  return activations
+    .filter((activation) => !activation.skill)
+    .map((activation) => activation.skillName)
+    .join(",") || "-";
 }
 
 function buildExplicitSkillActivationBlock(
@@ -152,6 +172,10 @@ function computeFingerprint(skills: SkillInfo[]): string {
     .join("|");
 }
 
+function modelInvocableSkills(skills: SkillInfo[], limit: number): SkillInfo[] {
+  return skills.filter((skill) => !skill.disableModelInvocation).slice(0, limit);
+}
+
 let lastFingerprint = "";
 let lastFullInjectionAt = 0;
 
@@ -208,6 +232,30 @@ function extractText(message: MessageInput): string {
   return String(message ?? "");
 }
 
+function inputPreview(text: string): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
+}
+
+function logPromptContext(
+  requestId: string,
+  context: "explicit" | "full" | "reminder" | "none",
+  reason: string,
+  text: string,
+  extra: Record<string, unknown> = {},
+  startedAt?: number,
+): void {
+  logDiagnostic({
+    event: "prompt_context",
+    requestId,
+    context,
+    reason,
+    inputPreview: inputPreview(text),
+    elapsedMs: startedAt ? Date.now() - startedAt : undefined,
+    ...extra,
+  });
+}
+
 function injectIntoMessage(
   message: MessageInput,
   injection: string,
@@ -250,13 +298,16 @@ export async function promptPreprocessor(
   userMessage: MessageInput,
 ): Promise<MessageInput> {
   const signal = ctl.abortSignal;
+  const requestId = createRequestId("prompt");
+  const startedAt = Date.now();
   checkAbort(signal);
 
   const cfg = resolveEffectiveConfig(ctl);
 
   checkAbort(signal);
   const text = extractText(userMessage);
-  const hasExplicitSkillActivation = extractSkillActivations(text).length > 0;
+  const requestedActivations = extractSkillActivations(text);
+  const hasExplicitSkillActivation = requestedActivations.length > 0;
   if (!cfg.autoInject && !hasExplicitSkillActivation) return userMessage;
   checkAbort(signal);
   if (text.trim().length === 0) return userMessage;
@@ -271,7 +322,6 @@ export async function promptPreprocessor(
     const roots = await resolveSkillRoots(cfg.skillsPaths, targets, registry, scanSignal);
     checkAbort(scanSignal);
 
-    const requestedActivations = extractSkillActivations(text);
     const resolvedActivations: ResolvedSkillActivation[] = [];
     for (const activation of requestedActivations) {
       checkAbort(scanSignal);
@@ -289,10 +339,13 @@ export async function promptPreprocessor(
       const activatedSkills = resolvedActivations
         .map((activation) => activation.skill)
         .filter((skill): skill is SkillInfo => Boolean(skill));
-      const supplementalSkills = await scanSkills(
-        roots,
-        registry,
-        scanSignal,
+      const supplementalSkills = modelInvocableSkills(
+        await scanSkills(
+          roots,
+          registry,
+          scanSignal,
+          Math.max((cfg.maxSkillsInContext - activatedSkills.length) * 3, 0),
+        ),
         Math.max(cfg.maxSkillsInContext - activatedSkills.length, 0),
       );
       const skillKey = (skill: SkillInfo) => `${skill.environment}:${skill.resolvedDirectoryPath}`;
@@ -306,31 +359,62 @@ export async function promptPreprocessor(
           return true;
         }),
       ];
+      const injection = [
+        buildExplicitSkillActivationBlock(resolvedActivations),
+        mergedSkills.length > 0
+          ? buildAvailableSkillsBlock(mergedSkills, Math.max(mergedSkills.length, cfg.maxSkillsInContext))
+          : "",
+        buildReminderInjection(),
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      logDiagnostic({
+        event: "preprocess_activation",
+        requestId,
+        activations: activationTokenList(requestedActivations),
+        resolvedSkills: resolvedActivationNames(resolvedActivations),
+        unresolvedSkills: unresolvedActivationNames(resolvedActivations),
+      });
+      logDiagnostic({
+        event: "preprocess_decision",
+        requestId,
+        mode: "explicit_activation",
+        messageChars: text.length,
+        skillCount: mergedSkills.length,
+        activations: activationTokenList(requestedActivations),
+        resolvedSkills: resolvedActivationNames(resolvedActivations),
+        injectionChars: injection.length,
+        elapsedMs: Date.now() - startedAt,
+      });
       checkAbort(signal);
-      return injectIntoMessage(
-        userMessage,
-        [
-          buildExplicitSkillActivationBlock(resolvedActivations),
-          mergedSkills.length > 0
-            ? buildAvailableSkillsBlock(mergedSkills, Math.max(mergedSkills.length, cfg.maxSkillsInContext))
-            : "",
-          buildReminderInjection(),
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
-      );
+      return injectIntoMessage(userMessage, injection);
     }
 
-    const skills = await scanSkills(
-      roots,
-      registry,
-      scanSignal,
+    const skills = modelInvocableSkills(
+      await scanSkills(
+        roots,
+        registry,
+        scanSignal,
+        cfg.maxSkillsInContext * 3,
+      ),
       cfg.maxSkillsInContext,
     );
     checkAbort(scanSignal);
 
     if (skills.length === 0) {
-      return injectIntoMessage(userMessage, buildReminderInjection());
+      const injection = buildReminderInjection();
+      logDiagnostic({
+        event: "preprocess_decision",
+        requestId,
+        mode: "reminder_no_skills",
+        messageChars: text.length,
+        skillCount: 0,
+        activations: "-",
+        resolvedSkills: "-",
+        injectionChars: injection.length,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return injectIntoMessage(userMessage, injection);
     }
 
     const fingerprint = computeFingerprint(skills);
@@ -343,20 +427,60 @@ export async function promptPreprocessor(
     if (shouldInjectFullContext) {
       lastFingerprint = fingerprint;
       lastFullInjectionAt = now;
+      const injection = buildFullInjection(skills, cfg.maxSkillsInContext);
+      logDiagnostic({
+        event: "preprocess_decision",
+        requestId,
+        mode: "full_context",
+        messageChars: text.length,
+        skillCount: skills.length,
+        activations: "-",
+        resolvedSkills: "-",
+        injectionChars: injection.length,
+        elapsedMs: Date.now() - startedAt,
+      });
       checkAbort(signal);
-      return injectIntoMessage(
-        userMessage,
-        buildFullInjection(skills, cfg.maxSkillsInContext),
-      );
+      return injectIntoMessage(userMessage, injection);
     }
 
+    const injection = buildReminderInjection();
+    logDiagnostic({
+      event: "preprocess_decision",
+      requestId,
+      mode: "compact_reminder",
+      messageChars: text.length,
+      skillCount: skills.length,
+      activations: "-",
+      resolvedSkills: "-",
+      injectionChars: injection.length,
+      elapsedMs: Date.now() - startedAt,
+    });
     checkAbort(signal);
-    return injectIntoMessage(userMessage, buildReminderInjection());
+    return injectIntoMessage(userMessage, injection);
   } catch (error) {
     if (signal?.aborted || (isAbortError(error) && !scanBudget.signal.aborted)) {
       throw error;
     }
-    return injectIntoMessage(userMessage, buildReminderInjection());
+    const injection = buildReminderInjection();
+    logDiagnostic({
+      event: "preprocess_fallback",
+      requestId,
+      reason: error instanceof Error ? error.message : String(error),
+      activations: activationTokenList(extractSkillActivations(text)),
+      elapsedMs: Date.now() - startedAt,
+    });
+    logDiagnostic({
+      event: "preprocess_decision",
+      requestId,
+      mode: "fallback_reminder",
+      messageChars: text.length,
+      skillCount: 0,
+      activations: activationTokenList(extractSkillActivations(text)),
+      resolvedSkills: "-",
+      injectionChars: injection.length,
+      elapsedMs: Date.now() - startedAt,
+    });
+    return injectIntoMessage(userMessage, injection);
   } finally {
     scanBudget.cleanup();
   }

@@ -6,6 +6,10 @@ export interface SkillInfo {
   description: string;
   bodyExcerpt: string;
   tags: string[];
+  frontmatter?: SkillFrontmatter;
+  metadataSource: "frontmatter" | "skill.json" | "markdown" | "fallback";
+  disableModelInvocation: boolean;
+  userInvocable: boolean;
   skillMdPath: string;
   directoryPath: string;
   resolvedSkillMdPath: string;
@@ -20,6 +24,22 @@ export interface SkillManifestFile {
   name?: string;
   description?: string;
   tags?: string[];
+}
+
+export interface SkillFrontmatter {
+  name?: string;
+  description?: string;
+  whenToUse?: string;
+  tags?: string[];
+  disableModelInvocation?: boolean;
+  userInvocable?: boolean;
+  allowedTools?: string[];
+  context?: string;
+  agent?: string;
+  model?: string;
+  effort?: string;
+  argumentHint?: string;
+  arguments?: string[];
 }
 
 export interface PersistedSettings {
