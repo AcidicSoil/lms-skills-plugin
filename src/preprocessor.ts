@@ -132,6 +132,12 @@ function buildExplicitSkillActivationBlock(
         `<location>`,
         skill.displayPath,
         `</location>`,
+        `<has_supporting_files>`,
+        String(skill.hasExtraFiles),
+        `</has_supporting_files>`,
+        skill.hasExtraFiles
+          ? `<supporting_files_hint>This skill directory contains additional files such as references, templates, examples, or scripts. If the expanded SKILL.md references supporting files or the task requires details beyond the entrypoint, call list_skill_files for this skill and then read the relevant relative files with read_skill_file.</supporting_files_hint>`
+          : "",
         activation.content
           ? `<expanded_skill_instructions source="${activation.contentDisplayPath ?? skill.displayPath}">\n${activation.content}\n</expanded_skill_instructions>`
           : `<expanded_skill_instructions_error>${activation.contentError ?? "Skill resolved but SKILL.md could not be expanded."}</expanded_skill_instructions_error>`,
@@ -159,7 +165,7 @@ function buildExplicitSkillActivationBlock(
     `</model_contract>`,
     `<next_action>`,
     expandedCount > 0
-      ? `Use the expanded skill instructions immediately and answer according to them. Do not call list_skills, read_skill_file, run_command, or web/search tools to resolve already-expanded skills. Treat <task_payload> as the user's input to the expanded skill.`
+      ? `Use the expanded skill instructions immediately and answer according to them. Do not call list_skills or read_skill_file to resolve already-expanded skills. You may call list_skill_files and read_skill_file for relative supporting files only when the expanded SKILL.md references them or additional skill assets are needed. Do not call run_command or web/search tools to resolve already-expanded skills. Treat <task_payload> as the user's input to the expanded skill.`
       : `Call list_skills for unresolved activations, then read the matching skill before doing covered work.`,
     hasResolvedFailures
       ? `For failed expansions only, call read_skill_file before doing covered work.`

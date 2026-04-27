@@ -69,7 +69,142 @@ async function resolveExactSkillQuery(
   return null;
 }
 
-function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
+interface ToolSkillCandidate {
+  skill: SkillInfo;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  reasons: string[];
+  source: "exact" | "fuzzy" | "tag" | "description" | "path";
+}
+
+function compactSkillText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function skillTokens(value: string): string[] {
+  return [...new Set(value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0))];
+}
+
+function addCandidateReason(reasons: string[], reason: string): void {
+  if (!reasons.includes(reason)) reasons.push(reason);
+}
+
+function scoreToolSkillCandidate(query: string, skill: SkillInfo): ToolSkillCandidate {
+  const queryCompact = compactSkillText(query.replace(/^\$+/, ""));
+  const queryTokens = skillTokens(query.replace(/^\$+/, ""));
+  const nameTokens = skillTokens(skill.name);
+  const directoryName = path.basename(skill.resolvedDirectoryPath.replace(/\\/g, "/"));
+  const directoryTokens = skillTokens(directoryName);
+  const descriptionTokens = skillTokens(skill.description);
+  const tagTokens = skill.tags.flatMap(skillTokens);
+  const nameCompact = compactSkillText(skill.name);
+  const directoryCompact = compactSkillText(directoryName);
+  const reasons: string[] = [];
+  let score = 0;
+
+  if (queryCompact.length >= 3 && nameCompact === queryCompact) {
+    score += 120;
+    addCandidateReason(reasons, "exact:name_compact");
+  }
+  if (queryCompact.length >= 3 && directoryCompact === queryCompact) {
+    score += 115;
+    addCandidateReason(reasons, "exact:directory_compact");
+  }
+  if (queryCompact.length >= 4 && nameCompact.includes(queryCompact)) {
+    score += 55;
+    addCandidateReason(reasons, "fuzzy:name_contains");
+  }
+  if (queryCompact.length >= 4 && directoryCompact.includes(queryCompact)) {
+    score += 50;
+    addCandidateReason(reasons, "fuzzy:directory_contains");
+  }
+
+  for (const token of queryTokens) {
+    if (token.length === 0) continue;
+    if (nameTokens.includes(token)) {
+      score += 24;
+      addCandidateReason(reasons, `fuzzy:name_token=${token}`);
+    } else if (token.length >= 3 && nameTokens.some((nameToken) => nameToken.startsWith(token) || token.startsWith(nameToken))) {
+      score += 14;
+      addCandidateReason(reasons, `fuzzy:name_prefix=${token}`);
+    }
+
+    if (directoryTokens.includes(token)) {
+      score += 22;
+      addCandidateReason(reasons, `path:directory_token=${token}`);
+    } else if (token.length >= 3 && directoryTokens.some((nameToken) => nameToken.startsWith(token) || token.startsWith(nameToken))) {
+      score += 12;
+      addCandidateReason(reasons, `path:directory_prefix=${token}`);
+    }
+
+    if (tagTokens.includes(token)) {
+      score += 18;
+      addCandidateReason(reasons, `tag:${token}`);
+    }
+    if (descriptionTokens.includes(token)) {
+      score += 5;
+      addCandidateReason(reasons, `description:${token}`);
+    }
+  }
+
+  const source = reasons.some((reason) => reason.startsWith("exact:"))
+    ? "exact"
+    : reasons.some((reason) => reason.startsWith("tag:"))
+      ? "tag"
+      : reasons.some((reason) => reason.startsWith("description:"))
+        ? "description"
+        : reasons.some((reason) => reason.startsWith("path:"))
+          ? "path"
+          : "fuzzy";
+  return {
+    skill,
+    score: Math.round(score),
+    confidence: score >= 70 ? "high" : score >= 25 ? "medium" : "low",
+    reasons,
+    source,
+  };
+}
+
+function fuzzySkillCandidates(query: string, skills: SkillInfo[], limit: number): ToolSkillCandidate[] {
+  return skills
+    .map((skill) => scoreToolSkillCandidate(query, skill))
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score || a.skill.name.localeCompare(b.skill.name))
+    .slice(0, limit);
+}
+
+function skillCandidateResult(candidate: ToolSkillCandidate) {
+  return {
+    name: candidate.skill.name,
+    description: candidate.skill.description,
+    tags: candidate.skill.tags.length > 0 ? candidate.skill.tags : undefined,
+    environment: candidate.skill.environment,
+    skillMdPath: candidate.skill.skillMdPath,
+    displayPath: candidate.skill.displayPath,
+    hasExtraFiles: candidate.skill.hasExtraFiles,
+    score: candidate.score,
+    confidence: candidate.confidence,
+    reasons: candidate.reasons,
+    source: candidate.source,
+  };
+}
+
+async function suggestSkillsForQuery(
+  roots: ResolvedSkillRoot[],
+  registry: RuntimeRegistry,
+  query: string,
+  limit: number,
+  signal?: AbortSignal,
+): Promise<ToolSkillCandidate[]> {
+  const skills = await scanSkills(roots, registry, signal);
+  return fuzzySkillCandidates(query, skills, limit);
+}
+
+function formatDirEntries(entries: DirectoryEntry[], rootName: string) {
   if (entries.length === 0) return "Directory is empty.";
 
   const lines: string[] = [`${rootName}/`];
@@ -370,6 +505,36 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
+          const fuzzy = await timedStep(
+            requestId,
+            "list_skills",
+            "fuzzy_skill_candidates",
+            async () => suggestSkillsForQuery(roots, registry, trimmedQuery, cap, toolSignal),
+            { query: trimmedQuery, rootCount: roots.length },
+          );
+
+          if (fuzzy.length > 0) {
+            logDiagnostic({
+              event: "list_skills_result",
+              requestId,
+              tool: "list_skills",
+              total: fuzzy.length,
+              returned: fuzzy.length,
+              mode: "fuzzy",
+              query: trimmedQuery,
+            });
+            return {
+              query: trimmedQuery,
+              mode: "fuzzy",
+              total: fuzzy.length,
+              found: fuzzy.length,
+              skillsEnvironment: cfg.skillsEnvironment,
+              roots,
+              note: "Fuzzy skill-name candidates matched before full-text search. Pick the intended skill and call read_skill_file with its exact name.",
+              skills: fuzzy.map(skillCandidateResult),
+            };
+          }
+
           const results = await timedStep(
             requestId,
             "list_skills",
@@ -513,10 +678,28 @@ export async function toolsProvider(ctl: PluginController) {
         );
 
         if (!skill) {
-          logDiagnostic({ event: "skill_not_found", requestId, tool: "read_skill_file", skill_name, rootCount: roots.length });
+          const suggestions = await timedStep(
+            requestId,
+            "read_skill_file",
+            "suggest_skill_candidates",
+            async () => suggestSkillsForQuery(roots, registry, skill_name, 8, toolSignal),
+            { skill_name, rootCount: roots.length },
+          );
+          logDiagnostic({
+            event: "skill_not_found",
+            requestId,
+            tool: "read_skill_file",
+            skill_name,
+            rootCount: roots.length,
+            suggestions: suggestions.map((candidate) => candidate.skill.name).join(",") || "-",
+          });
           return {
             success: false,
-            error: `Skill "${skill_name}" not found. Call list_skills to see available skills.`,
+            error: `Skill "${skill_name}" not found.`,
+            hint: suggestions.length > 0
+              ? "Use one of the suggested exact skill names, then call read_skill_file again."
+              : "Call list_skills with a broader query to see available skills.",
+            suggestions: suggestions.map(skillCandidateResult),
           };
         }
 
@@ -621,10 +804,28 @@ export async function toolsProvider(ctl: PluginController) {
         );
 
         if (!skill) {
-          logDiagnostic({ event: "skill_not_found", requestId, tool: "list_skill_files", skill_name, rootCount: roots.length });
+          const suggestions = await timedStep(
+            requestId,
+            "list_skill_files",
+            "suggest_skill_candidates",
+            async () => suggestSkillsForQuery(roots, registry, skill_name, 8, toolSignal),
+            { skill_name, rootCount: roots.length },
+          );
+          logDiagnostic({
+            event: "skill_not_found",
+            requestId,
+            tool: "list_skill_files",
+            skill_name,
+            rootCount: roots.length,
+            suggestions: suggestions.map((candidate) => candidate.skill.name).join(",") || "-",
+          });
           return {
             success: false,
-            error: `Skill "${skill_name}" not found. Call list_skills to see available skills.`,
+            error: `Skill "${skill_name}" not found.`,
+            hint: suggestions.length > 0
+              ? "Use one of the suggested exact skill names, then call list_skill_files again."
+              : "Call list_skills with a broader query to see available skills.",
+            suggestions: suggestions.map(skillCandidateResult),
           };
         }
 

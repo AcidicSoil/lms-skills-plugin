@@ -26,6 +26,10 @@ Most important current behaviors:
 - `read_skill_file` strips frontmatter from `SKILL.md` responses.
 - `list_skills({ query, mode: "route" })` exposes the same router used by prompt injection, but now first attempts exact skill resolution before broad route scanning. This keeps exact skill names consistent with `$skill-name` preprocessor resolution and avoids expensive scans/timeouts when the query is already an exact skill.
 - Exact skill query resolution accepts common model-generated variants before scanning, including leading `$skill-name` and space-separated `skill name` forms that normalize to `skill-name`.
+- Core prompt routing/scoring in `src/skillRouter.ts` remains unchanged for stability.
+- Tool-side fuzzy matching now lives only in `src/toolsProvider.ts` so model tool mistakes get help without changing essential preprocessor routing behavior.
+- `list_skills` search mode first returns fuzzy skill-name candidates from metadata before falling back to expensive full-text search, with a note telling the model to pick the intended exact skill and call `read_skill_file`.
+- `read_skill_file` and `list_skill_files` no longer hard-stop on a wrong or partial skill name; they return ranked `suggestions` with exact names, scores, reasons, and paths so the model can retry with the best candidate.
 - `list_skills({ mode: "route" })` without a query now returns a clear structured note that route mode needs a concrete query, instead of scanning/listing everything. This avoids the exported-chat failure where the model used route mode with no query after seeing a placeholder command.
 - `run_command` is disabled by default and protected by schema validation plus command safety policy.
 - Tool inputs are validated by Zod schemas in `src/toolSchemas.ts`.
