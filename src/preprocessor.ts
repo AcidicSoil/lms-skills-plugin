@@ -3,7 +3,10 @@ import { scanSkills } from "./scanner";
 import { deriveRuntimeTargets } from "./environment";
 import { createRuntimeRegistry } from "./runtime";
 import { resolveSkillRoots } from "./pathResolver";
-import { PREPROCESSOR_SCAN_TIMEOUT_MS } from "./constants";
+import {
+  INTERNAL_CONTEXT_REFRESH_INTERVAL_MS,
+  PREPROCESSOR_SCAN_TIMEOUT_MS,
+} from "./constants";
 import { checkAbort, isAbortError } from "./abort";
 import type { PluginController } from "./pluginTypes";
 import type { SkillInfo } from "./types";
@@ -34,17 +37,35 @@ function buildAvailableSkillsBlock(skills: SkillInfo[], limit: number): string {
   return `<available_skills>\n${skillTags}\n</available_skills>`;
 }
 
-function buildInstruction(): string {
-  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills.\n</skills_runtime_context>";
+function buildFullInstruction(): string {
+  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills. This full skills context applies to the conversation until the plugin refreshes it.\n</skills_runtime_context>";
 }
 
-function buildInjection(skills: SkillInfo[], limit: number): string {
+function buildReminderInstruction(): string {
+  return "<skills_runtime_reminder>The LM Studio Skills plugin is active. If this request matches an installed skill, use `list_skills` or `read_skill_file` as needed; do not ask the user to add skill instructions to the system prompt.</skills_runtime_reminder>";
+}
+
+function buildFullInjection(skills: SkillInfo[], limit: number): string {
   return [
-    buildInstruction(),
+    buildFullInstruction(),
     "",
     buildAvailableSkillsBlock(skills, limit),
   ].join("\n");
 }
+
+function buildReminderInjection(): string {
+  return buildReminderInstruction();
+}
+
+function computeFingerprint(skills: SkillInfo[]): string {
+  return skills
+    .map((s) => `${s.environment}:${s.name}:${s.displayPath}`)
+    .sort()
+    .join("|");
+}
+
+let lastFingerprint = "";
+let lastFullInjectionAt = 0;
 
 type MessageContent =
   | { type: "text"; text: string }
@@ -168,18 +189,35 @@ export async function promptPreprocessor(
       cfg.maxSkillsInContext,
     );
     checkAbort(scanSignal);
-    if (skills.length === 0) return userMessage;
+
+    if (skills.length === 0) {
+      return injectIntoMessage(userMessage, buildReminderInjection());
+    }
+
+    const fingerprint = computeFingerprint(skills);
+    const now = Date.now();
+    const shouldInjectFullContext =
+      lastFullInjectionAt === 0 ||
+      fingerprint !== lastFingerprint ||
+      now - lastFullInjectionAt > INTERNAL_CONTEXT_REFRESH_INTERVAL_MS;
+
+    if (shouldInjectFullContext) {
+      lastFingerprint = fingerprint;
+      lastFullInjectionAt = now;
+      checkAbort(signal);
+      return injectIntoMessage(
+        userMessage,
+        buildFullInjection(skills, cfg.maxSkillsInContext),
+      );
+    }
 
     checkAbort(signal);
-    return injectIntoMessage(
-      userMessage,
-      buildInjection(skills, cfg.maxSkillsInContext),
-    );
+    return injectIntoMessage(userMessage, buildReminderInjection());
   } catch (error) {
     if (signal?.aborted || (isAbortError(error) && !scanBudget.signal.aborted)) {
       throw error;
     }
-    return userMessage;
+    return injectIntoMessage(userMessage, buildReminderInjection());
   } finally {
     scanBudget.cleanup();
   }

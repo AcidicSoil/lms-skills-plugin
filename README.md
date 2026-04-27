@@ -26,7 +26,9 @@ LM Studio does not save plugin settings across new chats. This plugin solves tha
 
 ## No System Prompt Setup Required
 
-The plugin registers a prompt preprocessor with LM Studio. When **Internal Skills Context** is enabled, the plugin automatically prepends the skills runtime instructions and available-skills block to the current user message before it reaches the model. This happens inside the plugin; users do not need to copy a template into the chat system prompt.
+The plugin registers a prompt preprocessor with LM Studio. When **Internal Skills Context** is enabled, the plugin automatically prepends skills runtime guidance before the current user message reaches the model. This happens inside the plugin; users do not need to copy a template into the chat system prompt.
+
+To balance reliability and performance, the plugin injects the full `<available_skills>` block at startup, when the discovered skills change, and periodically as a refresh. On intervening turns it injects only a compact reminder that the skills tools are available. This avoids repeatedly growing the chat history with the same full skills list.
 
 Manual system-prompt instructions are optional and should only be used if you want extra project-specific behavior beyond the plugin defaults.
 
