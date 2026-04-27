@@ -25,6 +25,8 @@ Most important current behaviors:
 - Metadata priority: `SKILL.md` frontmatter, then `skill.json`, then directory/markdown fallback.
 - `read_skill_file` strips frontmatter from `SKILL.md` responses.
 - `list_skills({ query, mode: "route" })` exposes the same router used by prompt injection, but now first attempts exact skill resolution before broad route scanning. This keeps exact skill names consistent with `$skill-name` preprocessor resolution and avoids expensive scans/timeouts when the query is already an exact skill.
+- Exact skill query resolution accepts common model-generated variants before scanning, including leading `$skill-name` and space-separated `skill name` forms that normalize to `skill-name`.
+- `list_skills({ mode: "route" })` without a query now returns a clear structured note that route mode needs a concrete query, instead of scanning/listing everything. This avoids the exported-chat failure where the model used route mode with no query after seeing a placeholder command.
 - `run_command` is disabled by default and protected by schema validation plus command safety policy.
 - Tool inputs are validated by Zod schemas in `src/toolSchemas.ts`.
 - Tool requests have timeout guardrails.

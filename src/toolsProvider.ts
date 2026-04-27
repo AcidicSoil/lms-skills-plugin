@@ -43,7 +43,31 @@ import type { RuntimeRegistry } from "./runtime";
 import type { RuntimeTargetName } from "./environment";
 import type { ResolvedSkillRoot } from "./pathResolver";
 import type { PluginController } from "./pluginTypes";
-import type { DirectoryEntry, EffectiveConfig } from "./types";
+import type { DirectoryEntry, EffectiveConfig, SkillInfo } from "./types";
+
+function exactSkillQueryCandidates(query: string): string[] {
+  const trimmed = query.trim();
+  const withoutSigil = trimmed.replace(/^\$+/, "").trim();
+  const hyphenated = withoutSigil
+    .toLowerCase()
+    .split(/[^a-z0-9._-]+/)
+    .filter(Boolean)
+    .join("-");
+  return [...new Set([trimmed, withoutSigil, hyphenated].filter(Boolean))];
+}
+
+async function resolveExactSkillQuery(
+  roots: ResolvedSkillRoot[],
+  registry: RuntimeRegistry,
+  query: string,
+  signal?: AbortSignal,
+): Promise<{ skill: SkillInfo; matchedQuery: string } | null> {
+  for (const candidate of exactSkillQueryCandidates(query)) {
+    const skill = await resolveSkillByName(roots, registry, candidate, signal);
+    if (skill) return { skill, matchedQuery: candidate };
+  }
+  return null;
+}
 
 function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
   if (entries.length === 0) return "Directory is empty.";
@@ -189,26 +213,38 @@ export async function toolsProvider(ctl: PluginController) {
         const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skills", toolSignal);
         const cap = limit ?? LIST_SKILLS_DEFAULT_LIMIT;
 
+        if (mode === "route" && !(query && query.trim())) {
+          return {
+            success: false,
+            mode: "route",
+            found: 0,
+            skills: [],
+            note: "Route mode needs a concrete query. If the user wrote $skill-name, treat it as explicit activation handled by the preprocessor instead of listing all skills.",
+          };
+        }
+
         if (query && query.trim()) {
           const trimmedQuery = query.trim();
           status(`Searching skills for "${trimmedQuery}"..`);
 
           if (mode === "route") {
-            const exactSkill = await timedStep(
+            const exact = await timedStep(
               requestId,
               "list_skills",
               "resolve_exact_skill_query_for_route",
-              async () => resolveSkillByName(roots, registry, trimmedQuery, toolSignal),
+              async () => resolveExactSkillQuery(roots, registry, trimmedQuery, toolSignal),
               { query: trimmedQuery, rootCount: roots.length },
             );
 
-            if (exactSkill) {
+            if (exact) {
+              const exactSkill = exact.skill;
               status(`Found exact skill ${exactSkill.name}`);
               logDiagnostic({
                 event: "list_skills_exact_result",
                 requestId,
                 tool: "list_skills",
                 query: trimmedQuery,
+                matchedQuery: exact.matchedQuery,
                 mode: "route",
                 skill: exactSkill.name,
                 environment: exactSkill.environment,
@@ -216,6 +252,7 @@ export async function toolsProvider(ctl: PluginController) {
               });
               return {
                 query: trimmedQuery,
+                matchedQuery: exact.matchedQuery,
                 mode: "route",
                 total: 1,
                 found: 1,
@@ -290,21 +327,23 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
-          const exactSkill = await timedStep(
+          const exact = await timedStep(
             requestId,
             "list_skills",
             "resolve_exact_skill_query",
-            async () => resolveSkillByName(roots, registry, trimmedQuery, toolSignal),
+            async () => resolveExactSkillQuery(roots, registry, trimmedQuery, toolSignal),
             { query: trimmedQuery, rootCount: roots.length },
           );
 
-          if (exactSkill) {
+          if (exact) {
+            const exactSkill = exact.skill;
             status(`Found exact skill ${exactSkill.name}`);
             logDiagnostic({
               event: "list_skills_exact_result",
               requestId,
               tool: "list_skills",
               query: trimmedQuery,
+              matchedQuery: exact.matchedQuery,
               skill: exactSkill.name,
               environment: exactSkill.environment,
               resolvedDirectoryPath: exactSkill.resolvedDirectoryPath,
