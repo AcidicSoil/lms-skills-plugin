@@ -26,6 +26,7 @@ function shouldLog(event: DiagnosticEvent): boolean {
 
   switch (event.event) {
     case "prompt_context":
+    case "prompt_route":
     case "preprocess_decision":
     case "preprocess_activation":
     case "preprocess_fallback":
@@ -39,6 +40,7 @@ function shouldLog(event: DiagnosticEvent): boolean {
     case "read_skill_file_result":
     case "list_skills_exact_result":
     case "list_skills_result":
+    case "list_skills_route_result":
     case "list_skill_files_result":
     case "run_command_safety_check":
     case "run_command_result":
@@ -147,6 +149,8 @@ function formatHumanEvent(event: DiagnosticEvent): string {
   switch (event.event) {
     case "prompt_context":
       return `${prefix} ${formatPromptContext(event)}`;
+    case "prompt_route":
+      return `${prefix} route mode=${quote(event.mode)} top=${quote(event.topSkill)} score=${quote(event.topScore)} confidence=${quote(event.topConfidence)} selected=${quote(event.selected)} rejectedBest=${quote(event.rejectedBest)} action=${quote(event.expectedAction)} input="${quote(event.inputPreview)}" inject=${quote(event.injectionChars)}ch${elapsed(event)}${id(event)}`;
     case "preprocess_activation":
       return `${prefix} prompt activation tokens=${quote(event.activations)} resolved=${quote(event.resolvedSkills)} unresolved=${quote(event.unresolvedSkills)} action=read_skill_file_first${id(event)}`;
     case "preprocess_decision":
@@ -175,6 +179,8 @@ function formatHumanEvent(event: DiagnosticEvent): string {
       return `${prefix} list_skills exact query=${quote(event.query)} -> ${quote(event.skill)} env=${quote(event.environment)}${id(event)}`;
     case "list_skills_result":
       return `${prefix} list_skills result total=${quote(event.total)} returned=${quote(event.returned)}${id(event)}`;
+    case "list_skills_route_result":
+      return `${prefix} list_skills route query=${quote(event.query)} selected=${quote(event.selected)} rejectedBest=${quote(event.rejectedBest)} total=${quote(event.total)}${id(event)}`;
     case "list_skill_files_result":
       return `${prefix} list_skill_files result skill=${quote(event.skill)} mode=${quote(event.mode)} entries=${quote(event.entryCount)}${id(event)}`;
     case "run_command_safety_check":

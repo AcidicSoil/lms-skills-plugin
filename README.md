@@ -27,28 +27,30 @@ A skill is a directory containing a `SKILL.md` file. The model sees a compact li
 
 When **Internal Skills Context** is enabled, the plugin prepends hidden skills guidance before the current user message reaches the model.
 
-The full internal context includes:
+The internal context is routed, not a broad skill dump. The plugin scores skill metadata against the current request and injects only the top routed candidates:
 
 ```xml
 <skills_runtime_context>
 ...
 </skills_runtime_context>
 
-<available_skills>
-  <skill>
-    <n>skill-name</n    <description>...</description>
+<routed_skills>
+  <skill rank="1" confidence="high" score="86">
+    <n>skill-name</n>
+    <description>...</description>
+    <why>frontmatter:description_token=...</why>
     <environment>WSL</environment>
     <location>WSL:/home/user/.agents/skills/skill-name/SKILL.md</location>
   </skill>
-</available_skills>
+</routed_skills>
 ```
 
-To avoid repeatedly growing chat history with the same full list, the plugin injects:
+To avoid context overload, the plugin injects:
 
-- full context at the beginning of plugin/runtime use,
-- full context when the discovered skills fingerprint changes,
-- full context after the refresh interval,
-- a compact reminder on normal intervening turns.
+- routed context when there is a confident route,
+- routed context when the route changes or refreshes,
+- a compact reminder when no skill is confidently routed,
+- no broad catalog of all installed skills.
 
 Manual system-prompt instructions are optional and should only be used for extra project-specific behavior beyond the plugin defaults.
 
@@ -85,7 +87,7 @@ Explicit activation works even when the regular internal context is disabled, be
 
 | Tool | Purpose |
 |---|---|
-| `list_skills` | List or search available skills. Exact-looking queries are resolved directly first. |
+| `list_skills` | List/search skills. `mode: "route"` applies the deterministic router used by prompt injection. |
 | `read_skill_file` | Read `SKILL.md` or another file inside a skill directory. Defaults to `SKILL.md`. |
 | `list_skill_files` | Explore files inside a skill directory. |
 | `run_command` | Execute shell commands only when explicitly enabled by the command safety setting. Disabled by default. |
@@ -131,7 +133,7 @@ A skill is any subdirectory inside a configured skills path that contains a `SKI
 
 ### `SKILL.md`
 
-`SKILL.md` is the required entry point for a skill. Claude-style YAML frontmatter at the top of `SKILL.md` is used as the high-level discovery context injected into `<available_skills>`.
+`SKILL.md` is the required entry point for a skill. Claude-style YAML frontmatter at the top of `SKILL.md` is used as high-level routing metadata for `<routed_skills>`.
 
 ```md
 ---
@@ -153,7 +155,7 @@ Frontmatter behavior:
 - `description` is the primary trigger text shown to the model before it reads the full skill.
 - `when_to_use` / `when-to-use` is appended to `description` in the high-level skill listing.
 - `tags` are used for search/scoring.
-- `disable-model-invocation: true` keeps the skill out of automatic `<available_skills>` context, while still allowing explicit `$skill-name` activation.
+- `disable-model-invocation: true` keeps the skill out of automatic routing context, while still allowing explicit `$skill-name` activation.
 - Descriptions are capped at 1,536 characters to keep high-level context useful without loading the full skill body.
 - The frontmatter is stripped from `read_skill_file` results for `SKILL.md`, so the model receives the detailed instruction body after discovery metadata has already been consumed.
 
@@ -175,12 +177,34 @@ Metadata priority is: `SKILL.md` frontmatter first, then `skill.json`, then the 
 
 ---
 
+
+## Deterministic skill routing
+
+The model should not scan a long skills catalog. The plugin routes before injection so the model sees only the smallest useful set of candidates.
+
+Routing uses metadata only:
+
+```text
+name
+directory basename
+frontmatter description
+frontmatter when_to_use / when-to-use
+tags
+environment/display path
+```
+
+The router scores exact name matches, tag matches, description/when-to-use token overlap, and path/name overlap. Skills with `disable-model-invocation: true` are excluded from automatic routing. The full `SKILL.md` body is not used for prompt injection; it is loaded only after the model calls `read_skill_file`.
+
+Use `list_skills` with `mode: "route"` to inspect the same routing decision outside the prompt loop.
+
+---
+
 ## Settings
 
 | Setting | Default | Description |
 |---|---:|---|
 | Internal Skills Context | On | Automatically provides skill instructions and available skill context under the hood. No system prompt setup required. |
-| Max Skills in Context | 15 | Maximum number of skills gathered for the internal skills context. Range: 1–50. |
+| Max Skills in Context | 15 | Upper bound for discovery work. Normal prompt injection is further capped by deterministic routing, currently up to 3 routed candidates. |
 | Skills Runtime Environment | Host-dependent | `Windows`, `WSL`, or `Both`. Controls path resolution, skill reads, and command target behavior. |
 | Skills Paths | Last saved/default | Semicolon-separated skill root directories. |
 | Command Execution Safety | Disabled | Controls whether `run_command` can execute shell commands. |
@@ -286,11 +310,11 @@ Timeouts are enforced with `AbortSignal`, so WSL/runtime subprocesses are killed
 
 The plugin emits concise structured logs prefixed with `[lms-skills]`.
 
-Default logs are human-readable request summaries, such as:
+Default logs are human-readable route/tool summaries, such as:
 
 ```text
+[lms-skills] route mode=routed_context top=example-skill score=86 confidence=high selected=example-skill:86:high:... action=read_skill_file(example-skill) if task is covered id=prompt-...
 [lms-skills] read_skill_file start skill=example-skill file=- timeout=30000ms id=read_skill_file-...
-[lms-skills] read_skill_file resolved example-skill -> example-skill env=wsl id=read_skill_file-...
 [lms-skills] read_skill_file read skill=example-skill mode=skill env=wsl bytes=2048 id=read_skill_file-...
 [lms-skills] read_skill_file done 42ms id=read_skill_file-...
 ```

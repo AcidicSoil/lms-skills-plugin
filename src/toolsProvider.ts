@@ -27,6 +27,7 @@ import {
 } from "./scanner";
 import { createRequestId, logDiagnostic, serializeError, timedStep } from "./diagnostics";
 import { validateCommandSafety } from "./commandSafety";
+import { routeSkills, summarizeRouteCandidate } from "./skillRouter";
 import { createTimeoutSignal, isTimeoutError } from "./timeout";
 import {
   commandSchema,
@@ -175,20 +176,71 @@ export async function toolsProvider(ctl: PluginController) {
     description:
       "List or search available skills. " +
       "Without a query, returns all skills up to the limit. " +
-      "With a query, scores and ranks skills by relevance across name, tags, description, and SKILL.md body content. " +
+      "With a query, searches skills. Pass mode='route' to use the same deterministic metadata router used by prompt injection. " +
       "Always call read_skill_file on any skill that looks relevant before starting work.",
     parameters: {
       query: listSkillsQuerySchema.describe("Optional search query."),
       limit: listSkillsLimitSchema,
+      mode: z.enum(["search", "route"]).optional().describe("Use 'route' to apply deterministic skill routing instead of broad full-text search."),
     },
-    implementation: async ({ query, limit }, { status }) =>
-      withToolLogging(ctl, "list_skills", { query, limit }, TOOL_LIST_SKILLS_TIMEOUT_MS, async (requestId, toolSignal) => {
+    implementation: async ({ query, limit, mode }, { status }) =>
+      withToolLogging(ctl, "list_skills", { query, limit, mode }, TOOL_LIST_SKILLS_TIMEOUT_MS, async (requestId, toolSignal) => {
         const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skills", toolSignal);
         const cap = limit ?? LIST_SKILLS_DEFAULT_LIMIT;
 
         if (query && query.trim()) {
           const trimmedQuery = query.trim();
           status(`Searching skills for "${trimmedQuery}"..`);
+
+          if (mode === "route") {
+            const skills = await timedStep(
+              requestId,
+              "list_skills",
+              "scan_skills_for_route",
+              async () => scanSkills(roots, registry, toolSignal),
+              { query: trimmedQuery, rootCount: roots.length },
+            );
+            const routed = routeSkills(trimmedQuery, skills, cap);
+            logDiagnostic({
+              event: "list_skills_route_result",
+              requestId,
+              tool: "list_skills",
+              query: trimmedQuery,
+              selected: routed.selected.map(summarizeRouteCandidate).join(" | ") || "-",
+              rejectedBest: routed.bestRejected ? summarizeRouteCandidate(routed.bestRejected) : "-",
+              total: skills.length,
+              returned: routed.selected.length,
+            });
+            return {
+              query: trimmedQuery,
+              mode: "route",
+              total: skills.length,
+              found: routed.selected.length,
+              threshold: routed.threshold,
+              queryTokens: routed.queryTokens,
+              selected: routed.selected.map((candidate) => ({
+                name: candidate.skill.name,
+                description: candidate.skill.description,
+                tags: candidate.skill.tags.length > 0 ? candidate.skill.tags : undefined,
+                environment: candidate.skill.environment,
+                skillMdPath: candidate.skill.skillMdPath,
+                displayPath: candidate.skill.displayPath,
+                hasExtraFiles: candidate.skill.hasExtraFiles,
+                score: candidate.score,
+                confidence: candidate.confidence,
+                reasons: candidate.reasons,
+                source: candidate.source,
+              })),
+              bestRejected: routed.bestRejected
+                ? {
+                    name: routed.bestRejected.skill.name,
+                    score: routed.bestRejected.score,
+                    confidence: routed.bestRejected.confidence,
+                    reasons: routed.bestRejected.reasons,
+                  }
+                : undefined,
+            };
+          }
 
           const exactSkill = await timedStep(
             requestId,

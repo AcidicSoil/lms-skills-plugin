@@ -4,40 +4,17 @@ import { deriveRuntimeTargets } from "./environment";
 import { createRuntimeRegistry } from "./runtime";
 import { resolveSkillRoots } from "./pathResolver";
 import {
+  DEFAULT_MAX_ROUTED_SKILLS,
   INTERNAL_CONTEXT_REFRESH_INTERVAL_MS,
   PREPROCESSOR_SCAN_TIMEOUT_MS,
+  ROUTER_DISCOVERY_MULTIPLIER,
 } from "./constants";
 import { checkAbort, isAbortError } from "./abort";
 import { createRequestId, logDiagnostic, serializeError } from "./diagnostics";
+import { routeSkills, summarizeRouteCandidate } from "./skillRouter";
 import type { PluginController } from "./pluginTypes";
 import type { SkillInfo } from "./types";
-
-function buildAvailableSkillsBlock(skills: SkillInfo[], limit: number): string {
-  const skillTags = skills
-    .slice(0, limit)
-    .map((s) =>
-      [
-        `<skill>`,
-        `<n>`,
-        s.name,
-        `</n>`,
-        `<description>`,
-        s.description,
-        `</description>`,
-        `<environment>`,
-        s.environmentLabel,
-        `</environment>`,
-        `<location>`,
-        s.displayPath,
-        `</location>`,
-        `</skill>`,
-      ].join("\n"),
-    )
-    .join("\n\n");
-
-  return `<available_skills>\n${skillTags}\n</available_skills>`;
-}
-
+import type { SkillRouteCandidate, SkillRouteDecision } from "./skillRouter";
 
 interface SkillActivationRequest {
   token: string;
@@ -49,6 +26,44 @@ interface ResolvedSkillActivation extends SkillActivationRequest {
 }
 
 const SKILL_ACTIVATION_PATTERN = /(^|[^A-Za-z0-9_])\$([A-Za-z][A-Za-z0-9._-]{1,127})(?=$|[^A-Za-z0-9._-])/g;
+
+function routedSkillLimit(configuredLimit: number): number {
+  return Math.max(1, Math.min(DEFAULT_MAX_ROUTED_SKILLS, configuredLimit));
+}
+
+function buildRoutedSkillsBlock(candidates: SkillRouteCandidate[]): string {
+  const skillTags = candidates
+    .map((candidate, index) => {
+      const skill = candidate.skill;
+      return [
+        `<skill rank="${index + 1}" confidence="${candidate.confidence}" score="${candidate.score}">`,
+        `<n>`,
+        skill.name,
+        `</n>`,
+        `<description>`,
+        skill.description,
+        `</description>`,
+        `<why>`,
+        candidate.reasons.slice(0, 4).join("; ") || "deterministic route score",
+        `</why>`,
+        `<environment>`,
+        skill.environmentLabel,
+        `</environment>`,
+        `<location>`,
+        skill.displayPath,
+        `</location>`,
+        `</skill>`,
+      ].join("\n");
+    })
+    .join("\n\n");
+
+  return [
+    `<routed_skills>`,
+    `<routing_decision>Deterministic plugin routing selected these candidate skills for this request. Read the highest-ranked relevant skill with read_skill_file before doing covered work. Do not browse unrelated skills unless routing is unresolved or the user explicitly asks.</routing_decision>`,
+    skillTags,
+    `</routed_skills>`,
+  ].join("\n");
+}
 
 function extractSkillActivations(text: string): SkillActivationRequest[] {
   const seen = new Set<string>();
@@ -65,7 +80,6 @@ function extractSkillActivations(text: string): SkillActivationRequest[] {
 
   return activations;
 }
-
 
 function activationTokenList(activations: SkillActivationRequest[]): string {
   return activations.map((activation) => activation.token).join(",") || "-";
@@ -145,35 +159,36 @@ function buildExplicitSkillActivationBlock(
     .join("\n");
 }
 
-function buildFullInstruction(): string {
-  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. If the user writes `$skill-name`, treat that as an explicit skill activation for that request: read that skill first and treat the remaining text as task payload for the skill. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills. Do not use `run_command` for exploration unless command execution is explicitly enabled and the user task requires it; prefer skill reads and file-listing tools. This full skills context applies to the conversation until the plugin refreshes it.\n</skills_runtime_context>";
+function buildRouterInstruction(): string {
+  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically routed skill context for this request. Do not require the user to add skill instructions to the system prompt. If <routed_skills> is present, read the highest-ranked relevant skill with `read_skill_file` before doing covered work. If the user writes `$skill-name`, treat that as an explicit skill activation: read that skill first and treat the remaining text as task payload for the skill. If no skill is routed, use `list_skills` only when the task clearly requires a specialized skill. Do not use `run_command` for exploration unless command execution is explicitly enabled and necessary.\n</skills_runtime_context>";
 }
 
-function buildReminderInstruction(): string {
-  return "<skills_runtime_reminder>The LM Studio Skills plugin is active. If this request includes `$skill-name` notation, read that skill first and treat the rest as task payload. Otherwise, if this request matches an installed skill, use `list_skills` or `read_skill_file` as needed; do not ask the user to add skill instructions to the system prompt. Do not run shell commands unless explicitly enabled and necessary.</skills_runtime_reminder>";
+function buildReminderInstruction(reason = "no confident skill route"): string {
+  return `<skills_runtime_reminder reason="${reason}">The Skills plugin is active, but no skill was confidently routed for this request. Use list_skills only if the task appears to require a specialized skill. If the request includes $skill-name notation, read that skill first.</skills_runtime_reminder>`;
 }
 
-function buildFullInjection(skills: SkillInfo[], limit: number): string {
+function buildRoutedInjection(candidates: SkillRouteCandidate[]): string {
+  return [buildRouterInstruction(), "", buildRoutedSkillsBlock(candidates)].join("\n");
+}
+
+function buildExplicitInjection(
+  activations: ResolvedSkillActivation[],
+  routedSupplemental: SkillRouteCandidate[],
+): string {
   return [
-    buildFullInstruction(),
-    "",
-    buildAvailableSkillsBlock(skills, limit),
-  ].join("\n");
+    buildExplicitSkillActivationBlock(activations),
+    routedSupplemental.length > 0 ? buildRoutedSkillsBlock(routedSupplemental) : "",
+    buildReminderInstruction("explicit activation"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
-function buildReminderInjection(): string {
-  return buildReminderInstruction();
-}
-
-function computeFingerprint(skills: SkillInfo[]): string {
-  return skills
-    .map((s) => `${s.environment}:${s.name}:${s.displayPath}`)
+function computeFingerprint(candidates: SkillRouteCandidate[]): string {
+  return candidates
+    .map((candidate) => `${candidate.skill.environment}:${candidate.skill.name}:${candidate.skill.displayPath}:${candidate.score}`)
     .sort()
     .join("|");
-}
-
-function modelInvocableSkills(skills: SkillInfo[], limit: number): SkillInfo[] {
-  return skills.filter((skill) => !skill.disableModelInvocation).slice(0, limit);
 }
 
 let lastFingerprint = "";
@@ -237,25 +252,6 @@ function inputPreview(text: string): string {
   return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
 }
 
-function logPromptContext(
-  requestId: string,
-  context: "explicit" | "full" | "reminder" | "none",
-  reason: string,
-  text: string,
-  extra: Record<string, unknown> = {},
-  startedAt?: number,
-): void {
-  logDiagnostic({
-    event: "prompt_context",
-    requestId,
-    context,
-    reason,
-    inputPreview: inputPreview(text),
-    elapsedMs: startedAt ? Date.now() - startedAt : undefined,
-    ...extra,
-  });
-}
-
 function injectIntoMessage(
   message: MessageInput,
   injection: string,
@@ -293,6 +289,52 @@ function injectIntoMessage(
   return message;
 }
 
+function logPromptRoute(
+  requestId: string,
+  mode: string,
+  text: string,
+  route: SkillRouteDecision | undefined,
+  injection: string,
+  startedAt: number,
+  extra: Record<string, unknown> = {},
+): void {
+  const top = route?.selected[0];
+  logDiagnostic({
+    event: "prompt_route",
+    requestId,
+    mode,
+    inputPreview: inputPreview(text),
+    selected: route?.selected.map(summarizeRouteCandidate).join(" | ") || "-",
+    rejectedBest: route?.bestRejected ? summarizeRouteCandidate(route.bestRejected) : "-",
+    topSkill: top?.skill.name ?? "-",
+    topScore: top?.score ?? 0,
+    topConfidence: top?.confidence ?? "low",
+    injectionChars: injection.length,
+    elapsedMs: Date.now() - startedAt,
+    ...extra,
+  });
+}
+
+async function resolveActivations(
+  activations: SkillActivationRequest[],
+  roots: Awaited<ReturnType<typeof resolveSkillRoots>>,
+  registry: ReturnType<typeof createRuntimeRegistry>,
+  signal?: AbortSignal,
+): Promise<ResolvedSkillActivation[]> {
+  const resolved: ResolvedSkillActivation[] = [];
+  for (const activation of activations) {
+    checkAbort(signal);
+    const skill = await resolveSkillByName(
+      roots,
+      registry,
+      activation.skillName,
+      signal,
+    );
+    resolved.push({ ...activation, ...(skill ? { skill } : {}) });
+  }
+  return resolved;
+}
+
 export async function promptPreprocessor(
   ctl: PluginController,
   userMessage: MessageInput,
@@ -313,6 +355,7 @@ export async function promptPreprocessor(
   if (text.trim().length === 0) return userMessage;
 
   const scanBudget = createTimeoutSignal(signal, PREPROCESSOR_SCAN_TIMEOUT_MS);
+  const maxRouted = routedSkillLimit(cfg.maxSkillsInContext);
 
   try {
     const scanSignal = scanBudget.signal;
@@ -322,52 +365,39 @@ export async function promptPreprocessor(
     const roots = await resolveSkillRoots(cfg.skillsPaths, targets, registry, scanSignal);
     checkAbort(scanSignal);
 
-    const resolvedActivations: ResolvedSkillActivation[] = [];
-    for (const activation of requestedActivations) {
-      checkAbort(scanSignal);
-      const skill = await resolveSkillByName(
-        roots,
-        registry,
-        activation.skillName,
-        scanSignal,
-      );
-      resolvedActivations.push({ ...activation, ...(skill ? { skill } : {}) });
-    }
+    const resolvedActivations = await resolveActivations(
+      requestedActivations,
+      roots,
+      registry,
+      scanSignal,
+    );
 
-    const hasExplicitActivation = requestedActivations.length > 0;
-    if (hasExplicitActivation) {
+    const discoveryLimit = Math.max(
+      maxRouted * ROUTER_DISCOVERY_MULTIPLIER,
+      cfg.maxSkillsInContext,
+    );
+    const discoveredSkills = await scanSkills(
+      roots,
+      registry,
+      scanSignal,
+      discoveryLimit,
+    );
+
+    if (requestedActivations.length > 0) {
       const activatedSkills = resolvedActivations
         .map((activation) => activation.skill)
         .filter((skill): skill is SkillInfo => Boolean(skill));
-      const supplementalSkills = modelInvocableSkills(
-        await scanSkills(
-          roots,
-          registry,
-          scanSignal,
-          Math.max((cfg.maxSkillsInContext - activatedSkills.length) * 3, 0),
-        ),
-        Math.max(cfg.maxSkillsInContext - activatedSkills.length, 0),
+      const activatedKeys = new Set(
+        activatedSkills.map((skill) => `${skill.environment}:${skill.resolvedDirectoryPath}`),
       );
-      const skillKey = (skill: SkillInfo) => `${skill.environment}:${skill.resolvedDirectoryPath}`;
-      const seen = new Set(activatedSkills.map(skillKey));
-      const mergedSkills = [
-        ...activatedSkills,
-        ...supplementalSkills.filter((skill) => {
-          const key = skillKey(skill);
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        }),
-      ];
-      const injection = [
-        buildExplicitSkillActivationBlock(resolvedActivations),
-        mergedSkills.length > 0
-          ? buildAvailableSkillsBlock(mergedSkills, Math.max(mergedSkills.length, cfg.maxSkillsInContext))
-          : "",
-        buildReminderInjection(),
-      ]
-        .filter(Boolean)
-        .join("\n\n");
+      const route = routeSkills(
+        text,
+        discoveredSkills.filter(
+          (skill) => !activatedKeys.has(`${skill.environment}:${skill.resolvedDirectoryPath}`),
+        ),
+        Math.max(maxRouted - activatedSkills.length, 0),
+      );
+      const injection = buildExplicitInjection(resolvedActivations, route.selected);
       logDiagnostic({
         event: "preprocess_activation",
         requestId,
@@ -375,111 +405,105 @@ export async function promptPreprocessor(
         resolvedSkills: resolvedActivationNames(resolvedActivations),
         unresolvedSkills: unresolvedActivationNames(resolvedActivations),
       });
-      logDiagnostic({
-        event: "preprocess_decision",
+      logPromptRoute(
         requestId,
-        mode: "explicit_activation",
-        messageChars: text.length,
-        skillCount: mergedSkills.length,
-        activations: activationTokenList(requestedActivations),
-        resolvedSkills: resolvedActivationNames(resolvedActivations),
-        injectionChars: injection.length,
-        elapsedMs: Date.now() - startedAt,
-      });
+        "explicit_activation",
+        text,
+        route,
+        injection,
+        startedAt,
+        {
+          activations: activationTokenList(requestedActivations),
+          resolvedSkills: resolvedActivationNames(resolvedActivations),
+          unresolvedSkills: unresolvedActivationNames(resolvedActivations),
+          expectedAction: activatedSkills.length
+            ? `read_skill_file(${activatedSkills.map((skill) => skill.name).join(",")}) first`
+            : "list_skills for unresolved activation",
+        },
+      );
       checkAbort(signal);
       return injectIntoMessage(userMessage, injection);
     }
 
-    const skills = modelInvocableSkills(
-      await scanSkills(
-        roots,
-        registry,
-        scanSignal,
-        cfg.maxSkillsInContext * 3,
-      ),
-      cfg.maxSkillsInContext,
-    );
-    checkAbort(scanSignal);
-
-    if (skills.length === 0) {
-      const injection = buildReminderInjection();
-      logDiagnostic({
-        event: "preprocess_decision",
+    const route = routeSkills(text, discoveredSkills, maxRouted);
+    if (route.selected.length === 0) {
+      const injection = buildReminderInstruction("no confident skill route");
+      logPromptRoute(
         requestId,
-        mode: "reminder_no_skills",
-        messageChars: text.length,
-        skillCount: 0,
-        activations: "-",
-        resolvedSkills: "-",
-        injectionChars: injection.length,
-        elapsedMs: Date.now() - startedAt,
-      });
+        "no_route",
+        text,
+        route,
+        injection,
+        startedAt,
+        { expectedAction: "no skill unless user asks or task needs specialization" },
+      );
       return injectIntoMessage(userMessage, injection);
     }
 
-    const fingerprint = computeFingerprint(skills);
+    const fingerprint = computeFingerprint(route.selected);
     const now = Date.now();
-    const shouldInjectFullContext =
+    const shouldInjectRoutedContext =
       lastFullInjectionAt === 0 ||
       fingerprint !== lastFingerprint ||
       now - lastFullInjectionAt > INTERNAL_CONTEXT_REFRESH_INTERVAL_MS;
 
-    if (shouldInjectFullContext) {
+    if (shouldInjectRoutedContext) {
+      const reason =
+        lastFullInjectionAt === 0
+          ? "initial_route"
+          : fingerprint !== lastFingerprint
+            ? "route_changed"
+            : "refresh_interval";
       lastFingerprint = fingerprint;
       lastFullInjectionAt = now;
-      const injection = buildFullInjection(skills, cfg.maxSkillsInContext);
-      logDiagnostic({
-        event: "preprocess_decision",
+      const injection = buildRoutedInjection(route.selected);
+      logPromptRoute(
         requestId,
-        mode: "full_context",
-        messageChars: text.length,
-        skillCount: skills.length,
-        activations: "-",
-        resolvedSkills: "-",
-        injectionChars: injection.length,
-        elapsedMs: Date.now() - startedAt,
-      });
+        "routed_context",
+        text,
+        route,
+        injection,
+        startedAt,
+        { reason, expectedAction: `read_skill_file(${route.selected[0].skill.name}) if task is covered` },
+      );
       checkAbort(signal);
       return injectIntoMessage(userMessage, injection);
     }
 
-    const injection = buildReminderInjection();
-    logDiagnostic({
-      event: "preprocess_decision",
+    const injection = buildReminderInstruction("route unchanged");
+    logPromptRoute(
       requestId,
-      mode: "compact_reminder",
-      messageChars: text.length,
-      skillCount: skills.length,
-      activations: "-",
-      resolvedSkills: "-",
-      injectionChars: injection.length,
-      elapsedMs: Date.now() - startedAt,
-    });
+      "compact_reminder",
+      text,
+      route,
+      injection,
+      startedAt,
+      { reason: "route_unchanged", expectedAction: "reuse prior routed context or use skills tools if needed" },
+    );
     checkAbort(signal);
     return injectIntoMessage(userMessage, injection);
   } catch (error) {
     if (signal?.aborted || (isAbortError(error) && !scanBudget.signal.aborted)) {
       throw error;
     }
-    const injection = buildReminderInjection();
+    const injection = buildReminderInstruction("scan timeout or routing error");
     logDiagnostic({
       event: "preprocess_fallback",
       requestId,
       reason: error instanceof Error ? error.message : String(error),
-      activations: activationTokenList(extractSkillActivations(text)),
+      activations: activationTokenList(requestedActivations),
       elapsedMs: Date.now() - startedAt,
+      error: serializeError(error),
     });
-    logDiagnostic({
-      event: "preprocess_decision",
+    logPromptRoute(
       requestId,
-      mode: "fallback_reminder",
-      messageChars: text.length,
-      skillCount: 0,
-      activations: activationTokenList(extractSkillActivations(text)),
-      resolvedSkills: "-",
-      injectionChars: injection.length,
-      elapsedMs: Date.now() - startedAt,
-    });
+      "fallback_reminder",
+      text,
+      undefined,
+      injection,
+      startedAt,
+      { expectedAction: "use list_skills only if specialized skill is needed" },
+    );
     return injectIntoMessage(userMessage, injection);
   } finally {
     scanBudget.cleanup();
