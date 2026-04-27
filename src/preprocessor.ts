@@ -3,7 +3,11 @@ import { scanSkills } from "./scanner";
 import { deriveRuntimeTargets } from "./environment";
 import { createRuntimeRegistry } from "./runtime";
 import { resolveSkillRoots } from "./pathResolver";
-import { MIN_PROMPT_LENGTH, REINJECT_INTERVAL_MS } from "./constants";
+import {
+  MIN_PROMPT_LENGTH,
+  PREPROCESSOR_SCAN_TIMEOUT_MS,
+  REINJECT_INTERVAL_MS,
+} from "./constants";
 import { checkAbort, isAbortError } from "./abort";
 import type { PluginController } from "./pluginTypes";
 import type { SkillInfo } from "./types";
@@ -60,6 +64,33 @@ type MessageContent =
   | { type: "text"; text: string }
   | { type: string; [key: string]: unknown };
 type MessageInput = string | { content: string | MessageContent[] } | unknown;
+
+function createTimeoutSignal(
+  parent: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  let settled = false;
+
+  const abort = () => {
+    if (settled) return;
+    settled = true;
+    controller.abort(parent?.reason ?? new Error("Prompt preprocessor scan timed out."));
+  };
+
+  if (parent?.aborted) abort();
+  parent?.addEventListener("abort", abort, { once: true });
+
+  const timer = setTimeout(abort, timeoutMs);
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      settled = true;
+      clearTimeout(timer);
+      parent?.removeEventListener("abort", abort);
+    },
+  };
+}
 
 function extractText(message: MessageInput): string {
   if (typeof message === "string") return message;
@@ -135,14 +166,17 @@ export async function promptPreprocessor(
   checkAbort(signal);
   if (text.trim().length < MIN_PROMPT_LENGTH) return userMessage;
 
+  const scanBudget = createTimeoutSignal(signal, PREPROCESSOR_SCAN_TIMEOUT_MS);
+
   try {
-    checkAbort(signal);
+    const scanSignal = scanBudget.signal;
+    checkAbort(scanSignal);
     const registry = createRuntimeRegistry(cfg);
     const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
-    const roots = await resolveSkillRoots(cfg.skillsPaths, targets, registry, signal);
-    checkAbort(signal);
-    const skills = await scanSkills(roots, registry, signal);
-    checkAbort(signal);
+    const roots = await resolveSkillRoots(cfg.skillsPaths, targets, registry, scanSignal);
+    checkAbort(scanSignal);
+    const skills = await scanSkills(roots, registry, scanSignal);
+    checkAbort(scanSignal);
     if (skills.length === 0) return userMessage;
 
     const fingerprint = computeFingerprint(skills);
@@ -161,7 +195,11 @@ export async function promptPreprocessor(
       buildInjection(skills, cfg.maxSkillsInContext),
     );
   } catch (error) {
-    if (isAbortError(error)) throw error;
+    if (signal?.aborted || (isAbortError(error) && !scanBudget.signal.aborted)) {
+      throw error;
+    }
     return userMessage;
+  } finally {
+    scanBudget.cleanup();
   }
 }

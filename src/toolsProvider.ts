@@ -71,12 +71,13 @@ export async function toolsProvider(ctl: PluginController) {
         cfg.skillsPaths,
         deriveRuntimeTargets(cfg.skillsEnvironment),
         registry,
+        ctl.abortSignal,
       );
       const cap = limit ?? LIST_SKILLS_DEFAULT_LIMIT;
 
       if (query && query.trim()) {
         status(`Searching skills for "${query.trim()}"..`);
-        const results = await searchSkills(roots, registry, query.trim());
+        const results = await searchSkills(roots, registry, query.trim(), ctl.abortSignal);
 
         if (results.length === 0) {
           return {
@@ -114,7 +115,7 @@ export async function toolsProvider(ctl: PluginController) {
       }
 
       status("Scanning skills directories..");
-      const skills = await scanSkills(roots, registry);
+      const skills = await scanSkills(roots, registry, ctl.abortSignal);
 
       if (skills.length === 0) {
         return {
@@ -166,6 +167,7 @@ export async function toolsProvider(ctl: PluginController) {
         cfg.skillsPaths,
         deriveRuntimeTargets(cfg.skillsEnvironment),
         registry,
+        ctl.abortSignal,
       );
       status(`Reading ${skill_name}${file_path ? ` / ${file_path}` : ""}..`);
 
@@ -174,7 +176,7 @@ export async function toolsProvider(ctl: PluginController) {
         skill_name.startsWith("Windows:") ||
         path.isAbsolute(skill_name)
       ) {
-        const result = await readAbsolutePath(skill_name, roots, registry);
+        const result = await readAbsolutePath(skill_name, roots, registry, ctl.abortSignal);
         if ("error" in result) return { success: false, error: result.error };
         status(`Read ${Math.round(result.content.length / 1024)}KB`);
         return {
@@ -186,7 +188,7 @@ export async function toolsProvider(ctl: PluginController) {
         };
       }
 
-      const skill = await resolveSkillByName(roots, registry, skill_name);
+      const skill = await resolveSkillByName(roots, registry, skill_name, ctl.abortSignal);
 
       if (!skill) {
         return {
@@ -195,7 +197,7 @@ export async function toolsProvider(ctl: PluginController) {
         };
       }
 
-      const result = await readSkillFile(skill, file_path, registry);
+      const result = await readSkillFile(skill, file_path, registry, ctl.abortSignal);
       if ("error" in result) return { success: false, skill: skill_name, error: result.error };
 
       status(`Read ${Math.round(result.content.length / 1024)}KB from ${skill.name}`);
@@ -231,6 +233,7 @@ export async function toolsProvider(ctl: PluginController) {
         cfg.skillsPaths,
         deriveRuntimeTargets(cfg.skillsEnvironment),
         registry,
+        ctl.abortSignal,
       );
       status(`Listing files in ${skill_name}..`);
 
@@ -239,7 +242,7 @@ export async function toolsProvider(ctl: PluginController) {
         skill_name.startsWith("Windows:") ||
         path.isAbsolute(skill_name)
       ) {
-        const entries = await listAbsoluteDirectory(skill_name, roots, registry);
+        const entries = await listAbsoluteDirectory(skill_name, roots, registry, ctl.abortSignal);
         const formatted = formatDirEntries(entries, path.basename(skill_name));
         status(`Found ${entries.length} entries`);
         return {
@@ -257,7 +260,7 @@ export async function toolsProvider(ctl: PluginController) {
         };
       }
 
-      const skill = await resolveSkillByName(roots, registry, skill_name);
+      const skill = await resolveSkillByName(roots, registry, skill_name, ctl.abortSignal);
 
       if (!skill) {
         return {
@@ -266,7 +269,7 @@ export async function toolsProvider(ctl: PluginController) {
         };
       }
 
-      const entries = await listSkillDirectory(skill, sub_path, registry);
+      const entries = await listSkillDirectory(skill, sub_path, registry, ctl.abortSignal);
       const formatted = formatDirEntries(entries, skill.name);
 
       status(`Found ${entries.length} entries in ${skill_name}`);
@@ -330,6 +333,7 @@ export async function toolsProvider(ctl: PluginController) {
           cwd,
           timeoutMs: timeout_ms,
           env,
+          signal: ctl.abortSignal,
           target: environment,
         },
         registry,

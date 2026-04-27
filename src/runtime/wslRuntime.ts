@@ -1,4 +1,5 @@
 import * as child_process from "child_process";
+import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import {
@@ -113,11 +114,11 @@ function execRaw(
     let timedOut = false;
 
     proc.stdout?.on("data", (chunk: Buffer) => {
-      checkAbort(options.signal);
+      if (options.signal?.aborted) return;
       stdout += chunk.toString("utf-8");
     });
     proc.stderr?.on("data", (chunk: Buffer) => {
-      checkAbort(options.signal);
+      if (options.signal?.aborted) return;
       stderr += chunk.toString("utf-8");
     });
 
@@ -244,18 +245,59 @@ export function createWslRuntime(options: WslRuntimeOptions = {}): RuntimeAdapte
     expandPath,
     async exists(filePath, signal) {
       const resolved = await expandPath(filePath, signal);
+      if (detectHostPlatform() === "linux") {
+        try {
+          checkAbort(signal);
+          await fs.access(resolved);
+          return true;
+        } catch {
+          return false;
+        }
+      }
       const result = await execRaw(`test -e ${quoteBash(resolved)}`, { signal }, options);
       return result.exitCode === 0;
     },
-    stat,
+    async stat(filePath, signal): Promise<RuntimeFileStat> {
+      const resolved = await expandPath(filePath, signal);
+      if (detectHostPlatform() === "linux") {
+        checkAbort(signal);
+        const fileStat = await fs.stat(resolved);
+        return {
+          size: fileStat.size,
+          sizeBytes: fileStat.size,
+          isFile: fileStat.isFile(),
+          isDirectory: fileStat.isDirectory(),
+        };
+      }
+      return stat(filePath, signal);
+    },
     async readFile(filePath, signal) {
       const resolved = await expandPath(filePath, signal);
+      if (detectHostPlatform() === "linux") {
+        checkAbort(signal);
+        return fs.readFile(resolved, "utf-8");
+      }
       const result = await execRaw(`cat ${quoteBash(resolved)}`, { signal }, options);
       if (result.exitCode !== 0) throw new Error(result.stderr || `Unable to read file: ${resolved}`);
       return result.stdout;
     },
     async readDir(dirPath, signal): Promise<RuntimeDirectoryEntry[]> {
       const resolved = await expandPath(dirPath, signal);
+      if (detectHostPlatform() === "linux") {
+        checkAbort(signal);
+        const entries = await fs.readdir(resolved, { withFileTypes: true });
+        const result: RuntimeDirectoryEntry[] = [];
+        for (const entry of entries) {
+          checkAbort(signal);
+          if (entry.isDirectory()) result.push({ name: entry.name, type: "directory" });
+          else if (entry.isFile()) {
+            let sizeBytes: number | undefined;
+            try { sizeBytes = (await fs.stat(path.posix.join(resolved, entry.name))).size; } catch {}
+            result.push({ name: entry.name, type: "file", ...(sizeBytes !== undefined ? { sizeBytes } : {}) });
+          }
+        }
+        return result;
+      }
       const script = `python3 - <<'PY'\nimport json, os\nroot=${JSON.stringify(resolved)}\nout=[]\nfor name in os.listdir(root):\n    p=os.path.join(root,name)\n    if os.path.isdir(p): out.append({'name':name,'type':'directory'})\n    elif os.path.isfile(p): out.append({'name':name,'type':'file','sizeBytes':os.path.getsize(p)})\nprint(json.dumps(out))\nPY`;
       const result = await execRaw(script, { signal }, options);
       if (result.exitCode !== 0) throw new Error(result.stderr || `Unable to list directory: ${resolved}`);

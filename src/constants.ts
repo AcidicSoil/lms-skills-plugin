@@ -38,3 +38,4 @@ export const EXEC_MAX_COMMAND_LENGTH = 8_000;
 export const SKILLS_PATH_SEPARATOR = ";";
 export const CONFIG_CACHE_TTL_MS = 5_000;
 export const REINJECT_INTERVAL_MS = 30 * 60 * 1_000;
+export const PREPROCESSOR_SCAN_TIMEOUT_MS = 3_000;

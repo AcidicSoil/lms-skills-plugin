@@ -72,8 +72,8 @@ export function execWindowsCommand(
     let stdout = "";
     let stderr = "";
     let timedOut = false;
-    proc.stdout?.on("data", (chunk: Buffer) => { checkAbort(options.signal); stdout += chunk.toString("utf-8"); });
-    proc.stderr?.on("data", (chunk: Buffer) => { checkAbort(options.signal); stderr += chunk.toString("utf-8"); });
+    proc.stdout?.on("data", (chunk: Buffer) => { if (options.signal?.aborted) return; stdout += chunk.toString("utf-8"); });
+    proc.stderr?.on("data", (chunk: Buffer) => { if (options.signal?.aborted) return; stderr += chunk.toString("utf-8"); });
     const timer = setTimeout(() => {
       timedOut = true;
       try { proc.kill("SIGKILL"); } catch {}
