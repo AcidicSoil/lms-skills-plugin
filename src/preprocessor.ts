@@ -107,6 +107,9 @@ function buildExplicitSkillActivationBlock(
 ): string {
   const resolved = activations.filter((a) => a.skill);
   const unresolved = activations.filter((a) => !a.skill);
+  const expandedCount = resolved.filter((activation) => activation.content).length;
+  const failedExpansionCount = resolved.length - expandedCount;
+  const hasResolvedFailures = failedExpansionCount > 0;
 
   const resolvedBlock = resolved
     .map((activation) => {
@@ -143,21 +146,27 @@ function buildExplicitSkillActivationBlock(
     : "";
 
   return [
-    `<explicit_skill_activation priority="highest" expanded="true">`,
-    `<activation_rule>STOP: apply the expanded skill instructions below before interpreting the task payload. The $skill token has already been resolved by the plugin.</activation_rule>`,
+    `<explicit_skill_activation priority="highest" expanded="${expandedCount > 0}" expanded_count="${expandedCount}" unresolved_count="${unresolved.length}" failed_expansion_count="${failedExpansionCount}">`,
+    `<activation_status>${expandedCount > 0 ? "expanded_success" : "no_skill_expanded"}</activation_status>`,
+    `<activation_rule>STOP: the plugin has already resolved $skill notation before model reasoning. Apply any expanded skill instructions below before interpreting the task payload.</activation_rule>`,
     `<mandatory_interpretation>`,
     `The user used $skill notation. This is an explicit instruction to use the named skill, not a shell variable and not decorative text.`,
-    `Resolved activated skills are the highest-priority source of truth for this request. All other user text, including quoted strings, backticked snippets, globs, command-looking text, or examples, is task payload for the activated skill unless SKILL.md later says otherwise.`,
+    `Expanded activated skills are the highest-priority source of truth for this request. All other user text, including quoted strings, backticked snippets, globs, command-looking text, or examples, is task payload for the expanded skill unless SKILL.md later says otherwise.`,
     `</mandatory_interpretation>`,
     `<mandatory_next_action>`,
-    `The resolved SKILL.md instructions have already been expanded below before model reasoning. Treat the expanded instructions as authoritative. If expansion failed, call read_skill_file for the resolved skill before doing covered work.`,
+    expandedCount > 0
+      ? `The resolved SKILL.md instructions are already expanded below. Do not call read_skill_file for expanded skills before proceeding; apply the expanded instructions directly to <task_payload>.`
+      : `No activated skill body was expanded. Resolve the activation with list_skills or read_skill_file before doing covered work.`,
+    hasResolvedFailures
+      ? `Some resolved skills failed to expand. Only for those failed skills, call read_skill_file before doing covered work.`
+      : "",
     `</mandatory_next_action>`,
     `<do_not>`,
-    `Do not guess what the rest of the prompt means before applying the expanded skill instructions. Do not run backticked command-looking text unless the expanded skill explicitly instructs that and command execution is enabled. Do not call run_command for exploration.`,
+    `Do not guess what the task payload means before applying the expanded skill instructions. Do not run backticked command-looking text unless the expanded skill explicitly instructs that and command execution is enabled. Do not call run_command for exploration.`,
     `</do_not>`,
-    `<unresolved_behavior>`,
-    `If an activated skill is unresolved, call list_skills with the token name to search for it before proceeding. Do not ignore an explicit $skill activation unless the skill cannot be found.`,
-    `</unresolved_behavior>`,
+    unresolved.length > 0
+      ? `<unresolved_behavior>If an activated skill is unresolved, call list_skills with the token name to search for it before proceeding. Do not ignore an explicit $skill activation unless the skill cannot be found.</unresolved_behavior>`
+      : "",
     resolvedBlock,
     unresolvedBlock,
     `</explicit_skill_activation>`,

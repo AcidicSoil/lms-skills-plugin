@@ -152,7 +152,7 @@ function formatHumanEvent(event: DiagnosticEvent): string {
     case "prompt_route":
       return `${prefix} route mode=${quote(event.mode)} top=${quote(event.topSkill)} score=${quote(event.topScore)} confidence=${quote(event.topConfidence)} selected=${quote(event.selected)} rejectedBest=${quote(event.rejectedBest)} action=${quote(event.expectedAction)} input="${quote(event.inputPreview)}" inject=${quote(event.injectionChars)}ch${elapsed(event)}${id(event)}`;
     case "preprocess_activation":
-      return `${prefix} prompt activation tokens=${quote(event.activations)} resolved=${quote(event.resolvedSkills)} unresolved=${quote(event.unresolvedSkills)} action=expanded_before_model${id(event)}`;
+      return `${prefix} prompt activation tokens=${quote(event.activations)} resolved=${quote(event.resolvedSkills)} unresolved=${quote(event.unresolvedSkills)} expanded=${quote(event.expandedCount)} action=expanded_before_model${id(event)}`;
     case "preprocess_decision":
       return `${prefix} prompt context=${quote(event.mode)} skills=${quote(event.skillCount)} activations=${quote(event.activations)} resolved=${quote(event.resolvedSkills)} input=${quote(event.messageChars)}ch inject=${quote(event.injectionChars)}ch${elapsed(event)}${id(event)}`;
     case "preprocess_fallback":
