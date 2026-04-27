@@ -27,7 +27,7 @@ export const MIN_PROMPT_LENGTH = 10;
 
 export const DEFAULT_MAX_SKILLS_IN_CONTEXT = 15;
 export const MIN_MAX_SKILLS_IN_CONTEXT = 1;
-export const MAX_MAX_SKILLS_IN_CONTEXT = 30;
+export const MAX_MAX_SKILLS_IN_CONTEXT = 50;
 export const LIST_SKILLS_DEFAULT_LIMIT = 50;
 
 export const EXEC_DEFAULT_TIMEOUT_MS = 30_000;

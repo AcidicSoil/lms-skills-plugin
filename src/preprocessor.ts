@@ -175,7 +175,12 @@ export async function promptPreprocessor(
     const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
     const roots = await resolveSkillRoots(cfg.skillsPaths, targets, registry, scanSignal);
     checkAbort(scanSignal);
-    const skills = await scanSkills(roots, registry, scanSignal);
+    const skills = await scanSkills(
+      roots,
+      registry,
+      scanSignal,
+      cfg.maxSkillsInContext,
+    );
     checkAbort(scanSignal);
     if (skills.length === 0) return userMessage;
 

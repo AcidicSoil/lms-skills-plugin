@@ -155,18 +155,61 @@ export async function toolsProvider(ctl: PluginController) {
         const cap = limit ?? LIST_SKILLS_DEFAULT_LIMIT;
 
         if (query && query.trim()) {
-          status(`Searching skills for "${query.trim()}"..`);
+          const trimmedQuery = query.trim();
+          status(`Searching skills for "${trimmedQuery}"..`);
+
+          const exactSkill = await timedStep(
+            requestId,
+            "list_skills",
+            "resolve_exact_skill_query",
+            async () => resolveSkillByName(roots, registry, trimmedQuery, ctl.abortSignal),
+            { query: trimmedQuery, rootCount: roots.length },
+          );
+
+          if (exactSkill) {
+            status(`Found exact skill ${exactSkill.name}`);
+            logDiagnostic({
+              event: "list_skills_exact_result",
+              requestId,
+              tool: "list_skills",
+              query: trimmedQuery,
+              skill: exactSkill.name,
+              environment: exactSkill.environment,
+              resolvedDirectoryPath: exactSkill.resolvedDirectoryPath,
+            });
+            return {
+              query: trimmedQuery,
+              total: 1,
+              found: 1,
+              skillsEnvironment: cfg.skillsEnvironment,
+              roots,
+              note: "Exact skill match resolved directly without scanning all skill files.",
+              skills: [
+                {
+                  name: exactSkill.name,
+                  description: exactSkill.description,
+                  tags: exactSkill.tags.length > 0 ? exactSkill.tags : undefined,
+                  environment: exactSkill.environment,
+                  skillMdPath: exactSkill.skillMdPath,
+                  displayPath: exactSkill.displayPath,
+                  hasExtraFiles: exactSkill.hasExtraFiles,
+                  score: 10,
+                },
+              ],
+            };
+          }
+
           const results = await timedStep(
             requestId,
             "list_skills",
             "search_skills",
-            async () => searchSkills(roots, registry, query.trim(), ctl.abortSignal),
-            { query: query.trim(), rootCount: roots.length },
+            async () => searchSkills(roots, registry, trimmedQuery, ctl.abortSignal),
+            { query: trimmedQuery, rootCount: roots.length },
           );
 
           if (results.length === 0) {
             return {
-              query: query.trim(),
+              query: trimmedQuery,
               found: 0,
               skills: [],
               roots,
@@ -179,7 +222,7 @@ export async function toolsProvider(ctl: PluginController) {
           logDiagnostic({ event: "list_skills_result", requestId, tool: "list_skills", total: results.length, returned: page.length });
 
           return {
-            query: query.trim(),
+            query: trimmedQuery,
             total: results.length,
             found: page.length,
             skillsEnvironment: cfg.skillsEnvironment,

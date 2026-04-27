@@ -200,10 +200,53 @@ function isInsideTarget(
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
+async function buildSkillInfoFromDirectory(
+  root: ResolvedSkillRoot,
+  runtime: RuntimeAdapter,
+  skillDir: string,
+  fallbackName: string,
+  signal?: AbortSignal,
+): Promise<SkillInfo | null> {
+  checkAbort(signal);
+  const skillMdPath = joinForTarget(root.environment, skillDir, SKILL_ENTRY_POINT);
+
+  if (!(await runtime.exists(skillMdPath, signal))) return null;
+
+  const manifest = await loadManifest(runtime, skillDir, signal);
+  const skillMdContent = await readFileSafe(runtime, skillMdPath, signal);
+
+  const description =
+    manifest?.description ??
+    (skillMdContent
+      ? extractDescription(skillMdContent)
+      : "No description available.");
+  const bodyExcerpt = skillMdContent ? extractBodyExcerpt(skillMdContent) : "";
+  const tags = Array.isArray(manifest?.tags)
+    ? manifest.tags.filter((t): t is string => typeof t === "string")
+    : [];
+
+  const displayPath = formatDisplayPath(root.environment, skillMdPath);
+  return {
+    name: manifest?.name ?? fallbackName,
+    description,
+    bodyExcerpt,
+    tags,
+    skillMdPath: displayPath,
+    directoryPath: formatDisplayPath(root.environment, skillDir),
+    resolvedSkillMdPath: skillMdPath,
+    resolvedDirectoryPath: skillDir,
+    displayPath,
+    environment: root.environment,
+    environmentLabel: root.environmentLabel,
+    hasExtraFiles: await hasExtraFiles(runtime, skillDir, signal),
+  };
+}
+
 async function scanSkillsRoot(
   root: ResolvedSkillRoot,
   registry: RuntimeRegistry,
   signal?: AbortSignal,
+  limit?: number,
 ): Promise<SkillInfo[]> {
   const runtime = registry.getRuntime(root.environment);
   try {
@@ -215,43 +258,18 @@ async function scanSkillsRoot(
 
     for (const entry of entries) {
       checkAbort(signal);
+      if (limit !== undefined && skills.length >= limit) break;
       if (entry.type !== "directory") continue;
 
       const skillDir = joinForTarget(root.environment, root.resolvedPath, entry.name);
-      const skillMdPath = joinForTarget(root.environment, skillDir, SKILL_ENTRY_POINT);
-
-      if (!(await runtime.exists(skillMdPath, signal))) continue;
-
-      const manifest = await loadManifest(runtime, skillDir, signal);
-      const skillMdContent = await readFileSafe(runtime, skillMdPath, signal);
-
-      const description =
-        manifest?.description ??
-        (skillMdContent
-          ? extractDescription(skillMdContent)
-          : "No description available.");
-      const bodyExcerpt = skillMdContent
-        ? extractBodyExcerpt(skillMdContent)
-        : "";
-      const tags = Array.isArray(manifest?.tags)
-        ? manifest.tags.filter((t): t is string => typeof t === "string")
-        : [];
-
-      const displayPath = formatDisplayPath(root.environment, skillMdPath);
-      skills.push({
-        name: manifest?.name ?? entry.name,
-        description,
-        bodyExcerpt,
-        tags,
-        skillMdPath: displayPath,
-        directoryPath: formatDisplayPath(root.environment, skillDir),
-        resolvedSkillMdPath: skillMdPath,
-        resolvedDirectoryPath: skillDir,
-        displayPath,
-        environment: root.environment,
-        environmentLabel: root.environmentLabel,
-        hasExtraFiles: await hasExtraFiles(runtime, skillDir, signal),
-      });
+      const skill = await buildSkillInfoFromDirectory(
+        root,
+        runtime,
+        skillDir,
+        entry.name,
+        signal,
+      );
+      if (skill) skills.push(skill);
     }
 
     return skills;
@@ -265,17 +283,21 @@ export async function scanSkills(
   roots: ResolvedSkillRoot[],
   registry: RuntimeRegistry,
   signal?: AbortSignal,
+  limit?: number,
 ): Promise<SkillInfo[]> {
   const seen = new Set<string>();
   const merged: SkillInfo[] = [];
 
   for (const root of roots) {
     checkAbort(signal);
-    for (const skill of await scanSkillsRoot(root, registry, signal)) {
+    const remaining = limit === undefined ? undefined : Math.max(limit - merged.length, 0);
+    if (remaining === 0) break;
+    for (const skill of await scanSkillsRoot(root, registry, signal, remaining)) {
       const key = `${skill.environment}:${normalizeForTarget(skill.environment, skill.resolvedDirectoryPath)}`;
       if (!seen.has(key)) {
         seen.add(key);
         merged.push(skill);
+        if (limit !== undefined && merged.length >= limit) break;
       }
     }
   }
@@ -427,6 +449,110 @@ export async function searchSkills(
   return results.sort((a, b) => b.score - a.score);
 }
 
+function hasPathSeparator(value: string): boolean {
+  return value.includes("/") || value.includes("\\");
+}
+
+async function resolveSkillByDisplayOrAbsolutePath(
+  roots: ResolvedSkillRoot[],
+  registry: RuntimeRegistry,
+  skillName: string,
+  signal?: AbortSignal,
+): Promise<SkillInfo | null> {
+  const display = parseDisplayPath(skillName);
+  const candidateRoots = display.environment
+    ? roots.filter((r) => r.environment === display.environment)
+    : roots;
+
+  for (const root of candidateRoots) {
+    checkAbort(signal);
+    const runtime = registry.getRuntime(root.environment);
+    const resolved = await runtime.expandPath(display.path, signal);
+    if (!isInsideTarget(root.environment, resolved, root.resolvedPath)) continue;
+
+    const stat = await runtime.stat(resolved, signal).catch(() => null);
+    if (!stat) continue;
+
+    const skillDir = stat.isDirectory
+      ? resolved
+      : path.basename(resolved) === SKILL_ENTRY_POINT
+        ? (root.environment === "windows"
+            ? path.win32.dirname(resolved)
+            : path.posix.dirname(resolved))
+        : null;
+    if (!skillDir) continue;
+
+    const fallbackName =
+      root.environment === "windows"
+        ? path.win32.basename(skillDir)
+        : path.posix.basename(skillDir);
+    const skill = await buildSkillInfoFromDirectory(
+      root,
+      runtime,
+      skillDir,
+      fallbackName,
+      signal,
+    );
+    if (skill) return skill;
+  }
+
+  return null;
+}
+
+async function resolveSkillByDirectoryName(
+  roots: ResolvedSkillRoot[],
+  registry: RuntimeRegistry,
+  skillName: string,
+  signal?: AbortSignal,
+): Promise<SkillInfo | null> {
+  const requested = skillName.trim();
+  if (!requested || hasPathSeparator(requested)) return null;
+
+  for (const root of roots) {
+    checkAbort(signal);
+    const runtime = registry.getRuntime(root.environment);
+    const exactDir = joinForTarget(root.environment, root.resolvedPath, requested);
+    const exact = await buildSkillInfoFromDirectory(
+      root,
+      runtime,
+      exactDir,
+      requested,
+      signal,
+    ).catch((error) => {
+      if (isAbortError(error)) throw error;
+      return null;
+    });
+    if (exact) return exact;
+  }
+
+  const lower = requested.toLowerCase();
+  for (const root of roots) {
+    checkAbort(signal);
+    const runtime = registry.getRuntime(root.environment);
+    const entries = await runtime.readDir(root.resolvedPath, signal).catch((error) => {
+      if (isAbortError(error)) throw error;
+      return [];
+    });
+
+    const match = entries.find(
+      (entry) => entry.type === "directory" && entry.name.toLowerCase() === lower,
+    );
+    if (!match) continue;
+
+    const skillDir = joinForTarget(root.environment, root.resolvedPath, match.name);
+    const skill = await buildSkillInfoFromDirectory(
+      root,
+      runtime,
+      skillDir,
+      match.name,
+      signal,
+    );
+    if (skill) return skill;
+  }
+
+  return null;
+}
+
 export async function resolveSkillByName(
   roots: ResolvedSkillRoot[],
   registry: RuntimeRegistry,
@@ -435,21 +561,26 @@ export async function resolveSkillByName(
 ): Promise<SkillInfo | null> {
   const lower = skillName.toLowerCase().trim();
   const display = parseDisplayPath(skillName);
-  const skills = await scanSkills(roots, registry, signal);
 
-  if (display.environment) {
-    return (
-      skills.find(
-        (s) =>
-          s.environment === display.environment &&
-          (s.resolvedSkillMdPath === display.path ||
-            s.resolvedDirectoryPath === display.path ||
-            s.displayPath === skillName ||
-            s.directoryPath === skillName),
-      ) ?? null
+  if (display.environment || hasPathSeparator(display.path) || path.isAbsolute(skillName)) {
+    const directPath = await resolveSkillByDisplayOrAbsolutePath(
+      roots,
+      registry,
+      skillName,
+      signal,
     );
+    if (directPath) return directPath;
   }
 
+  const directDirectory = await resolveSkillByDirectoryName(
+    roots,
+    registry,
+    skillName,
+    signal,
+  );
+  if (directDirectory) return directDirectory;
+
+  const skills = await scanSkills(roots, registry, signal);
   return (
     skills.find(
       (s) =>
