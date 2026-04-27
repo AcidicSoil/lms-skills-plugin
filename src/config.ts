@@ -10,17 +10,17 @@ export const configSchematics = createConfigSchematics()
     "autoInject",
     "select",
     {
-      displayName: "Auto-Inject Skills List",
+      displayName: "Internal Skills Context",
       subtitle:
-        "Automatically inject the list of available skills into every prompt so the model knows when to use them",
+        "Automatically inject skills context behind the scenes. No manual system prompt is required when this is on.",
       options: [
         {
           value: "on",
-          displayName: "On - inject skill list into every prompt (recommended)",
+          displayName: "On - automatically provide skills context (recommended)",
         },
         {
           value: "off",
-          displayName: "Off - only use skills when tools are called explicitly",
+          displayName: "Off - tools remain available, but no context is injected",
         },
       ],
     },
@@ -31,7 +31,7 @@ export const configSchematics = createConfigSchematics()
     "numeric",
     {
       displayName: "Max Skills in Context",
-      subtitle: `Maximum number of skills to list in the injected prompt (${MIN_MAX_SKILLS_IN_CONTEXT}-${MAX_MAX_SKILLS_IN_CONTEXT})`,
+      subtitle: `Maximum number of skills to include in the internal skills context (${MIN_MAX_SKILLS_IN_CONTEXT}-${MAX_MAX_SKILLS_IN_CONTEXT})`,
       min: MIN_MAX_SKILLS_IN_CONTEXT,
       max: MAX_MAX_SKILLS_IN_CONTEXT,
       int: true,

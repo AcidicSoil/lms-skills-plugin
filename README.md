@@ -1,6 +1,6 @@
 # lms-plugin-skills
 
-A 1:1 clone of Claude's internal skill system, built as an LM Studio plugin.
+A Claude-style internal skill system for LM Studio. When the plugin is active, it automatically supplies skill context under the hood; users do not need to paste anything into the system prompt.
 
 ## How It Works
 
@@ -9,7 +9,7 @@ Claude reads a list of available skills at the start of every context, then uses
 ### The Skill System - Three Components
 
 **1. Prompt Preprocessor**
-Before every message, the plugin scans the skills directory and injects an `<available_skills>` block into the prompt. The model sees this and knows which skills exist, their descriptions, and their file paths - exactly like Claude's system prompt injection.
+Before every user message, the plugin internally supplies a skills runtime context and an `<available_skills>` block. The model sees the available skills, descriptions, environments, and file paths without requiring the user to configure a system prompt.
 
 **2. Tools**
 
@@ -21,6 +21,14 @@ Before every message, the plugin scans the skills directory and injects an `<ava
 
 **3. Persistent Settings**
 LM Studio does not save plugin settings across new chats. This plugin solves that by writing settings to `~/.lmstudio/plugin-data/lms-skills/settings.json` - the skills path and all configuration survive chat resets.
+
+---
+
+## No System Prompt Setup Required
+
+The plugin registers a prompt preprocessor with LM Studio. When **Internal Skills Context** is enabled, the plugin automatically prepends the skills runtime instructions and available-skills block to the current user message before it reaches the model. This happens inside the plugin; users do not need to copy a template into the chat system prompt.
+
+Manual system-prompt instructions are optional and should only be used if you want extra project-specific behavior beyond the plugin defaults.
 
 ---
 
@@ -73,8 +81,8 @@ If absent, the plugin uses the directory name and extracts the description from 
 
 | Setting | Default | Description |
 |---|---|---|
-| Auto-Inject Skills List | On | Injects skills block into every prompt |
-| Max Skills in Context | 15 | Max skills listed in each injected block |
+| Internal Skills Context | On | Automatically supplies skill instructions and available skill context under the hood; no system prompt setup required |
+| Max Skills in Context | 15 | Max skills included in the internal skills context |
 | Skills Directory Path | *(empty)* | Custom path to skills directory |
 
 ### Skills Directory Path
@@ -112,7 +120,7 @@ The default path `~/.lmstudio/skills` resolves to:
 ## Model Workflow
 
 1. User sends a message
-2. Preprocessor fires - scans skills dir, injects `<available_skills>` block
+2. Preprocessor fires - gathers up to the configured skill limit and internally supplies `<available_skills>` context
 3. Model reads the block and recognises a relevant skill
 4. Model calls `read_skill_file("skill-name")` -> receives full `SKILL.md` content
 5. `SKILL.md` may reference other files -> model calls `list_skill_files` then `read_skill_file` with specific path

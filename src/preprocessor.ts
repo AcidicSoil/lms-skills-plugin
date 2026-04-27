@@ -3,11 +3,7 @@ import { scanSkills } from "./scanner";
 import { deriveRuntimeTargets } from "./environment";
 import { createRuntimeRegistry } from "./runtime";
 import { resolveSkillRoots } from "./pathResolver";
-import {
-  MIN_PROMPT_LENGTH,
-  PREPROCESSOR_SCAN_TIMEOUT_MS,
-  REINJECT_INTERVAL_MS,
-} from "./constants";
+import { PREPROCESSOR_SCAN_TIMEOUT_MS } from "./constants";
 import { checkAbort, isAbortError } from "./abort";
 import type { PluginController } from "./pluginTypes";
 import type { SkillInfo } from "./types";
@@ -39,7 +35,7 @@ function buildAvailableSkillsBlock(skills: SkillInfo[], limit: number): string {
 }
 
 function buildInstruction(): string {
-  return "You have access to a set of skills listed in <available_skills>. Each skill is a directory containing a SKILL.md file with instructions and best practices built from real trial and error. Before starting any task that matches a skill, call `read_skill_file` with the skill name or its environment-prefixed location path to load its instructions - always do this before writing any code, creating files, or producing output the skill covers. Multiple skills may be relevant to a single task; read all of them before proceeding, do not limit yourself to one. After reading SKILL.md, if it references additional files, call `list_skill_files` to discover them, then read whichever ones apply. Use `list_skills` with a query to search for relevant skills by name and description when the task does not match anything in the list above - not all installed skills may be shown here.";
+  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically supplied this context. Do not require the user to add skill instructions to the system prompt. Use the skills listed in <available_skills> when they are relevant to the user request. Before starting any task that matches a skill, call `read_skill_file` with the skill name or environment-prefixed location to load its SKILL.md instructions. Multiple skills may be relevant; read all applicable skills before doing covered work. If SKILL.md references additional files, call `list_skill_files`, then read the applicable files. If no listed skill matches, use `list_skills` with a query to search installed skills.\n</skills_runtime_context>";
 }
 
 function buildInjection(skills: SkillInfo[], limit: number): string {
@@ -49,16 +45,6 @@ function buildInjection(skills: SkillInfo[], limit: number): string {
     buildAvailableSkillsBlock(skills, limit),
   ].join("\n");
 }
-
-function computeFingerprint(skills: SkillInfo[]): string {
-  return skills
-    .map((s) => s.displayPath)
-    .sort()
-    .join("|");
-}
-
-let lastFingerprint = "";
-let lastInjectedAt = 0;
 
 type MessageContent =
   | { type: "text"; text: string }
@@ -164,7 +150,7 @@ export async function promptPreprocessor(
   checkAbort(signal);
   const text = extractText(userMessage);
   checkAbort(signal);
-  if (text.trim().length < MIN_PROMPT_LENGTH) return userMessage;
+  if (text.trim().length === 0) return userMessage;
 
   const scanBudget = createTimeoutSignal(signal, PREPROCESSOR_SCAN_TIMEOUT_MS);
 
@@ -183,16 +169,6 @@ export async function promptPreprocessor(
     );
     checkAbort(scanSignal);
     if (skills.length === 0) return userMessage;
-
-    const fingerprint = computeFingerprint(skills);
-    const now = Date.now();
-    const skillsChanged = fingerprint !== lastFingerprint;
-    const intervalElapsed = now - lastInjectedAt > REINJECT_INTERVAL_MS;
-
-    if (!skillsChanged && !intervalElapsed) return userMessage;
-
-    lastFingerprint = fingerprint;
-    lastInjectedAt = now;
 
     checkAbort(signal);
     return injectIntoMessage(
