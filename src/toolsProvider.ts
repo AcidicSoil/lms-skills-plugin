@@ -177,7 +177,8 @@ export async function toolsProvider(ctl: PluginController) {
       "List or search available skills. " +
       "Without a query, returns all skills up to the limit. " +
       "With a query, searches skills. Pass mode='route' to use the same deterministic metadata router used by prompt injection. " +
-      "Always call read_skill_file on any skill that looks relevant before starting work.",
+      "Do not call this tool just because the user wrote $skill-name; explicit $skill activations are handled by the prompt preprocessor and may already be expanded. " +
+      "For routed candidates only, call read_skill_file on any skill that looks relevant before starting work.",
     parameters: {
       query: listSkillsQuerySchema.describe("Optional search query."),
       limit: listSkillsLimitSchema,
@@ -622,7 +623,7 @@ export async function toolsProvider(ctl: PluginController) {
   const runCommandTool = tool({
     name: "run_command",
     description:
-      "Execute a shell command only when plugin settings explicitly allow it. Disabled by default. Read-only mode allows simple inspection commands only; guarded mode still blocks dangerous patterns.",
+      "Execute a shell command only when plugin settings explicitly allow it. Disabled by default. Read-only mode allows simple inspection commands only; guarded mode still blocks dangerous patterns. Do not use run_command for $skill-name tokens; $skill-name is explicit skill activation syntax, not a shell command.",
     parameters: {
       command: commandSchema.describe("The single-line shell command to execute."),
       cwd: cwdSchema.describe("Working directory for the command."),

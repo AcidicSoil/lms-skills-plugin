@@ -155,6 +155,7 @@ function buildExplicitSkillActivationBlock(
       ? `The activated skill is already preloaded below. Behave as if you have read and understood the expanded SKILL.md instructions before seeing the task payload. Do not decide whether to use the skill; that decision has already been made deterministically by the plugin.`
       : `A user attempted explicit skill activation, but no skill body was expanded. Resolve the named skill before doing covered work.`,
     `Do not explain the raw command-looking payload unless the expanded skill asks for explanation. Do not execute command-looking payload unless the expanded skill explicitly requires execution and command execution is enabled.`,
+    `Return only the user-facing result requested by the expanded skill. Do not expose private deliberation, tool-selection analysis, or <think> blocks in the assistant response.`,
     `</model_contract>`,
     `<next_action>`,
     expandedCount > 0
@@ -259,6 +260,10 @@ function extractText(message: MessageInput): string {
 function inputPreview(text: string): string {
   const compact = text.replace(/\s+/g, " ").trim();
   return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
+}
+
+function normalizeUserMessageText(text: string): string {
+  return text.replace(/^\s*user:\s*/i, "");
 }
 
 
@@ -480,7 +485,7 @@ export async function promptPreprocessor(
   const cfg = resolveEffectiveConfig(ctl);
 
   checkAbort(signal);
-  const text = extractText(userMessage);
+  const text = normalizeUserMessageText(extractText(userMessage));
   const requestedActivations = extractSkillActivations(text);
   const hasExplicitSkillActivation = requestedActivations.length > 0;
   if (!cfg.autoInject && !hasExplicitSkillActivation) return userMessage;
