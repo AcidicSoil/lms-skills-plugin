@@ -63,7 +63,7 @@ function buildRoutedSkillsBlock(candidates: SkillRouteCandidate[]): string {
 
   return [
     `<routed_skills>`,
-    `<routing_decision>Deterministic plugin routing selected these candidate skills for this request. Read the highest-ranked relevant skill with read_skill_file before doing covered work. Do not browse unrelated skills unless routing is unresolved or the user explicitly asks.</routing_decision>`,
+    `<routing_decision>Deterministic plugin routing selected these candidate skills because they appear relevant to the current user request. Before answering specialized, workflow-based, file-format-specific, tool-specific, or implementation-heavy work, read the highest-ranked relevant skill with read_skill_file and use that SKILL.md as the workflow source of truth. Do not browse unrelated skills unless these candidates are clearly wrong or the user explicitly asks.</routing_decision>`,
     skillTags,
     `</routed_skills>`,
   ].join("\n");
@@ -183,11 +183,11 @@ function buildExplicitSkillActivationBlock(
 }
 
 function buildRouterInstruction(): string {
-  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active and has automatically routed skill context for this request. Do not require the user to add skill instructions to the system prompt. If <routed_skills> is present, read the highest-ranked relevant skill with `read_skill_file` before doing covered work. If the user writes `$skill-name`, treat that as an explicit skill activation: read that skill first and treat the remaining text as task payload for the skill. If no skill is routed, use `list_skills` only when the task clearly requires a specialized skill. Do not use `run_command` for exploration unless command execution is explicitly enabled and necessary.\n</skills_runtime_context>";
+  return "<skills_runtime_context>\nThe LM Studio Skills plugin is active. Good outputs usually come from applying the right skill before answering specialized work. The plugin has already routed likely skill context for this request; do not require the user to add skill instructions to the system prompt. If <routed_skills> is present and the task is covered by a candidate, read the highest-ranked relevant skill with `read_skill_file` before producing the final answer, then follow that SKILL.md as the workflow source of truth. If the user writes `$skill-name`, treat that as explicit skill activation handled by the preprocessor and treat the remaining text as task payload for the skill. If no skill is routed but the task clearly needs a specialized workflow, use `list_skills` with a concise query derived from the user request. Do not use `run_command` for skill discovery or exploration.\n</skills_runtime_context>";
 }
 
 function buildReminderInstruction(reason = "no confident skill route"): string {
-  return `<skills_runtime_reminder reason="${reason}">The Skills plugin is active, but no skill was confidently routed for this request. Use list_skills only if the task appears to require a specialized skill. If the request includes $skill-name notation, read that skill first.</skills_runtime_reminder>`;
+  return `<skills_runtime_reminder reason="${reason}">The Skills plugin is active, but no skill was confidently routed for this request. If the task appears specialized, workflow-based, file-format-specific, tool-specific, or implementation-heavy, call list_skills with a concise query derived from the user's request before doing covered work. If the request is casual, simple, or general, answer normally without skill lookup. If the request includes $skill-name notation, treat it as explicit activation handled by the preprocessor.</skills_runtime_reminder>`;
 }
 
 function buildRoutedInjection(candidates: SkillRouteCandidate[]): string {
