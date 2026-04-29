@@ -40,6 +40,12 @@ export interface SkillFrontmatter {
   effort?: string;
   argumentHint?: string;
   arguments?: string[];
+  license?: string;
+  compatibility?: string;
+  metadata?: string;
+  paths?: string[];
+  hooks?: string;
+  shell?: string;
 }
 
 export interface PersistedSettings {

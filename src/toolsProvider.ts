@@ -54,6 +54,38 @@ function skillNextStepHint(skill: SkillInfo): string {
     : "Call read_skill_file with this exact skill name before doing covered work.";
 }
 
+function skillFrontmatterSummary(skill: SkillInfo): Record<string, unknown> | undefined {
+  const frontmatter = skill.frontmatter;
+  if (!frontmatter) return undefined;
+  const summary: Record<string, unknown> = {};
+  for (const key of [
+    "allowedTools",
+    "context",
+    "agent",
+    "model",
+    "effort",
+    "argumentHint",
+    "arguments",
+    "license",
+    "compatibility",
+    "metadata",
+    "paths",
+    "hooks",
+    "shell",
+  ] as const) {
+    const value = frontmatter[key];
+    if (value !== undefined) summary[key] = value;
+  }
+  if (Object.keys(summary).length === 0) return undefined;
+  if (frontmatter.allowedTools?.length) {
+    summary.allowedToolsNote = "Skill-declared allowed-tools are advisory in this plugin; run_command still requires plugin command settings and safety validation.";
+  }
+  if (frontmatter.arguments?.length || frontmatter.argumentHint) {
+    summary.argumentsNote = "If invoking explicitly, pass remaining user text as the task payload; this plugin does not currently perform Claude Code-style argument placeholder substitution.";
+  }
+  return summary;
+}
+
 function exactSkillQueryCandidates(query: string): string[] {
   const trimmed = query.trim();
   const withoutSigil = trimmed.replace(/^\$+/, "").trim();
@@ -200,6 +232,7 @@ function skillCandidateResult(candidate: ToolSkillCandidate) {
     reasons: candidate.reasons,
     source: candidate.source,
     nextStep: skillNextStepHint(candidate.skill),
+    frontmatter: skillFrontmatterSummary(candidate.skill),
   };
 }
 
@@ -421,6 +454,7 @@ export async function toolsProvider(ctl: PluginController) {
                     reasons: ["exact_skill_name_or_directory_match"],
                     source: "exact",
                     nextStep: skillNextStepHint(exactSkill),
+                    frontmatter: skillFrontmatterSummary(exactSkill),
                   },
                 ],
               };
@@ -515,6 +549,7 @@ export async function toolsProvider(ctl: PluginController) {
                   hasExtraFiles: exactSkill.hasExtraFiles,
                   score: 10,
                   nextStep: skillNextStepHint(exactSkill),
+                  frontmatter: skillFrontmatterSummary(exactSkill),
                 },
               ],
             };
@@ -594,6 +629,7 @@ export async function toolsProvider(ctl: PluginController) {
               hasExtraFiles: skill.hasExtraFiles,
               score: Math.round(score * 100) / 100,
               nextStep: skillNextStepHint(skill),
+              frontmatter: skillFrontmatterSummary(skill),
             })),
           };
         }
@@ -641,6 +677,7 @@ export async function toolsProvider(ctl: PluginController) {
             displayPath: s.displayPath,
             hasExtraFiles: s.hasExtraFiles,
             nextStep: skillNextStepHint(s),
+            frontmatter: skillFrontmatterSummary(s),
           })),
         };
       }),
@@ -768,6 +805,7 @@ export async function toolsProvider(ctl: PluginController) {
           displayPath: `${skill.environment === "wsl" ? "WSL" : "Windows"}:${result.resolvedPath}`,
           content: result.content,
           hasExtraFiles: skill.hasExtraFiles,
+          frontmatter: skillFrontmatterSummary(skill),
           skillStructureHint: SKILL_STRUCTURE_HINT,
           ...(skill.hasExtraFiles
             ? { hint: "This skill has additional files. Call list_skill_files to explore references/templates/examples/scripts, then read needed relative paths with read_skill_file(file_path)." }

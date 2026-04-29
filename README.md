@@ -119,10 +119,14 @@ A skill is any subdirectory inside a configured skills path that contains a `SKI
 ~/.lmstudio/skills/
 ├── docx/
 │   ├── SKILL.md             # entry point, required
+│   ├── references/
+│   │   └── patterns.md
 │   ├── scripts/
 │   │   └── helper.py
-│   └── templates/
-│       └── base.docx
+│   ├── templates/
+│   │   └── base.docx
+│   └── examples/
+│       └── sample.md
 ├── pptx/
 │   ├── SKILL.md
 │   └── editing.md
@@ -142,6 +146,10 @@ description: Use this skill when the user needs a clear, complete example workfl
 when_to_use: Trigger when the request matches the workflow this skill implements.
 tags: [examples, workflow]
 disable-model-invocation: false
+allowed-tools: Bash(python *)
+argument-hint: "[input-file]"
+paths: ["src/**/*.ts"]
+compatibility: "Requires Python 3 for bundled helper scripts."
 ---
 
 # Example Skill
@@ -156,6 +164,10 @@ Frontmatter behavior:
 - `when_to_use` / `when-to-use` is appended to `description` in the high-level skill listing.
 - `tags` are used for search/scoring.
 - `disable-model-invocation: true` keeps the skill out of automatic routing context, while still allowing explicit `$skill-name` activation.
+- `user-invocable`, `allowed-tools`, `context`, `agent`, `model`, `effort`, `argument-hint`, `arguments`, `license`, `compatibility`, `metadata`, `paths`, `hooks`, and `shell` are parsed when present and may be surfaced to the model as skill metadata.
+- `allowed-tools` is advisory in this plugin. It does not bypass plugin command settings or `run_command` safety validation.
+- `arguments` and `argument-hint` are surfaced as metadata, but this plugin does not currently perform Claude Code-style argument placeholder substitution.
+- `context: fork`, `agent`, `model`, `effort`, `paths`, `hooks`, and `shell` are metadata/advisory fields here unless a future plugin feature explicitly implements their Claude Code behavior.
 - Descriptions are capped at 1,536 characters to keep high-level context useful without loading the full skill body.
 - The frontmatter is stripped from `read_skill_file` results for `SKILL.md`, so the model receives the detailed instruction body after discovery metadata has already been consumed.
 

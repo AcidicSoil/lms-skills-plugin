@@ -115,6 +115,18 @@ function normalizeFrontmatterKey(key: string): keyof SkillFrontmatter | null {
       return "argumentHint";
     case "arguments":
       return "arguments";
+    case "license":
+      return "license";
+    case "compatibility":
+      return "compatibility";
+    case "metadata":
+      return "metadata";
+    case "paths":
+      return "paths";
+    case "hooks":
+      return "hooks";
+    case "shell":
+      return "shell";
     default:
       return null;
   }
@@ -136,7 +148,7 @@ function assignFrontmatterValue(
     return;
   }
 
-  if (normalizedKey === "tags" || normalizedKey === "allowedTools" || normalizedKey === "arguments") {
+  if (normalizedKey === "tags" || normalizedKey === "allowedTools" || normalizedKey === "arguments" || normalizedKey === "paths") {
     const parsed = parseStringList(rawValue);
     if (parsed) {
       (frontmatter as Record<string, unknown>)[normalizedKey] = parsed;
