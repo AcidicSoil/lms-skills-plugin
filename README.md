@@ -87,10 +87,10 @@ Explicit activation works even when the regular internal context is disabled, be
 
 | Tool | Purpose |
 |---|---|
-| `list_skills` | List/search skills. `mode: "route"` applies the deterministic router used by prompt injection. |
-| `read_skill_file` | Read `SKILL.md` or another file inside a skill directory. Defaults to `SKILL.md`. |
-| `list_skill_files` | Explore files inside a skill directory. |
-| `run_command` | Execute shell commands only when explicitly enabled by the command safety setting. Disabled by default. |
+| `list_skills` | List/search skills. `mode: "route"` applies the deterministic router used by prompt injection. Query mode also surfaces fuzzy candidates for partial names, missing hyphens, and nearby skill words before falling back to broad full-text search. |
+| `read_skill_file` | Read `SKILL.md` or another relative file inside a skill directory. Defaults to `SKILL.md`; pass `file_path` for support files found with `list_skill_files`. |
+| `list_skill_files` | Explore the relative file tree inside a skill directory, including common support folders such as `references/`, `templates/`, `examples/`, and `scripts/`. |
+| `run_command` | Execute shell commands only when explicitly enabled by the command safety setting and required by the active skill/task. Disabled by default. |
 
 ### 4. Runtime environments
 

@@ -45,6 +45,15 @@ import type { ResolvedSkillRoot } from "./pathResolver";
 import type { PluginController } from "./pluginTypes";
 import type { DirectoryEntry, EffectiveConfig, SkillInfo } from "./types";
 
+const SKILL_STRUCTURE_HINT =
+  "A skill directory uses SKILL.md as the entrypoint. Supporting assets may live in references/, templates/, examples/, scripts/, or other relative paths. Read SKILL.md first, then call list_skill_files and read_skill_file with a relative file_path for referenced support files when needed.";
+
+function skillNextStepHint(skill: SkillInfo): string {
+  return skill.hasExtraFiles
+    ? "Call read_skill_file with this exact skill name first. If SKILL.md references support assets or more detail is needed, call list_skill_files, then read_skill_file again with the relative file_path."
+    : "Call read_skill_file with this exact skill name before doing covered work.";
+}
+
 function exactSkillQueryCandidates(query: string): string[] {
   const trimmed = query.trim();
   const withoutSigil = trimmed.replace(/^\$+/, "").trim();
@@ -190,6 +199,7 @@ function skillCandidateResult(candidate: ToolSkillCandidate) {
     confidence: candidate.confidence,
     reasons: candidate.reasons,
     source: candidate.source,
+    nextStep: skillNextStepHint(candidate.skill),
   };
 }
 
@@ -335,9 +345,10 @@ export async function toolsProvider(ctl: PluginController) {
     description:
       "List or search available skills. " +
       "Without a query, returns all skills up to the limit. " +
-      "With a query, searches skills. Pass mode='route' to use the same deterministic metadata router used by prompt injection. " +
+      "With a query, searches skills and can surface fuzzy candidates for partial names, missing hyphens, or nearby skill words. " +
+      "Pass mode='route' to use the same deterministic metadata router used by prompt injection. " +
       "Do not call this tool just because the user wrote $skill-name; explicit $skill activations are handled by the prompt preprocessor and may already be expanded. " +
-      "For routed candidates only, call read_skill_file on any skill that looks relevant before starting work.",
+      "For routed/search candidates, call read_skill_file on the best relevant exact skill name before starting covered work. If hasExtraFiles is true, use list_skill_files to inspect references/templates/examples/scripts only when SKILL.md or the task needs them.",
     parameters: {
       query: listSkillsQuerySchema.describe("Optional search query."),
       limit: listSkillsLimitSchema,
@@ -395,6 +406,7 @@ export async function toolsProvider(ctl: PluginController) {
                 queryTokens: trimmedQuery.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
                 exactMatch: true,
                 note: "Exact skill match resolved directly before route scanning.",
+                skillStructureHint: SKILL_STRUCTURE_HINT,
                 selected: [
                   {
                     name: exactSkill.name,
@@ -408,6 +420,7 @@ export async function toolsProvider(ctl: PluginController) {
                     confidence: "exact",
                     reasons: ["exact_skill_name_or_directory_match"],
                     source: "exact",
+                    nextStep: skillNextStepHint(exactSkill),
                   },
                 ],
               };
@@ -490,6 +503,7 @@ export async function toolsProvider(ctl: PluginController) {
               skillsEnvironment: cfg.skillsEnvironment,
               roots,
               note: "Exact skill match resolved directly without scanning all skill files.",
+              skillStructureHint: SKILL_STRUCTURE_HINT,
               skills: [
                 {
                   name: exactSkill.name,
@@ -500,6 +514,7 @@ export async function toolsProvider(ctl: PluginController) {
                   displayPath: exactSkill.displayPath,
                   hasExtraFiles: exactSkill.hasExtraFiles,
                   score: 10,
+                  nextStep: skillNextStepHint(exactSkill),
                 },
               ],
             };
@@ -531,6 +546,7 @@ export async function toolsProvider(ctl: PluginController) {
               skillsEnvironment: cfg.skillsEnvironment,
               roots,
               note: "Fuzzy skill-name candidates matched before full-text search. Pick the intended skill and call read_skill_file with its exact name.",
+              skillStructureHint: SKILL_STRUCTURE_HINT,
               skills: fuzzy.map(skillCandidateResult),
             };
           }
@@ -549,7 +565,8 @@ export async function toolsProvider(ctl: PluginController) {
               found: 0,
               skills: [],
               roots,
-              note: "No skills matched. Try a broader query or omit the query to list all skills.",
+              note: "No skills matched. Try a broader query or omit the query to list all skills. Use concise terms from the user's task, expected file type, tool name, or workflow.",
+              skillStructureHint: SKILL_STRUCTURE_HINT,
             };
           }
 
@@ -563,6 +580,7 @@ export async function toolsProvider(ctl: PluginController) {
             found: page.length,
             skillsEnvironment: cfg.skillsEnvironment,
             roots,
+            skillStructureHint: SKILL_STRUCTURE_HINT,
             ...(results.length > cap
               ? { note: `Showing top ${cap} of ${results.length} matches.` }
               : {}),
@@ -575,6 +593,7 @@ export async function toolsProvider(ctl: PluginController) {
               displayPath: skill.displayPath,
               hasExtraFiles: skill.hasExtraFiles,
               score: Math.round(score * 100) / 100,
+              nextStep: skillNextStepHint(skill),
             })),
           };
         }
@@ -596,6 +615,7 @@ export async function toolsProvider(ctl: PluginController) {
             roots,
             skills: [],
             note: "No skills found. Create skill directories with a SKILL.md file inside the configured skills paths.",
+            skillStructureHint: SKILL_STRUCTURE_HINT,
           };
         }
 
@@ -608,6 +628,7 @@ export async function toolsProvider(ctl: PluginController) {
           found: page.length,
           skillsEnvironment: cfg.skillsEnvironment,
           roots,
+          skillStructureHint: SKILL_STRUCTURE_HINT,
           ...(skills.length > cap
             ? { note: `Showing ${cap} of ${skills.length} skills.` }
             : {}),
@@ -619,6 +640,7 @@ export async function toolsProvider(ctl: PluginController) {
             skillMdPath: s.skillMdPath,
             displayPath: s.displayPath,
             hasExtraFiles: s.hasExtraFiles,
+            nextStep: skillNextStepHint(s),
           })),
         };
       }),
@@ -627,7 +649,7 @@ export async function toolsProvider(ctl: PluginController) {
   const readSkillFileTool = tool({
     name: "read_skill_file",
     description:
-      "Read a file from within a skill directory. Accepts a skill name, an environment-prefixed display path such as WSL:/path, or an absolute path within a configured skill root.",
+      "Read SKILL.md or a relative support file from within a skill directory. Accepts a skill name, an environment-prefixed display path such as WSL:/path, or an absolute path within a configured skill root. Omit file_path to read SKILL.md first. Use file_path for support assets discovered with list_skill_files, such as references/patterns.md, templates/example.md, examples/demo.md, or scripts/helper.py.",
     parameters: {
       skill_name: skillNameSchema.describe("Skill name or absolute/display path."),
       file_path: optionalRelativeSkillPathSchema.describe("Relative path inside the skill directory. Omit for SKILL.md."),
@@ -699,6 +721,7 @@ export async function toolsProvider(ctl: PluginController) {
             hint: suggestions.length > 0
               ? "Use one of the suggested exact skill names, then call read_skill_file again."
               : "Call list_skills with a broader query to see available skills.",
+            skillStructureHint: SKILL_STRUCTURE_HINT,
             suggestions: suggestions.map(skillCandidateResult),
           };
         }
@@ -745,8 +768,9 @@ export async function toolsProvider(ctl: PluginController) {
           displayPath: `${skill.environment === "wsl" ? "WSL" : "Windows"}:${result.resolvedPath}`,
           content: result.content,
           hasExtraFiles: skill.hasExtraFiles,
+          skillStructureHint: SKILL_STRUCTURE_HINT,
           ...(skill.hasExtraFiles
-            ? { hint: "This skill has additional files. Call list_skill_files to explore them." }
+            ? { hint: "This skill has additional files. Call list_skill_files to explore references/templates/examples/scripts, then read needed relative paths with read_skill_file(file_path)." }
             : {}),
         };
       }),
@@ -755,7 +779,7 @@ export async function toolsProvider(ctl: PluginController) {
   const listSkillFilesTool = tool({
     name: "list_skill_files",
     description:
-      "List all files inside a skill directory. Accepts a skill name or an environment-prefixed display path.",
+      "List the relative file tree inside a skill directory so the model can discover supporting assets referenced by SKILL.md. Typical skill children include references/, templates/, examples/, scripts/, and other relative files. After listing, read a needed support file with read_skill_file using the exact skill name and the returned relative path as file_path.",
     parameters: {
       skill_name: skillNameSchema.describe("Skill name or absolute/display path."),
       sub_path: optionalRelativeSkillPathSchema.describe("Optional relative sub-path within the skill directory."),
@@ -785,6 +809,8 @@ export async function toolsProvider(ctl: PluginController) {
             directoryPath: skill_name,
             entryCount: entries.length,
             tree: formatted,
+            skillStructureHint: SKILL_STRUCTURE_HINT,
+            readHint: "Read a needed support file with read_skill_file using the returned relative path as file_path.",
             entries: entries.map((e) => ({
               name: e.name,
               path: e.relativePath,
@@ -825,6 +851,7 @@ export async function toolsProvider(ctl: PluginController) {
             hint: suggestions.length > 0
               ? "Use one of the suggested exact skill names, then call list_skill_files again."
               : "Call list_skills with a broader query to see available skills.",
+            skillStructureHint: SKILL_STRUCTURE_HINT,
             suggestions: suggestions.map(skillCandidateResult),
           };
         }
@@ -849,6 +876,8 @@ export async function toolsProvider(ctl: PluginController) {
           displayPath: `${skill.environment === "wsl" ? "WSL" : "Windows"}:${skill.directoryPath}`,
           entryCount: entries.length,
           tree: formatted,
+          skillStructureHint: SKILL_STRUCTURE_HINT,
+          readHint: "Read a needed support file with read_skill_file using this exact skill name and the returned relative path as file_path.",
           entries: entries.map((e) => ({
             name: e.name,
             path: e.relativePath,
@@ -863,7 +892,7 @@ export async function toolsProvider(ctl: PluginController) {
   const runCommandTool = tool({
     name: "run_command",
     description:
-      "Execute a shell command only when plugin settings explicitly allow it. Disabled by default. Read-only mode allows simple inspection commands only; guarded mode still blocks dangerous patterns. Do not use run_command for $skill-name tokens; $skill-name is explicit skill activation syntax, not a shell command.",
+      "Execute a shell command only when plugin settings explicitly allow it and the active skill/task genuinely requires command execution. Disabled by default. Prefer skill file reads and list_skill_files for skill discovery. Read-only mode allows simple inspection commands only; guarded mode still blocks dangerous patterns. Do not use run_command for $skill-name tokens; $skill-name is explicit skill activation syntax, not a shell command.",
     parameters: {
       command: commandSchema.describe("The single-line shell command to execute."),
       cwd: cwdSchema.describe("Working directory for the command."),

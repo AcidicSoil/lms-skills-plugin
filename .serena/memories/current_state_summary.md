@@ -30,6 +30,10 @@ Most important current behaviors:
 - Tool-side fuzzy matching now lives only in `src/toolsProvider.ts` so model tool mistakes get help without changing essential preprocessor routing behavior.
 - `list_skills` search mode first returns fuzzy skill-name candidates from metadata before falling back to expensive full-text search, with a note telling the model to pick the intended exact skill and call `read_skill_file`.
 - `read_skill_file` and `list_skill_files` no longer hard-stop on a wrong or partial skill name; they return ranked `suggestions` with exact names, scores, reasons, and paths so the model can retry with the best candidate.
+- Tool descriptions and tool result payloads now explicitly teach the model the skill structure: `SKILL.md` is the entrypoint, supporting assets may live under `references/`, `templates/`, `examples/`, `scripts/`, or other relative paths, and the model should use `list_skill_files` plus `read_skill_file(file_path)` for referenced support files.
+- `list_skills` results now include `skillStructureHint` plus per-skill `nextStep` hints so search results tell the model how to select/read the skill and when to inspect child files.
+- `read_skill_file` success and not-found responses include structure/suggestion hints; `list_skill_files` responses include `readHint` for using returned relative paths.
+- `run_command` tool description now emphasizes command execution should only be used when settings allow it and the active skill/task genuinely requires it; skill discovery should prefer skill reads and file listing.
 - `list_skills({ mode: "route" })` without a query now returns a clear structured note that route mode needs a concrete query, instead of scanning/listing everything. This avoids the exported-chat failure where the model used route mode with no query after seeing a placeholder command.
 - `run_command` is disabled by default and protected by schema validation plus command safety policy.
 - Tool inputs are validated by Zod schemas in `src/toolSchemas.ts`.
