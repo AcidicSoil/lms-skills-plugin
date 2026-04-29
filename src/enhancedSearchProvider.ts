@@ -8,6 +8,12 @@ import type { SkillInfo, SkillSearchBackend } from "./types";
 
 export type ActiveSkillSearchBackend = "builtin" | "qmd" | "ck";
 
+export interface EnhancedSkillSearchOptions {
+  qmdExecutable: string;
+  qmdCollections: string[];
+  ckExecutable: string;
+}
+
 export interface EnhancedSkillSearchResult {
   requested: SkillSearchBackend;
   active: ActiveSkillSearchBackend;
@@ -16,6 +22,11 @@ export interface EnhancedSkillSearchResult {
   available: {
     qmd?: boolean;
     ck?: boolean;
+  };
+  options: {
+    qmdExecutable: string;
+    qmdCollections: string[];
+    ckExecutable: string;
   };
   candidates: SkillInfo[];
   rawResultCount: number;
@@ -191,10 +202,13 @@ async function runQmdSearch(
   registry: RuntimeRegistry,
   query: string,
   limit: number,
+  options: EnhancedSkillSearchOptions,
   signal?: AbortSignal,
 ): Promise<{ skills: SkillInfo[]; rawResultCount: number; diagnostics: string[] }> {
   const diagnostics: string[] = [];
-  const result = await runFixedCommand("qmd", ["query", "--json", "-n", String(Math.max(limit, 10)), query], signal);
+  const collectionArgs = options.qmdCollections.flatMap((collection) => ["-c", collection]);
+  const args = ["query", "--json", "-n", String(Math.max(limit, 10)), ...collectionArgs, query];
+  const result = await runFixedCommand(options.qmdExecutable, args, signal);
   if (result.timedOut) return { skills: [], rawResultCount: 0, diagnostics: ["qmd query timed out"] };
   if (result.exitCode !== 0) return { skills: [], rawResultCount: 0, diagnostics: [`qmd query failed: ${result.stderr.slice(0, 240)}`] };
   const candidates = [...new Set([...parseJsonCandidates(result.stdout), ...parseTextCandidatePaths(result.stdout)])];
@@ -208,6 +222,7 @@ async function runCkSearch(
   registry: RuntimeRegistry,
   query: string,
   limit: number,
+  options: EnhancedSkillSearchOptions,
   signal?: AbortSignal,
 ): Promise<{ skills: SkillInfo[]; rawResultCount: number; diagnostics: string[] }> {
   const diagnostics: string[] = [];
@@ -215,7 +230,7 @@ async function runCkSearch(
 
   for (const root of roots) {
     checkAbort(signal);
-    const result = await runFixedCommand("ck", ["--jsonl", "--hybrid", "--topk", String(Math.max(limit, 10)), query, root.resolvedPath], signal, root.resolvedPath);
+    const result = await runFixedCommand(options.ckExecutable, ["--jsonl", "--hybrid", "--topk", String(Math.max(limit, 10)), query, root.resolvedPath], signal, root.resolvedPath);
     if (result.timedOut) {
       diagnostics.push(`ck timed out for ${root.displayPath}`);
       continue;
@@ -239,6 +254,7 @@ export async function searchSkillsWithEnhancedBackend(
   registry: RuntimeRegistry,
   query: string,
   limit: number,
+  options: EnhancedSkillSearchOptions,
   signal?: AbortSignal,
 ): Promise<EnhancedSkillSearchResult> {
   if (requested === "builtin") {
@@ -247,6 +263,7 @@ export async function searchSkillsWithEnhancedBackend(
       active: "builtin",
       fallbackUsed: false,
       available: {},
+      options,
       candidates: [],
       rawResultCount: 0,
       diagnostics: ["built-in backend selected"],
@@ -254,8 +271,8 @@ export async function searchSkillsWithEnhancedBackend(
   }
 
   const available = {
-    qmd: requested === "qmd" || requested === "auto" ? await isExecutableAvailable("qmd", signal) : undefined,
-    ck: requested === "ck" || requested === "auto" ? await isExecutableAvailable("ck", signal) : undefined,
+    qmd: requested === "qmd" || requested === "auto" ? await isExecutableAvailable(options.qmdExecutable, signal) : undefined,
+    ck: requested === "ck" || requested === "auto" ? await isExecutableAvailable(options.ckExecutable, signal) : undefined,
   };
 
   const order: ActiveSkillSearchBackend[] = requested === "qmd"
@@ -269,8 +286,8 @@ export async function searchSkillsWithEnhancedBackend(
     if (backend === "ck" && !available.ck) continue;
 
     const result = backend === "qmd"
-      ? await runQmdSearch(roots, registry, query, limit, signal)
-      : await runCkSearch(roots, registry, query, limit, signal);
+      ? await runQmdSearch(roots, registry, query, limit, options, signal)
+      : await runCkSearch(roots, registry, query, limit, options, signal);
 
     if (result.skills.length > 0) {
       return {
@@ -278,6 +295,7 @@ export async function searchSkillsWithEnhancedBackend(
         active: backend,
         fallbackUsed: false,
         available,
+        options,
         candidates: result.skills,
         rawResultCount: result.rawResultCount,
         diagnostics: result.diagnostics,
@@ -291,6 +309,7 @@ export async function searchSkillsWithEnhancedBackend(
         fallbackUsed: true,
         fallbackReason: `${backend} produced no resolvable skill candidates; using built-in fallback`,
         available,
+        options,
         candidates: [],
         rawResultCount: result.rawResultCount,
         diagnostics: result.diagnostics,
@@ -306,6 +325,7 @@ export async function searchSkillsWithEnhancedBackend(
       ? "No enhanced search backend is available; using built-in fallback"
       : `${requested} is not available; using built-in fallback`,
     available,
+    options,
     candidates: [],
     rawResultCount: 0,
     diagnostics: ["enhanced backend unavailable"],

@@ -39,6 +39,9 @@ const DEFAULTS: PersistedSettings = {
   wslDistro: "",
   commandExecutionMode: "disabled",
   skillSearchBackend: "builtin",
+  qmdExecutable: "qmd",
+  qmdCollections: [],
+  ckExecutable: "ck",
 };
 
 let cachedConfig: EffectiveConfig | null = null;
@@ -48,6 +51,15 @@ export function parseSkillsPaths(raw: string): string[] {
   return raw
     .split(SKILLS_PATH_SEPARATOR)
     .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+function parseOptionalList(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  if (typeof raw !== "string") return [];
+  return raw
+    .split(/[;,]/)
+    .map((value) => value.trim())
     .filter(Boolean);
 }
 
@@ -79,6 +91,9 @@ export function loadSettings(): PersistedSettings {
       wslDistro: typeof parsed.wslDistro === "string" ? parsed.wslDistro : "",
       commandExecutionMode: parseCommandExecutionMode(parsed.commandExecutionMode),
       skillSearchBackend: parseSkillSearchBackend(parsed.skillSearchBackend),
+      qmdExecutable: typeof parsed.qmdExecutable === "string" && parsed.qmdExecutable.trim() ? parsed.qmdExecutable.trim() : DEFAULTS.qmdExecutable,
+      qmdCollections: parseOptionalList(parsed.qmdCollections),
+      ckExecutable: typeof parsed.ckExecutable === "string" && parsed.ckExecutable.trim() ? parsed.ckExecutable.trim() : DEFAULTS.ckExecutable,
     };
   } catch {
     return { ...DEFAULTS };
@@ -121,6 +136,13 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
   const skillSearchBackend = parseSkillSearchBackend(
     c.get("skillSearchBackend") || saved.skillSearchBackend,
   );
+  const qmdExecutable =
+    ((c.get("qmdExecutable") as string | undefined) ?? "").trim() || saved.qmdExecutable || DEFAULTS.qmdExecutable;
+  const qmdCollections = parseOptionalList(
+    ((c.get("qmdCollections") as string | undefined) ?? "").trim() || saved.qmdCollections,
+  );
+  const ckExecutable =
+    ((c.get("ckExecutable") as string | undefined) ?? "").trim() || saved.ckExecutable || DEFAULTS.ckExecutable;
 
   if (rawPaths === RESET_TO_DEFAULT_SENTINEL) {
     const next: PersistedSettings = {
@@ -134,6 +156,9 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
       wslDistro,
       commandExecutionMode,
       skillSearchBackend,
+      qmdExecutable,
+      qmdCollections,
+      ckExecutable,
     };
     saveSettings(next);
     cachedConfig = next;
@@ -160,6 +185,9 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     wslDistro,
     commandExecutionMode,
     skillSearchBackend,
+    qmdExecutable,
+    qmdCollections,
+    ckExecutable,
   };
 
   if (JSON.stringify(next) !== JSON.stringify(saved)) saveSettings(next);

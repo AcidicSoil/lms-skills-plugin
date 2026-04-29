@@ -62,6 +62,7 @@ function skillSearchBackendSummary(cfg: EffectiveConfig, result?: EnhancedSkillS
       fallbackReason: result.fallbackReason,
       available: result.available,
       rawResultCount: result.rawResultCount,
+      options: result.options,
       diagnostics: result.diagnostics,
       workflowHint: SKILL_SEARCH_WORKFLOW_HINT,
     };
@@ -70,6 +71,11 @@ function skillSearchBackendSummary(cfg: EffectiveConfig, result?: EnhancedSkillS
     requested: cfg.skillSearchBackend,
     active: "builtin",
     fallbackUsed: false,
+    options: {
+      qmdExecutable: cfg.qmdExecutable,
+      qmdCollections: cfg.qmdCollections,
+      ckExecutable: cfg.ckExecutable,
+    },
     workflowHint: SKILL_SEARCH_WORKFLOW_HINT,
   };
 }
@@ -595,7 +601,19 @@ export async function toolsProvider(ctl: PluginController) {
             requestId,
             "list_skills",
             "enhanced_skill_search",
-            async () => searchSkillsWithEnhancedBackend(cfg.skillSearchBackend, roots, registry, trimmedQuery, cap, toolSignal),
+            async () => searchSkillsWithEnhancedBackend(
+              cfg.skillSearchBackend,
+              roots,
+              registry,
+              trimmedQuery,
+              cap,
+              {
+                qmdExecutable: cfg.qmdExecutable,
+                qmdCollections: cfg.qmdCollections,
+                ckExecutable: cfg.ckExecutable,
+              },
+              toolSignal,
+            ),
             { query: trimmedQuery, backend: cfg.skillSearchBackend, rootCount: roots.length },
           );
           const enhancedSearchBackend = skillSearchBackendSummary(cfg, enhanced);

@@ -72,6 +72,36 @@ export const configSchematics = createConfigSchematics()
     "builtin",
   )
   .field(
+    "qmdExecutable",
+    "string",
+    {
+      displayName: "QMD Executable",
+      subtitle:
+        "Command name or absolute path for qmd. Used only by plugin-controlled enhanced skill search; leave as qmd for PATH lookup.",
+    },
+    "qmd",
+  )
+  .field(
+    "qmdCollections",
+    "string",
+    {
+      displayName: "QMD Collections (optional)",
+      subtitle:
+        "Comma- or semicolon-separated QMD collection names to search with -c/--collection. Leave empty to let QMD search its configured/indexed scope.",
+    },
+    "",
+  )
+  .field(
+    "ckExecutable",
+    "string",
+    {
+      displayName: "CK Executable",
+      subtitle:
+        "Command name or absolute path for ck. Used only by plugin-controlled enhanced skill search; leave as ck for PATH lookup.",
+    },
+    "ck",
+  )
+  .field(
     "skillsEnvironment",
     "select",
     {
