@@ -1,0 +1,11 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review src/api/",
+  "files": ["src/api/routes.py"],
+  "expected_behavior": [
+    "Agent presents findings and strengths before any fix implementation.",
+    "Agent ends the read-only review with an explicit approval gate.",
+    "Agent does not include IMPROVEMENTS MADE or VERIFIED sections before user approval.",
+    "Agent reserves post-fix reporting for a later approved execution pass."
+  ]
+}

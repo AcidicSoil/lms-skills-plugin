@@ -1,0 +1,11 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review history agents",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to history mode based on the history keyword.",
+    "Agent treats history output as a read-only stored-review summary rather than a live code review.",
+    "Agent uses the history-format shape from output-formats.md.",
+    "Agent does not mix fix-report sections such as IMPROVEMENTS MADE or VERIFIED into the history response."
+  ]
+}

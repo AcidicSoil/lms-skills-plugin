@@ -1,0 +1,6 @@
+interface:
+  display_name: "Snippet Migration Planner"
+  short_description: "Audit and migrate legacy PromptSnippets snippets"
+  default_prompt: "Use $snippet-migration-planner to inventory, normalize, deduplicate, classify, and migrate this PromptSnippets library."
+policy:
+  allow_implicit_invocation: true

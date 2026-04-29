@@ -1,0 +1,15 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review HEAD~3..HEAD",
+  "files": [],
+  "expected_behavior": [
+    "Agent recognizes argument 'HEAD~3..HEAD' as a git range",
+    "Agent uses git diff HEAD~3..HEAD to identify changed files",
+    "Agent runs Wave 0 triage on files changed in the range",
+    "Agent scales review strategy based on changed file count",
+    "Agent applies at least 2 creative review lenses per scope",
+    "Agent spawns research subagents (Wave 2) to validate findings",
+    "Agent runs 8-step Judge protocol (Wave 3)",
+    "Agent presents findings with confidence scores and citations"
+  ]
+}

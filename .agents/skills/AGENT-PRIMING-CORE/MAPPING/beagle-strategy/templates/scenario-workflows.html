@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{TITLE}}</title>
+  {{BEAGLE_SHARED_HEAD}}
+</head>
+<body>
+  <div class="page-progress" aria-hidden="true"></div>
+  <main class="beagle-shell-frame">
+    <header class="ve-card">
+      <h1>{{TITLE}}</h1>
+      <p>{{SUBTITLE}}</p>
+      <div class="beagle-inline-list">{{HEADER_CHIPS}}</div>
+    </header>
+
+    <nav id="toc" class="toc" aria-label="table of contents">
+      <a href="#summary">Summary</a>
+      <a href="#lanes">Scenario lanes</a>
+      <a href="#gates">Execution gates</a>
+      <a href="#verification">Verification baseline</a>
+    </nav>
+
+    <section id="summary" class="ve-card">
+      <h2>Workflow Map</h2>
+      <div class="beagle-lane-grid">{{WORKFLOW_STATS}}</div>
+    </section>
+
+    <section id="lanes" class="ve-card">
+      <h2>Scenario lanes</h2>
+      <div class="beagle-lane-grid">{{SCENARIO_LANES}}</div>
+    </section>
+
+    <section id="gates" class="ve-card">
+      <h2>Execution gates</h2>
+      <div class="beagle-lane-grid">{{SCENARIO_GATES}}</div>
+    </section>
+
+    <section id="verification" class="ve-card">
+      <h2>Verification baseline</h2>
+      <pre>{{VERIFICATION_COMMANDS}}</pre>
+    </section>
+  </main>
+</body>
+</html>

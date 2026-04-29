@@ -1,0 +1,13 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review learnings list",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to learnings management mode",
+    "Agent can list stored false-positive dismissals for a project",
+    "When reviewing, agent checks findings against stored learnings during Judge Wave 3 Step 4",
+    "Findings matching a stored learning have confidence reduced by 0.3",
+    "Agent reports when findings are suppressed due to learnings",
+    "The learnings-store.py script is used for add, check, list, and clear operations"
+  ]
+}

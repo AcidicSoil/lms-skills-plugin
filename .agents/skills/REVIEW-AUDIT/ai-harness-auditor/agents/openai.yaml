@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Harness Auditor"
+  short_description: "Audit AI workflow rules and readiness"
+  default_prompt: "Use $ai-harness-auditor to audit this repository's AI collaboration system and return scoring, conclusion, risks, and prioritized recommendations."

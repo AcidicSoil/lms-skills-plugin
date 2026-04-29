@@ -1,0 +1,14 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review 42",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to PR review mode for PR #42",
+    "PR review findings use Conventional Comments format: label (decoration): content",
+    "P0/S0 findings use 'issue (blocking)' label",
+    "P1/S1 findings use 'issue (non-blocking)' or 'suggestion (blocking)' label",
+    "P2+/S2+ findings use 'suggestion (non-blocking)' or 'nitpick' label",
+    "Strengths use 'praise' label",
+    "Labels are machine-parseable and follow conventionalcomments.org spec"
+  ]
+}

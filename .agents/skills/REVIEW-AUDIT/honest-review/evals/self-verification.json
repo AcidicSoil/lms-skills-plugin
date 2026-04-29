@@ -1,0 +1,17 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review",
+  "files": ["src/api/users.py", "src/auth/middleware.py"],
+  "expected_behavior": [
+    "Agent completes standard review pipeline through Wave 3 (Judge reconciliation)",
+    "Agent runs self-verification (Wave 3.5) on top 5 findings by score",
+    "Self-verification subagent attempts to construct counter-arguments for each finding",
+    "Findings that survive get confidence +0.05 and [self-verified] tag",
+    "Findings that are weakened get confidence -0.10",
+    "Findings that are disproven are discarded with audit trail entry",
+    "Agent re-runs confidence filter after adjustment and presents final report",
+    "Self-verification is skipped if fewer than 3 findings survive Judge phase",
+    "Self-verification uses tool calls (Grep, Read) to verify citation anchors match actual source code",
+    "Findings with citation anchors that do not match source code are classified as 'hallucinated' and discarded"
+  ]
+}

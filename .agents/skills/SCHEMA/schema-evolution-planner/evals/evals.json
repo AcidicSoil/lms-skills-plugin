@@ -1,0 +1,101 @@
+{
+  "skill_name": "schema-evolution-planner",
+  "evals": [
+    {
+      "id": "empty-args-menu",
+      "prompt": "/schema-evolution-planner",
+      "expected_output": "A mode menu response with examples for plan, review, backfill, cutover, and deprecate.",
+      "files": [],
+      "assertions": [
+        "Agent dispatches to the empty-args handler.",
+        "Agent presents the mode menu with examples.",
+        "Agent does not guess a mode when no arguments are provided."
+      ]
+    },
+    {
+      "id": "plan-rename-column",
+      "prompt": "/schema-evolution-planner plan rename users.username to handle",
+      "expected_output": "A full expand-contract plan for a live column rename.",
+      "files": [],
+      "assertions": [
+        "Agent dispatches to plan mode based on the 'plan' keyword.",
+        "Agent identifies the change as a live rename rather than fresh schema design.",
+        "Agent reads or applies the change-type decision matrix.",
+        "Agent produces stages covering expand, compatibility, backfill, validation, cutover, and contract.",
+        "Agent names invariants and a rollback point.",
+        "Agent preserves the existing public mode name 'plan'."
+      ]
+    },
+    {
+      "id": "review-existing-rollout",
+      "prompt": "/schema-evolution-planner review migration plan for orders status enum change",
+      "expected_output": "A review of an existing migration plan with severity-ranked findings.",
+      "files": [],
+      "assertions": [
+        "Agent dispatches to review mode based on the 'review' keyword.",
+        "Agent checks for hidden destructive steps, compatibility gaps, and rollback issues.",
+        "Agent uses migration failure modes to pressure-test the rollout.",
+        "Agent ranks findings by severity."
+      ]
+    },
+    {
+      "id": "backfill-idempotence",
+      "prompt": "/schema-evolution-planner backfill new account_id on invoices",
+      "expected_output": "A backfill strategy that is explicitly idempotent, chunkable, and measurable.",
+      "files": [],
+      "assertions": [
+        "Agent dispatches to backfill mode based on the 'backfill' keyword.",
+        "Agent makes idempotence explicit rather than implied.",
+        "Agent specifies chunking, retries, progress tracking, and reconciliation checks.",
+        "Agent decides whether dual-write is required while the backfill runs."
+      ]
+    },
+    {
+      "id": "cutover-abort-criteria",
+      "prompt": "/schema-evolution-planner cutover reads to new customer_profile table",
+      "expected_output": "A cutover plan with explicit success checks, abort criteria, and rollback point.",
+      "files": [],
+      "assertions": [
+        "Agent dispatches to cutover mode based on the 'cutover' keyword.",
+        "Agent separates read and write cutover when appropriate.",
+        "Agent defines success checks before switching traffic or logic.",
+        "Agent defines abort criteria in advance.",
+        "Agent preserves a rollback point until the new path is proven stable."
+      ]
+    },
+    {
+      "id": "deprecate-legacy-columns",
+      "prompt": "/schema-evolution-planner deprecate legacy address columns",
+      "expected_output": "A contract-stage plan for safely removing deprecated schema after proof the compatibility window is closed.",
+      "files": [],
+      "assertions": [
+        "Agent dispatches to deprecate mode based on the 'deprecate' keyword.",
+        "Agent verifies that no live code, jobs, or consumers still depend on the old structure.",
+        "Agent removes writes first, then reads, then the deprecated schema.",
+        "Agent records the evidence that the compatibility window is closed."
+      ]
+    },
+    {
+      "id": "rename-vs-redesign-ambiguity",
+      "prompt": "We want to move customer profile fields out of users and turn profiles into their own bounded context. How should we handle the schema?",
+      "expected_output": "A clarification or plan response that distinguishes schema evolution from broader redesign instead of assuming a simple rename.",
+      "files": [],
+      "assertions": [
+        "Agent recognizes ambiguity between schema evolution and broader schema redesign.",
+        "Agent starts in plan-mode reasoning rather than silently treating the change as a simple rename.",
+        "Agent explicitly decides whether the request is additive evolution or should be routed to database-architect first."
+      ]
+    },
+    {
+      "id": "dba-tuning-misroute",
+      "prompt": "Our Postgres queries are slow and autovacuum is falling behind. How should we tune the database?",
+      "expected_output": "A concise refusal or redirect because DBA tuning is out of scope.",
+      "files": [],
+      "assertions": [
+        "Agent recognizes that query tuning and database administration are out of scope.",
+        "Agent does not provide a schema-evolution migration plan.",
+        "Agent redirects away from this skill."
+      ]
+    }
+  ]
+}

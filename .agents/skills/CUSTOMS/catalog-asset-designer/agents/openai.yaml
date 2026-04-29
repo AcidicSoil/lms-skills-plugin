@@ -1,0 +1,6 @@
+interface:
+  display_name: "Catalog Asset Designer"
+  short_description: "Design import-ready PromptSnippets catalog assets"
+  default_prompt: "Use $catalog-asset-designer to design searchable, import-ready PromptSnippets catalog assets."
+policy:
+  allow_implicit_invocation: true
