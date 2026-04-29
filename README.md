@@ -87,7 +87,7 @@ Explicit activation works even when the regular internal context is disabled, be
 
 | Tool | Purpose |
 |---|---|
-| `list_skills` | List/search skills. `mode: "route"` applies the deterministic router used by prompt injection. Query mode also surfaces fuzzy candidates for partial names, missing hyphens, and nearby skill words before falling back to broad full-text search. |
+| `list_skills` | List/search skills. `mode: "route"` applies the deterministic router used by prompt injection. Query mode also surfaces fuzzy candidates for partial names, missing hyphens, and nearby skill words before falling back to broad full-text search. The plugin controls any enhanced search backend internally; models should not call `qmd`, `ck`, `grep`, or shell commands directly for skill discovery. |
 | `read_skill_file` | Read `SKILL.md` or another relative file inside a skill directory. Defaults to `SKILL.md`; pass `file_path` for support files found with `list_skill_files`. |
 | `list_skill_files` | Explore the relative file tree inside a skill directory, including common support folders such as `references/`, `templates/`, `examples/`, and `scripts/`. |
 | `run_command` | Execute shell commands only when explicitly enabled by the command safety setting and required by the active skill/task. Disabled by default. |
@@ -218,6 +218,7 @@ Use `list_skills` with `mode: "route"` to inspect the same routing decision outs
 |---|---:|---|
 | Internal Skills Context | On | Automatically provides skill instructions and available skill context under the hood. No system prompt setup required. |
 | Skill Discovery Budget | 15 | Upper bound for skill scan/consideration work before routing. Normal prompt injection is capped separately by deterministic routing, currently up to 3 routed candidates, so this is not a catalog-injection limit. |
+| Skill Search Backend | Built-in | Optional backend selector for plugin-controlled skill discovery. `auto`, `qmd`, and `ck` are reserved for enhanced local search and safely fall back to built-in exact/fuzzy/route/full-text behavior when unavailable. Models should still call `list_skills`, not raw backend commands. |
 | Skills Runtime Environment | Host-dependent | `Windows`, `WSL`, or `Both`. Controls path resolution, skill reads, and command target behavior. |
 | Skills Paths | Last saved/default | Semicolon-separated skill root directories. |
 | Command Execution Safety | Disabled | Controls whether `run_command` can execute shell commands. |

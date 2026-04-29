@@ -48,6 +48,21 @@ import type { DirectoryEntry, EffectiveConfig, SkillInfo } from "./types";
 const SKILL_STRUCTURE_HINT =
   "A skill directory uses SKILL.md as the entrypoint. Supporting assets may live in references/, templates/, examples/, scripts/, or other relative paths. Read SKILL.md first, then call list_skill_files and read_skill_file with a relative file_path for referenced support files when needed.";
 
+const SKILL_SEARCH_WORKFLOW_HINT =
+  "Use list_skills for skill discovery. The plugin controls the search backend internally: exact lookup, fuzzy matching, route scoring, optional enhanced local search when available, and built-in fallback. Do not call qmd, ck, grep, or shell commands directly for skill discovery.";
+
+function skillSearchBackendSummary(cfg: EffectiveConfig) {
+  return {
+    requested: cfg.skillSearchBackend,
+    active: "builtin",
+    fallbackUsed: cfg.skillSearchBackend !== "builtin",
+    fallbackReason: cfg.skillSearchBackend === "builtin"
+      ? undefined
+      : "External enhanced search providers are not active in this build path; built-in exact/fuzzy/route/full-text search is used as the safe fallback.",
+    workflowHint: SKILL_SEARCH_WORKFLOW_HINT,
+  };
+}
+
 function skillNextStepHint(skill: SkillInfo): string {
   return skill.hasExtraFiles
     ? "Call read_skill_file with this exact skill name first. If SKILL.md references support assets or more detail is needed, call list_skill_files, then read_skill_file again with the relative file_path."
@@ -76,7 +91,6 @@ function skillFrontmatterSummary(skill: SkillInfo): Record<string, unknown> | un
     const value = frontmatter[key];
     if (value !== undefined) summary[key] = value;
   }
-  if (Object.keys(summary).length === 0) return undefined;
   if (frontmatter.extensionMetadata && Object.keys(frontmatter.extensionMetadata).length > 0) {
     summary.extensionMetadata = frontmatter.extensionMetadata;
     summary.extensionMetadataNote = "Unrecognized frontmatter keys are preserved here for compatibility with other skill ecosystems. They are metadata only unless this plugin explicitly implements their behavior.";
@@ -87,7 +101,7 @@ function skillFrontmatterSummary(skill: SkillInfo): Record<string, unknown> | un
   if (frontmatter.arguments?.length || frontmatter.argumentHint) {
     summary.argumentsNote = "If invoking explicitly, pass remaining user text as the task payload; this plugin does not currently perform Claude Code-style argument placeholder substitution.";
   }
-  return summary;
+  return Object.keys(summary).length > 0 ? summary : undefined;
 }
 
 function exactSkillQueryCandidates(query: string): string[] {
@@ -300,6 +314,7 @@ async function getRuntimeContext(
     skillsPaths: cfg.skillsPaths,
     autoInject: cfg.autoInject,
     maxSkillsInContext: cfg.maxSkillsInContext,
+    skillSearchBackend: cfg.skillSearchBackend,
     wslDistro: cfg.wslDistro || undefined,
     hasWindowsShellPath: Boolean(cfg.windowsShellPath),
     hasWslShellPath: Boolean(cfg.wslShellPath),
@@ -383,6 +398,7 @@ export async function toolsProvider(ctl: PluginController) {
       "List or search available skills. " +
       "Without a query, returns all skills up to the limit. " +
       "With a query, searches skills and can surface fuzzy candidates for partial names, missing hyphens, or nearby skill words. " +
+      "The plugin controls the search backend internally; do not call qmd, ck, grep, or shell commands directly for skill discovery. " +
       "Pass mode='route' to use the same deterministic metadata router used by prompt injection. " +
       "Do not call this tool just because the user wrote $skill-name; explicit $skill activations are handled by the prompt preprocessor and may already be expanded. " +
       "For routed/search candidates, call read_skill_file on the best relevant exact skill name before starting covered work. If hasExtraFiles is true, use list_skill_files to inspect references/templates/examples/scripts only when SKILL.md or the task needs them.",
@@ -395,6 +411,7 @@ export async function toolsProvider(ctl: PluginController) {
       withToolLogging(ctl, "list_skills", { query, limit, mode }, TOOL_LIST_SKILLS_TIMEOUT_MS, async (requestId, toolSignal) => {
         const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skills", toolSignal);
         const cap = limit ?? LIST_SKILLS_DEFAULT_LIMIT;
+        const searchBackend = skillSearchBackendSummary(cfg);
 
         if (mode === "route" && !(query && query.trim())) {
           return {
@@ -402,6 +419,7 @@ export async function toolsProvider(ctl: PluginController) {
             mode: "route",
             found: 0,
             skills: [],
+            searchBackend,
             note: "Route mode needs a concrete query. If the user wrote $skill-name, treat it as explicit activation handled by the preprocessor instead of listing all skills.",
           };
         }
@@ -442,6 +460,7 @@ export async function toolsProvider(ctl: PluginController) {
                 threshold: 0,
                 queryTokens: trimmedQuery.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
                 exactMatch: true,
+                searchBackend,
                 note: "Exact skill match resolved directly before route scanning.",
                 skillStructureHint: SKILL_STRUCTURE_HINT,
                 selected: [
@@ -489,6 +508,7 @@ export async function toolsProvider(ctl: PluginController) {
               found: routed.selected.length,
               threshold: routed.threshold,
               queryTokens: routed.queryTokens,
+              searchBackend,
               selected: routed.selected.map((candidate) => ({
                 name: candidate.skill.name,
                 description: candidate.skill.description,
@@ -540,6 +560,7 @@ export async function toolsProvider(ctl: PluginController) {
               found: 1,
               skillsEnvironment: cfg.skillsEnvironment,
               roots,
+              searchBackend,
               note: "Exact skill match resolved directly without scanning all skill files.",
               skillStructureHint: SKILL_STRUCTURE_HINT,
               skills: [
@@ -584,6 +605,7 @@ export async function toolsProvider(ctl: PluginController) {
               found: fuzzy.length,
               skillsEnvironment: cfg.skillsEnvironment,
               roots,
+              searchBackend,
               note: "Fuzzy skill-name candidates matched before full-text search. Pick the intended skill and call read_skill_file with its exact name.",
               skillStructureHint: SKILL_STRUCTURE_HINT,
               skills: fuzzy.map(skillCandidateResult),
@@ -604,6 +626,7 @@ export async function toolsProvider(ctl: PluginController) {
               found: 0,
               skills: [],
               roots,
+              searchBackend,
               note: "No skills matched. Try a broader query or omit the query to list all skills. Use concise terms from the user's task, expected file type, tool name, or workflow.",
               skillStructureHint: SKILL_STRUCTURE_HINT,
             };
@@ -620,6 +643,7 @@ export async function toolsProvider(ctl: PluginController) {
             skillsEnvironment: cfg.skillsEnvironment,
             roots,
             skillStructureHint: SKILL_STRUCTURE_HINT,
+            searchBackend,
             ...(results.length > cap
               ? { note: `Showing top ${cap} of ${results.length} matches.` }
               : {}),
@@ -656,6 +680,7 @@ export async function toolsProvider(ctl: PluginController) {
             skills: [],
             note: "No skills found. Create skill directories with a SKILL.md file inside the configured skills paths.",
             skillStructureHint: SKILL_STRUCTURE_HINT,
+            searchBackend,
           };
         }
 
@@ -669,6 +694,7 @@ export async function toolsProvider(ctl: PluginController) {
           skillsEnvironment: cfg.skillsEnvironment,
           roots,
           skillStructureHint: SKILL_STRUCTURE_HINT,
+          searchBackend,
           ...(skills.length > cap
             ? { note: `Showing ${cap} of ${skills.length} skills.` }
             : {}),

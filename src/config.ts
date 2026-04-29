@@ -44,6 +44,34 @@ export const configSchematics = createConfigSchematics()
     DEFAULT_MAX_SKILLS_IN_CONTEXT,
   )
   .field(
+    "skillSearchBackend",
+    "select",
+    {
+      displayName: "Skill Search Backend",
+      subtitle:
+        "Optional backend for skill discovery. Built-in is dependency-free. Auto/qmd/ck are reserved for plugin-controlled enhanced search and fall back to built-in behavior when unavailable.",
+      options: [
+        {
+          value: "builtin",
+          displayName: "Built-in - exact, fuzzy, route, and full-text search (recommended)",
+        },
+        {
+          value: "auto",
+          displayName: "Auto - use enhanced local search when available, otherwise built-in",
+        },
+        {
+          value: "qmd",
+          displayName: "QMD - use plugin-controlled qmd search when available, otherwise built-in",
+        },
+        {
+          value: "ck",
+          displayName: "CK - use plugin-controlled ck search when available, otherwise built-in",
+        },
+      ],
+    },
+    "builtin",
+  )
+  .field(
     "skillsEnvironment",
     "select",
     {

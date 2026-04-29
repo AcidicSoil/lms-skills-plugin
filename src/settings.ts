@@ -10,7 +10,7 @@ import {
 } from "./constants";
 import { configSchematics } from "./config";
 import { detectHostPlatform, parseSkillsEnvironment } from "./environment";
-import type { PersistedSettings, EffectiveConfig } from "./types";
+import type { PersistedSettings, EffectiveConfig, SkillSearchBackend } from "./types";
 import type { CommandExecutionMode } from "./commandSafety";
 import type { PluginController } from "./pluginTypes";
 
@@ -19,6 +19,13 @@ function parseCommandExecutionMode(value: unknown): CommandExecutionMode {
     return value;
   }
   return "disabled";
+}
+
+function parseSkillSearchBackend(value: unknown): SkillSearchBackend {
+  if (value === "builtin" || value === "auto" || value === "qmd" || value === "ck") {
+    return value;
+  }
+  return "builtin";
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -31,6 +38,7 @@ const DEFAULTS: PersistedSettings = {
   wslShellPath: "",
   wslDistro: "",
   commandExecutionMode: "disabled",
+  skillSearchBackend: "builtin",
 };
 
 let cachedConfig: EffectiveConfig | null = null;
@@ -70,6 +78,7 @@ export function loadSettings(): PersistedSettings {
       wslShellPath: typeof parsed.wslShellPath === "string" ? parsed.wslShellPath : "",
       wslDistro: typeof parsed.wslDistro === "string" ? parsed.wslDistro : "",
       commandExecutionMode: parseCommandExecutionMode(parsed.commandExecutionMode),
+      skillSearchBackend: parseSkillSearchBackend(parsed.skillSearchBackend),
     };
   } catch {
     return { ...DEFAULTS };
@@ -109,6 +118,9 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
   const commandExecutionMode = parseCommandExecutionMode(
     c.get("commandExecutionMode") || saved.commandExecutionMode,
   );
+  const skillSearchBackend = parseSkillSearchBackend(
+    c.get("skillSearchBackend") || saved.skillSearchBackend,
+  );
 
   if (rawPaths === RESET_TO_DEFAULT_SENTINEL) {
     const next: PersistedSettings = {
@@ -121,6 +133,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
       wslShellPath,
       wslDistro,
       commandExecutionMode,
+      skillSearchBackend,
     };
     saveSettings(next);
     cachedConfig = next;
@@ -146,6 +159,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     wslShellPath,
     wslDistro,
     commandExecutionMode,
+    skillSearchBackend,
   };
 
   if (JSON.stringify(next) !== JSON.stringify(saved)) saveSettings(next);

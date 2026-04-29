@@ -1,6 +1,8 @@
 import type { RuntimeTargetName, SkillsEnvironment } from "./environment";
 import type { CommandExecutionMode } from "./commandSafety";
 
+export type SkillSearchBackend = "builtin" | "auto" | "qmd" | "ck";
+
 export interface SkillInfo {
   name: string;
   description: string;
@@ -59,6 +61,7 @@ export interface PersistedSettings {
   wslShellPath: string;
   shellPath: string;
   commandExecutionMode: CommandExecutionMode;
+  skillSearchBackend: SkillSearchBackend;
 }
 
 export interface EffectiveConfig {
@@ -71,6 +74,7 @@ export interface EffectiveConfig {
   wslShellPath: string;
   shellPath: string;
   commandExecutionMode: CommandExecutionMode;
+  skillSearchBackend: SkillSearchBackend;
 }
 
 export interface DirectoryEntry {
