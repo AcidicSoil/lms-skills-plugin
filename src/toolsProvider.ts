@@ -28,6 +28,8 @@ import {
 import { createRequestId, logDiagnostic, serializeError, timedStep } from "./diagnostics";
 import { validateCommandSafety } from "./commandSafety";
 import { routeSkills, summarizeRouteCandidate } from "./skillRouter";
+import { searchSkillsWithEnhancedBackend } from "./enhancedSearchProvider";
+import type { EnhancedSkillSearchResult } from "./enhancedSearchProvider";
 import { createTimeoutSignal, isTimeoutError } from "./timeout";
 import {
   commandSchema,
@@ -51,14 +53,23 @@ const SKILL_STRUCTURE_HINT =
 const SKILL_SEARCH_WORKFLOW_HINT =
   "Use list_skills for skill discovery. The plugin controls the search backend internally: exact lookup, fuzzy matching, route scoring, optional enhanced local search when available, and built-in fallback. Do not call qmd, ck, grep, or shell commands directly for skill discovery.";
 
-function skillSearchBackendSummary(cfg: EffectiveConfig) {
+function skillSearchBackendSummary(cfg: EffectiveConfig, result?: EnhancedSkillSearchResult) {
+  if (result) {
+    return {
+      requested: result.requested,
+      active: result.active,
+      fallbackUsed: result.fallbackUsed,
+      fallbackReason: result.fallbackReason,
+      available: result.available,
+      rawResultCount: result.rawResultCount,
+      diagnostics: result.diagnostics,
+      workflowHint: SKILL_SEARCH_WORKFLOW_HINT,
+    };
+  }
   return {
     requested: cfg.skillSearchBackend,
     active: "builtin",
-    fallbackUsed: cfg.skillSearchBackend !== "builtin",
-    fallbackReason: cfg.skillSearchBackend === "builtin"
-      ? undefined
-      : "External enhanced search providers are not active in this build path; built-in exact/fuzzy/route/full-text search is used as the safe fallback.",
+    fallbackUsed: false,
     workflowHint: SKILL_SEARCH_WORKFLOW_HINT,
   };
 }
@@ -580,6 +591,55 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
+          const enhanced = await timedStep(
+            requestId,
+            "list_skills",
+            "enhanced_skill_search",
+            async () => searchSkillsWithEnhancedBackend(cfg.skillSearchBackend, roots, registry, trimmedQuery, cap, toolSignal),
+            { query: trimmedQuery, backend: cfg.skillSearchBackend, rootCount: roots.length },
+          );
+          const enhancedSearchBackend = skillSearchBackendSummary(cfg, enhanced);
+
+          if (enhanced.candidates.length > 0) {
+            logDiagnostic({
+              event: "list_skills_result",
+              requestId,
+              tool: "list_skills",
+              total: enhanced.candidates.length,
+              returned: enhanced.candidates.length,
+              mode: "enhanced",
+              query: trimmedQuery,
+              backend: enhanced.active,
+              requestedBackend: enhanced.requested,
+            });
+            return {
+              query: trimmedQuery,
+              mode: "enhanced",
+              total: enhanced.candidates.length,
+              found: enhanced.candidates.length,
+              skillsEnvironment: cfg.skillsEnvironment,
+              roots,
+              searchBackend: enhancedSearchBackend,
+              note: `Enhanced ${enhanced.active} search returned resolvable skill candidates. Pick the intended skill and call read_skill_file with its exact name.`,
+              skillStructureHint: SKILL_STRUCTURE_HINT,
+              skills: enhanced.candidates.map((skill, index) => ({
+                name: skill.name,
+                description: skill.description,
+                tags: skill.tags.length > 0 ? skill.tags : undefined,
+                environment: skill.environment,
+                skillMdPath: skill.skillMdPath,
+                displayPath: skill.displayPath,
+                hasExtraFiles: skill.hasExtraFiles,
+                score: Math.max(1, 100 - index),
+                confidence: index < 3 ? "high" : "medium",
+                reasons: [`enhanced:${enhanced.active}`],
+                source: enhanced.active,
+                nextStep: skillNextStepHint(skill),
+                frontmatter: skillFrontmatterSummary(skill),
+              })),
+            };
+          }
+
           const fuzzy = await timedStep(
             requestId,
             "list_skills",
@@ -605,7 +665,7 @@ export async function toolsProvider(ctl: PluginController) {
               found: fuzzy.length,
               skillsEnvironment: cfg.skillsEnvironment,
               roots,
-              searchBackend,
+              searchBackend: enhancedSearchBackend,
               note: "Fuzzy skill-name candidates matched before full-text search. Pick the intended skill and call read_skill_file with its exact name.",
               skillStructureHint: SKILL_STRUCTURE_HINT,
               skills: fuzzy.map(skillCandidateResult),
@@ -626,7 +686,7 @@ export async function toolsProvider(ctl: PluginController) {
               found: 0,
               skills: [],
               roots,
-              searchBackend,
+              searchBackend: enhancedSearchBackend,
               note: "No skills matched. Try a broader query or omit the query to list all skills. Use concise terms from the user's task, expected file type, tool name, or workflow.",
               skillStructureHint: SKILL_STRUCTURE_HINT,
             };
@@ -643,7 +703,7 @@ export async function toolsProvider(ctl: PluginController) {
             skillsEnvironment: cfg.skillsEnvironment,
             roots,
             skillStructureHint: SKILL_STRUCTURE_HINT,
-            searchBackend,
+            searchBackend: enhancedSearchBackend,
             ...(results.length > cap
               ? { note: `Showing top ${cap} of ${results.length} matches.` }
               : {}),
