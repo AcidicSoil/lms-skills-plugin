@@ -30,8 +30,8 @@ export const configSchematics = createConfigSchematics()
     "maxSkillsInContext",
     "numeric",
     {
-      displayName: "Max Skills in Context",
-      subtitle: `Maximum number of skills to include in the internal skills context (${MIN_MAX_SKILLS_IN_CONTEXT}-${MAX_MAX_SKILLS_IN_CONTEXT})`,
+      displayName: "Skill Discovery Budget",
+      subtitle: `Maximum number of skills to scan/consider before routing (${MIN_MAX_SKILLS_IN_CONTEXT}-${MAX_MAX_SKILLS_IN_CONTEXT}). Prompt injection remains capped to the top routed skills, not this full number.`,
       min: MIN_MAX_SKILLS_IN_CONTEXT,
       max: MAX_MAX_SKILLS_IN_CONTEXT,
       int: true,

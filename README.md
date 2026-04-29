@@ -217,7 +217,7 @@ Use `list_skills` with `mode: "route"` to inspect the same routing decision outs
 | Setting | Default | Description |
 |---|---:|---|
 | Internal Skills Context | On | Automatically provides skill instructions and available skill context under the hood. No system prompt setup required. |
-| Max Skills in Context | 15 | Upper bound for discovery work. Normal prompt injection is further capped by deterministic routing, currently up to 3 routed candidates. |
+| Skill Discovery Budget | 15 | Upper bound for skill scan/consideration work before routing. Normal prompt injection is capped separately by deterministic routing, currently up to 3 routed candidates, so this is not a catalog-injection limit. |
 | Skills Runtime Environment | Host-dependent | `Windows`, `WSL`, or `Both`. Controls path resolution, skill reads, and command target behavior. |
 | Skills Paths | Last saved/default | Semicolon-separated skill root directories. |
 | Command Execution Safety | Disabled | Controls whether `run_command` can execute shell commands. |
