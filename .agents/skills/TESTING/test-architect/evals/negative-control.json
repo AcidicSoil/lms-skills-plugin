@@ -1,0 +1,11 @@
+{
+  "skills": ["test-architect"],
+  "query": "Run our test suite and fix any failing tests. The CI pipeline is broken because 3 tests are failing.",
+  "files": [],
+  "expected_behavior": [
+    "Agent does NOT activate test-architect skill",
+    "Agent recognizes this as a test execution and fix task, not test design",
+    "Agent does NOT attempt to run tests through test-architect",
+    "Agent may suggest using test-architect flaky mode for diagnosis if appropriate, but does not activate it for running tests"
+  ]
+}

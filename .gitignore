@@ -3,8 +3,7 @@ node_modules
 .lmstudio
 *.lock
 *-lock.json
-.relayforge/
-.agents/
+
 
 # Logs
 logs
@@ -32,4 +31,6 @@ node_modules/
 # tasks.json
 # tasks/
 .archived/
-.serena/
+#.serena/
+.relayforge/
+#.agents/

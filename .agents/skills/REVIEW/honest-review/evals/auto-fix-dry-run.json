@@ -1,0 +1,15 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review",
+  "files": ["src/api/users.py", "src/auth/middleware.py"],
+  "expected_behavior": [
+    "Agent presents findings with offer to implement fixes",
+    "When user selects 'implement fixes', agent loads references/auto-fix-protocol.md",
+    "Agent generates unified diff previews for each finding without writing to disk",
+    "Agent presents all diffs with finding IDs, confidence, and effort estimates",
+    "Agent asks user for approval: all, select, skip, or edit",
+    "Agent checks for overlapping edits and dependent fixes before applying",
+    "Agent verifies clean git state and creates checkpoint before applying",
+    "Agent commits applied fixes atomically and runs post-fix verification (build, tests)"
+  ]
+}

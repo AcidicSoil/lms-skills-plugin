@@ -1,0 +1,14 @@
+{
+  "skills": ["shell-scripter"],
+  "query": "/shell-scripter create a backup script that copies a directory to a timestamped archive",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to create mode based on 'create' keyword",
+    "Agent generates a bash script with #!/usr/bin/env bash shebang",
+    "Agent includes set -euo pipefail",
+    "Agent includes error handling for directory existence and cp/tar commands",
+    "Agent includes a usage function for argument handling",
+    "Agent quotes all variable expansions",
+    "Agent runs script-analyzer.py on the generated script"
+  ]
+}

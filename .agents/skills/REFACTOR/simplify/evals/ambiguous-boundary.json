@@ -1,0 +1,16 @@
+{
+  "skills": ["simplify"],
+  "query": "Simplify the login flow across auth, middleware, and session handling, but tell me first if this needs wider changes.",
+  "files": [
+    "src/auth/login.ts",
+    "src/middleware/auth.ts",
+    "src/session/store.ts"
+  ],
+  "expected_behavior": [
+    "Agent recognizes a simplify request but detects ambiguous or cross-module boundaries",
+    "Agent does NOT start editing immediately when wider changes may be required",
+    "Agent asks for clarification or recommends Analyze first before attempting Apply mode",
+    "Agent makes the module-boundary or blast-radius risk explicit",
+    "Agent preserves the simplify skill's behavior-first contract"
+  ]
+}

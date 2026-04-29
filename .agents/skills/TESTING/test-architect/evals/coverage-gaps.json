@@ -1,0 +1,14 @@
+{
+  "skills": ["test-architect"],
+  "query": "/test-architect gaps",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates test-architect skill in gaps mode",
+    "Agent searches for coverage reports (coverage.json, lcov.info, etc.)",
+    "Agent runs coverage-analyzer.py on the found report",
+    "Agent ranks gaps by complexity-weighted risk, not raw line count",
+    "Agent prioritizes security/auth code gaps as P0",
+    "Agent recommends specific test types (unit/integration/e2e) per gap",
+    "Agent renders dashboard if 10+ gaps are found"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "skills": ["test-architect"],
+  "query": "/test-architect design tests for the user authentication module",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to Design mode",
+    "Agent reads the authentication module code",
+    "Agent designs test strategy with test pyramid (unit, integration, e2e)",
+    "Agent identifies key scenarios: login, logout, token refresh, password reset",
+    "Agent presents test plan with priority ranking and coverage targets"
+  ]
+}

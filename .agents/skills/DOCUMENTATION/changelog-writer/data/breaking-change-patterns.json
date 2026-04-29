@@ -1,0 +1,61 @@
+{
+  "patterns": {
+    "python": {
+      "high_confidence": [
+        "removed from __all__",
+        "deleted public function",
+        "changed required parameter",
+        "removed class or module",
+        "changed return type"
+      ],
+      "medium_confidence": [
+        "added required parameter",
+        "changed default value",
+        "moved module to different package",
+        "renamed public symbol",
+        "changed exception type raised"
+      ],
+      "file_patterns": ["*.py", "pyproject.toml", "setup.py", "setup.cfg"]
+    },
+    "javascript": {
+      "high_confidence": [
+        "removed named export",
+        "changed default export",
+        "removed package.json exports entry",
+        "changed main/module field",
+        "dropped Node.js version support"
+      ],
+      "medium_confidence": [
+        "changed function signature",
+        "renamed exported symbol",
+        "changed TypeScript type definition",
+        "modified peer dependency requirements",
+        "changed event names"
+      ],
+      "file_patterns": ["*.js", "*.ts", "*.mjs", "*.cjs", "package.json"]
+    },
+    "general": {
+      "high_confidence": [
+        "removed CLI flag or command",
+        "changed environment variable name",
+        "removed config option",
+        "changed database schema (column removal)",
+        "changed API endpoint path"
+      ],
+      "medium_confidence": [
+        "changed default behavior",
+        "renamed config key",
+        "changed error response format",
+        "modified authentication flow",
+        "changed file format version"
+      ],
+      "file_patterns": ["*.yml", "*.yaml", "*.json", "*.toml", "Dockerfile", "Makefile"]
+    }
+  },
+  "keywords": {
+    "removal": ["remove", "delete", "drop", "deprecate", "eliminate", "strip"],
+    "rename": ["rename", "move", "migrate", "replace", "swap"],
+    "behavior_change": ["change default", "modify behavior", "update semantics", "alter"],
+    "compatibility": ["incompatible", "breaking", "not backward compatible"]
+  }
+}

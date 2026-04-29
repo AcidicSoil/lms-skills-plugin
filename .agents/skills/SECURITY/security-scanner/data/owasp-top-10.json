@@ -1,0 +1,82 @@
+[
+  {
+    "id": "A01:2021",
+    "name": "Broken Access Control",
+    "description": "Restrictions on what authenticated users are allowed to do are often not properly enforced.",
+    "cwe_ids": ["CWE-200", "CWE-201", "CWE-352", "CWE-639", "CWE-862", "CWE-863"],
+    "code_patterns": ["missing auth middleware", "direct object reference", "CORS wildcard", "path traversal", "missing CSRF"],
+    "remediation": "Enforce server-side access control on every endpoint. Deny by default. Use allowlists."
+  },
+  {
+    "id": "A02:2021",
+    "name": "Cryptographic Failures",
+    "description": "Failures related to cryptography which often lead to sensitive data exposure.",
+    "cwe_ids": ["CWE-259", "CWE-327", "CWE-331", "CWE-328"],
+    "code_patterns": ["weak hash (MD5/SHA1)", "hardcoded key", "ECB mode", "no salt", "weak random"],
+    "remediation": "Use bcrypt/argon2 for passwords, AES-GCM for encryption, cryptographic PRNG for randomness."
+  },
+  {
+    "id": "A03:2021",
+    "name": "Injection",
+    "description": "User-supplied data is not validated, filtered, or sanitized by the application.",
+    "cwe_ids": ["CWE-79", "CWE-89", "CWE-73", "CWE-77", "CWE-78"],
+    "code_patterns": ["SQL string concat", "command injection", "XSS innerHTML", "template injection", "LDAP injection"],
+    "remediation": "Use parameterized queries, input validation, output encoding. Never concat user input into queries."
+  },
+  {
+    "id": "A04:2021",
+    "name": "Insecure Design",
+    "description": "Missing or ineffective control design. Different from implementation flaws.",
+    "cwe_ids": ["CWE-209", "CWE-256", "CWE-501", "CWE-522"],
+    "code_patterns": ["no rate limiting", "verbose errors", "missing input limits", "credential in URL"],
+    "remediation": "Threat model during design. Implement rate limiting, input validation, least privilege."
+  },
+  {
+    "id": "A05:2021",
+    "name": "Security Misconfiguration",
+    "description": "Missing appropriate security hardening or improperly configured permissions.",
+    "cwe_ids": ["CWE-16", "CWE-611", "CWE-1004"],
+    "code_patterns": ["debug mode", "default credentials", "permissive headers", "directory listing", "XXE"],
+    "remediation": "Harden defaults. Disable debug mode, directory listings, unnecessary features."
+  },
+  {
+    "id": "A06:2021",
+    "name": "Vulnerable and Outdated Components",
+    "description": "Using components with known vulnerabilities.",
+    "cwe_ids": ["CWE-1035", "CWE-1104"],
+    "code_patterns": ["outdated dependency", "unmaintained package", "known CVE", "typosquatting"],
+    "remediation": "Regular updates. Use lockfiles. Monitor advisories. Pin exact versions."
+  },
+  {
+    "id": "A07:2021",
+    "name": "Identification and Authentication Failures",
+    "description": "Confirmation of the user's identity, authentication, and session management is critical.",
+    "cwe_ids": ["CWE-287", "CWE-256", "CWE-307", "CWE-384"],
+    "code_patterns": ["weak password policy", "missing brute force protection", "session fixation", "plaintext password"],
+    "remediation": "MFA, strong password policies, account lockout, session regeneration."
+  },
+  {
+    "id": "A08:2021",
+    "name": "Software and Data Integrity Failures",
+    "description": "Code and infrastructure that does not protect against integrity violations.",
+    "cwe_ids": ["CWE-502", "CWE-829"],
+    "code_patterns": ["insecure deserialization", "missing integrity check", "auto-update without verification"],
+    "remediation": "Validate integrity of serialized data. Use SafeLoader, verify signatures."
+  },
+  {
+    "id": "A09:2021",
+    "name": "Security Logging and Monitoring Failures",
+    "description": "Without logging and monitoring, breaches cannot be detected.",
+    "cwe_ids": ["CWE-117", "CWE-223", "CWE-532", "CWE-778"],
+    "code_patterns": ["missing auth logging", "sensitive data in logs", "no error monitoring", "missing audit trail"],
+    "remediation": "Log security events. Never log sensitive data. Monitor for anomalies."
+  },
+  {
+    "id": "A10:2021",
+    "name": "Server-Side Request Forgery (SSRF)",
+    "description": "SSRF flaws occur when a web application fetches a remote resource without validating the URL.",
+    "cwe_ids": ["CWE-918"],
+    "code_patterns": ["user-supplied URL to HTTP client", "internal network access", "DNS rebinding"],
+    "remediation": "Validate and sanitize URLs. Use allowlists. Block internal IP ranges."
+  }
+]

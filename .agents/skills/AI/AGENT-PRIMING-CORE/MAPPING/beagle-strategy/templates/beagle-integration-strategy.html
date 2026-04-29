@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{TITLE}}</title>
+  {{BEAGLE_SHARED_HEAD}}
+</head>
+<body>
+  <div class="page-progress" aria-hidden="true"></div>
+  <main class="beagle-shell-frame">
+    <header class="ve-card">
+      <p class="beagle-kicker">Browser-first artifact</p>
+      <h1>{{TITLE}}</h1>
+      <p>{{SUBTITLE}}</p>
+      <div class="beagle-inline-list">
+        <span class="beagle-chip">Target: {{TARGET_PROJECT_NAME}}</span>
+        <span class="beagle-chip">Boundary: {{BOUNDARY_MODE}}</span>
+        <span class="beagle-chip">Strategy: {{STRATEGY_ID}}</span>
+      </div>
+    </header>
+
+    <nav id="toc" class="toc" aria-label="table of contents">
+      <a href="#summary">Summary</a>
+      <a href="#grounding">Repo grounding</a>
+      <a href="#skills">Skills</a>
+      <a href="#plan">Plan</a>
+      <a href="#workflows">Workflows</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#guardrails">Guardrails</a>
+    </nav>
+
+    <section id="summary" class="ve-card">
+      <h2>Recommended operating model</h2>
+      <p>{{OPERATING_MODEL_SUMMARY}}</p>
+      <ul>{{OPERATING_MODEL_PRINCIPLES}}</ul>
+      <h3>Installation for agents only</h3>
+      <p>{{INSTALLATION_SUMMARY}}</p>
+      <ul>{{INSTALLATION_STEPS}}</ul>
+    </section>
+
+    <section id="grounding" class="ve-card">
+      <h2>Repo grounding</h2>
+      <p>{{REPO_GROUNDING_SUMMARY}}</p>
+      <div class="beagle-lane-grid">{{REPO_GROUNDING_HTML}}</div>
+    </section>
+
+    <section id="gates" class="ve-card">
+      <h2>Mandatory agent gates</h2>
+      <div class="beagle-lane-grid">{{GATES_HTML}}</div>
+    </section>
+
+    <section id="skills" class="ve-card">
+      <h2>Select repo-governing Beagle skills</h2>
+      <p>Chosen skills: {{CHOSEN_SKILL_COUNT}}</p>
+      <div class="beagle-lane-grid">{{CHOSEN_SKILLS_HTML}}</div>
+    </section>
+
+    <section id="plan" class="ve-card">
+      <h2>Implementation plan</h2>
+      <p>{{IMPLEMENTATION_PLAN_SUMMARY}}</p>
+      <p>Phases: {{IMPLEMENTATION_PHASE_COUNT}} · Tasks: {{IMPLEMENTATION_TASK_COUNT}} · Scenarios: {{SCENARIO_COUNT}}</p>
+      <div class="beagle-lane-grid">{{IMPLEMENTATION_PHASES_HTML}}</div>
+      <label for="phase-filter">Filter tasks by phase</label>
+      <select id="phase-filter">{{PHASE_FILTER_OPTIONS}}</select>
+      <div class="beagle-lane-grid">{{IMPLEMENTATION_TASKS_HTML}}</div>
+    </section>
+
+    <section id="workflows" class="ve-card">
+      <h2>Scenario workflows</h2>
+      <div class="beagle-lane-grid">{{SCENARIO_FLOW_HTML}}</div>
+    </section>
+
+    <section id="evidence" class="ve-card">
+      <h2>Evidence and provenance</h2>
+      <h3>Verified facts</h3>
+      <div class="beagle-lane-grid">{{VERIFIED_FACTS_HTML}}</div>
+      <h3>Inferred conclusions</h3>
+      <div class="beagle-lane-grid">{{INFERRED_CONCLUSIONS_HTML}}</div>
+      <h3>Recommended follow-ups</h3>
+      <div class="beagle-lane-grid">{{FOLLOW_UPS_HTML}}</div>
+      <h3>Residual risks</h3>
+      <div class="beagle-lane-grid">{{RESIDUAL_RISKS_HTML}}</div>
+      <h3>Default verification commands</h3>
+      <pre>{{DEFAULT_VERIFICATION_COMMANDS}}</pre>
+    </section>
+
+    <section id="guardrails" class="ve-card">
+      <h2>Guardrails, decisions, and next steps</h2>
+      <h3>What not to do</h3>
+      <ul>{{ANTI_GOALS}}</ul>
+      <h3>Decisions</h3>
+      <ul>{{DECISIONS}}</ul>
+      <h3>Next steps</h3>
+      <ul>{{NEXT_STEPS}}</ul>
+    </section>
+  </main>
+</body>
+</html>

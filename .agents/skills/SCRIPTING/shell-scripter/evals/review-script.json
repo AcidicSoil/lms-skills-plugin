@@ -1,0 +1,14 @@
+{
+  "skills": ["shell-scripter"],
+  "query": "/shell-scripter review scripts/deploy.sh",
+  "files": ["scripts/deploy.sh"],
+  "expected_behavior": [
+    "Agent dispatches to review mode based on 'review' keyword",
+    "Agent reads the target script",
+    "Agent runs script-analyzer.py on the file",
+    "Agent references ShellCheck rule IDs (e.g., SC2086) with explanations",
+    "Agent groups findings by severity: error > warning > info > style",
+    "Agent provides concrete fixes for each finding",
+    "Agent does NOT modify the script being reviewed"
+  ]
+}

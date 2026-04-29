@@ -1,0 +1,14 @@
+{
+  "skills": ["simplify"],
+  "query": "/simplify apply src/auth/session.py",
+  "files": ["src/auth/session.py"],
+  "expected_behavior": [
+    "Agent dispatches to Mode B: Apply based on the 'apply' keyword",
+    "Agent keeps the work scoped to src/auth/session.py unless a directly adjacent change is required",
+    "Agent reads references/simplification-taxonomy.md and references/behavior-preservation.md before editing",
+    "Agent reads references/output-formats.md to structure the Apply response",
+    "Agent applies only behavior-preserving simplifications such as flattening control flow or removing redundant indirection",
+    "Agent avoids bundling unrelated bug fixes, debt work, or perf-only changes",
+    "Agent reports what changed, why it is simpler, and what verification basis was used"
+  ]
+}

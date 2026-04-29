@@ -1,0 +1,15 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review 42",
+  "files": [],
+  "expected_behavior": [
+    "Agent recognizes argument '42' as a PR number",
+    "Agent dispatches to PR review mode using gh pr diff 42",
+    "Agent runs Wave 0 triage on PR changed files",
+    "Agent identifies task intent from PR title and description",
+    "Agent scales review strategy based on PR file count",
+    "Agent spawns research subagents (Wave 2) to validate findings with external evidence",
+    "Agent runs 8-step Judge protocol (Wave 3) to normalize, deduplicate, and rank findings",
+    "Agent presents findings with confidence scores and citations"
+  ]
+}

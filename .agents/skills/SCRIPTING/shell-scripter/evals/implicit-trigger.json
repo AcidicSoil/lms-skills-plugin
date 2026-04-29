@@ -1,0 +1,11 @@
+{
+  "skills": ["shell-scripter"],
+  "query": "Can you write me a shell script that monitors disk usage and sends an alert when it exceeds 90%?",
+  "files": [],
+  "expected_behavior": [
+    "Agent recognizes this as a shell script creation request",
+    "Agent auto-detects create mode from the natural language description",
+    "Agent generates a bash script with proper error handling",
+    "Agent does NOT invoke python-conventions or devops-engineer skills"
+  ]
+}

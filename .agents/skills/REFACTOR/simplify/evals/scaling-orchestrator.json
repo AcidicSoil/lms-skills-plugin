@@ -1,0 +1,19 @@
+{
+  "skills": ["simplify"],
+  "query": "/simplify apply src/services/auth.ts src/routes/session.ts src/workers/sync.ts src/lib/session.ts src/controllers/login.ts src/models/session.ts",
+  "files": [
+    "src/services/auth.ts",
+    "src/routes/session.ts",
+    "src/workers/sync.ts",
+    "src/lib/session.ts",
+    "src/controllers/login.ts",
+    "src/models/session.ts"
+  ],
+  "expected_behavior": [
+    "Agent recognizes a 6+ file simplification request as exceeding the inline scaling tier",
+    "Agent follows the scaling strategy and routes the user toward orchestrator before editing",
+    "Agent names orchestrator explicitly as the correct tool for the wave-based multi-file plan",
+    "Agent does NOT silently attempt a wide multi-file simplification pass inline",
+    "Agent preserves the behavior-first contract while narrowing or redirecting the scope"
+  ]
+}

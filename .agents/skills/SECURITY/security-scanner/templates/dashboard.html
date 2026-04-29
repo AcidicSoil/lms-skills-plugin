@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Scanner Report</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --card: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --dim: #8b949e;
+  --accent: #58a6ff;
+  --critical: #f85149;
+  --high: #db6d28;
+  --medium: #d29922;
+  --low: #3fb950;
+  --info: #8b949e;
+  --radius: 8px;
+  --gap: 16px;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f8fa;
+    --card: #ffffff;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --dim: #656d76;
+    --accent: #0969da;
+    --critical: #cf222e;
+    --high: #bc4c00;
+    --medium: #9a6700;
+    --low: #1a7f37;
+    --info: #656d76;
+  }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding: var(--gap); }
+h1 { font-size: 1.5rem; margin-bottom: var(--gap); }
+h2 { font-size: 1.1rem; margin-bottom: 8px; color: var(--dim); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--gap); margin-bottom: var(--gap); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--gap); }
+.stat { text-align: center; }
+.stat .value { font-size: 2rem; font-weight: 700; }
+.stat .label { color: var(--dim); font-size: 0.85rem; }
+.severity-critical { color: var(--critical); }
+.severity-high { color: var(--high); }
+.severity-medium { color: var(--medium); }
+.severity-low { color: var(--low); }
+.severity-info { color: var(--info); }
+.pie-container { display: flex; justify-content: center; align-items: center; gap: 24px; margin: var(--gap) 0; }
+.pie { width: 160px; height: 160px; border-radius: 50%; position: relative; }
+.legend { display: flex; flex-direction: column; gap: 6px; }
+.legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+th { color: var(--dim); font-weight: 600; }
+tr:hover { background: rgba(88, 166, 255, 0.05); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+.badge-critical { background: rgba(248, 81, 73, 0.15); color: var(--critical); }
+.badge-high { background: rgba(219, 109, 40, 0.15); color: var(--high); }
+.badge-medium { background: rgba(210, 153, 34, 0.15); color: var(--medium); }
+.badge-low { background: rgba(63, 185, 80, 0.15); color: var(--low); }
+.badge-info { background: rgba(139, 148, 158, 0.15); color: var(--info); }
+.gauge-container { display: flex; justify-content: center; gap: 32px; margin: var(--gap) 0; }
+.gauge { text-align: center; }
+.gauge-ring { width: 100px; height: 100px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; margin: 0 auto 8px; }
+.gauge-label { font-size: 0.8rem; color: var(--dim); }
+.heatmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 4px; }
+.heat-cell { padding: 6px 8px; border-radius: 4px; font-size: 0.75rem; text-align: center; }
+.section { margin-bottom: 24px; }
+.no-data { text-align: center; color: var(--dim); padding: 40px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<h1>Security Scanner Report</h1>
+<script id="data" type="application/json">{"findings":[],"compliance":null,"dependencies":null,"secrets_summary":null}</script>
+<div id="app"></div>
+<script>
+(function(){
+  function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  var raw;
+  try{raw=JSON.parse(document.getElementById('data').textContent);}catch(e){document.getElementById('app').innerHTML='<div class="no-data">Failed to parse report data</div>';return;}
+  var findings=raw.findings||[];
+  var compliance=raw.compliance||null;
+  var deps=raw.dependencies||null;
+  var secrets=raw.secrets_summary||null;
+  var html='';
+  // Summary stats
+  var bySev={CRITICAL:0,HIGH:0,MEDIUM:0,LOW:0,INFO:0};
+  findings.forEach(function(f){bySev[f.severity]=(bySev[f.severity]||0)+1;});
+  var total=findings.length;
+  html+='<div class="grid">';
+  html+='<div class="card stat"><div class="value">'+total+'</div><div class="label">Total Findings</div></div>';
+  html+='<div class="card stat"><div class="value severity-critical">'+bySev.CRITICAL+'</div><div class="label">Critical</div></div>';
+  html+='<div class="card stat"><div class="value severity-high">'+bySev.HIGH+'</div><div class="label">High</div></div>';
+  html+='<div class="card stat"><div class="value severity-medium">'+bySev.MEDIUM+'</div><div class="label">Medium</div></div>';
+  html+='<div class="card stat"><div class="value severity-low">'+(bySev.LOW+bySev.INFO)+'</div><div class="label">Low / Info</div></div>';
+  html+='</div>';
+  // Pie chart
+  if(total>0){
+    var colors={'CRITICAL':'var(--critical)','HIGH':'var(--high)','MEDIUM':'var(--medium)','LOW':'var(--low)','INFO':'var(--info)'};
+    var segs=[];var angle=0;
+    ['CRITICAL','HIGH','MEDIUM','LOW','INFO'].forEach(function(s){
+      if(bySev[s]>0){var pct=bySev[s]/total*360;segs.push(colors[s]+' '+angle+'deg '+(angle+pct)+'deg');angle+=pct;}
+    });
+    html+='<div class="card"><h2>Severity Distribution</h2><div class="pie-container">';
+    html+='<div class="pie" style="background:conic-gradient('+segs.join(',')+')"></div>';
+    html+='<div class="legend">';
+    ['CRITICAL','HIGH','MEDIUM','LOW','INFO'].forEach(function(s){
+      if(bySev[s]>0) html+='<div class="legend-item"><div class="legend-dot" style="background:'+colors[s]+'"></div>'+s+': '+bySev[s]+'</div>';
+    });
+    html+='</div></div></div>';
+  }
+  // Findings table
+  if(total>0){
+    html+='<div class="card section"><h2>Findings</h2><table><thead><tr><th>Severity</th><th>Type</th><th>File</th><th>Line</th><th>CWE</th><th>Confidence</th></tr></thead><tbody>';
+    findings.forEach(function(f){
+      var sev=(f.severity||'MEDIUM').toLowerCase();
+      var cwe=f.cwe||'--';
+      var cweLink=cwe!=='--'?'<a href="https://cwe.mitre.org/data/definitions/'+cwe.replace('CWE-','')+'.html" target="_blank">'+escH(cwe)+'</a>':cwe;
+      html+='<tr><td><span class="badge badge-'+sev+'">'+escH(f.severity)+'</span></td><td>'+escH(f.name||f.type||'')+'</td><td>'+escH(f.file||'')+'</td><td>'+(f.line||'')+'</td><td>'+cweLink+'</td><td>'+(f.confidence||'')+'</td></tr>';
+    });
+    html+='</tbody></table></div>';
+  }
+  // Compliance gauges
+  if(compliance){
+    html+='<div class="card section"><h2>Compliance: '+escH(compliance.standard||'')+'</h2>';
+    var score=compliance.score||0;
+    var color=score>=80?'var(--low)':score>=60?'var(--medium)':'var(--critical)';
+    html+='<div class="gauge-container"><div class="gauge"><div class="gauge-ring" style="border:6px solid '+color+'">'+score+'%</div><div class="gauge-label">Overall Score</div></div>';
+    html+='<div class="gauge"><div class="gauge-ring" style="border:6px solid var(--low)">'+(compliance.passing||0)+'</div><div class="gauge-label">Passing</div></div>';
+    html+='<div class="gauge"><div class="gauge-ring" style="border:6px solid var(--medium)">'+(compliance.partial||0)+'</div><div class="gauge-label">Partial</div></div>';
+    html+='<div class="gauge"><div class="gauge-ring" style="border:6px solid var(--critical)">'+(compliance.failing||0)+'</div><div class="gauge-label">Failing</div></div>';
+    html+='</div></div>';
+  }
+  // Secrets heatmap
+  if(secrets&&secrets.by_directory){
+    html+='<div class="card section"><h2>Secrets by Directory</h2><div class="heatmap">';
+    Object.keys(secrets.by_directory).forEach(function(dir){
+      var count=secrets.by_directory[dir];
+      var intensity=Math.min(count/5,1);
+      var bg='rgba(248,81,73,'+intensity*0.4+')';
+      html+='<div class="heat-cell" style="background:'+bg+'">'+escH(dir)+'<br><strong>'+count+'</strong></div>';
+    });
+    html+='</div></div>';
+  }
+  // Dependencies
+  if(deps){
+    html+='<div class="card section"><h2>Dependencies</h2>';
+    html+='<div class="grid"><div class="stat"><div class="value">'+escH(deps.total_dependencies||0)+'</div><div class="label">Total Dependencies</div></div>';
+    html+='<div class="stat"><div class="value">'+escH(Object.keys(deps.by_ecosystem||{}).length)+'</div><div class="label">Ecosystems</div></div></div>';
+    if(deps.by_ecosystem){
+      html+='<table><thead><tr><th>Ecosystem</th><th>Count</th></tr></thead><tbody>';
+      Object.keys(deps.by_ecosystem).forEach(function(eco){
+        html+='<tr><td>'+escH(eco)+'</td><td>'+deps.by_ecosystem[eco]+'</td></tr>';
+      });
+      html+='</tbody></table>';
+    }
+    html+='</div>';
+  }
+  if(!total&&!compliance&&!deps){html='<div class="no-data">No findings to display. Run a security scan first.</div>';}
+  document.getElementById('app').innerHTML=html;
+})();
+</script>
+</body>
+</html>

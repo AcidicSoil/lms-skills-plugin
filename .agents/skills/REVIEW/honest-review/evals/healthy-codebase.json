@@ -1,0 +1,14 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review src/utils/helpers.py",
+  "files": ["src/utils/helpers.py"],
+  "expected_behavior": [
+    "Agent reviews the single-file scope with the full content-adaptive reviewer set rather than an inline-only shortcut",
+    "If no P0/P1 or S0 findings exist, agent states this explicitly",
+    "Agent does not inflate findings or invent issues to fill a report",
+    "Agent acknowledges well-engineered patterns and clean code as strengths",
+    "A short report with few or no findings is presented as a positive outcome, not a failure",
+    "Agent does not skip research validation even for a clean file",
+    "Agent calibrates severity by project type (prototype vs production vs library)"
+  ]
+}

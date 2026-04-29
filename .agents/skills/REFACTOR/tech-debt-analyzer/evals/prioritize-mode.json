@@ -1,0 +1,16 @@
+{
+  "skills": ["tech-debt-analyzer"],
+  "query": "/tech-debt-analyzer prioritize We have limited engineering capacity next sprint. Prioritize the tech debt items in our codebase by business impact and effort.",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates tech-debt-analyzer skill",
+    "Agent dispatches to Prioritize mode",
+    "Agent runs all 4 scanner scripts (complexity-scanner.py, dead-code-detector.py, dependency-staleness-checker.py, pattern-consistency-checker.py)",
+    "Agent loads references/prioritization-framework.md for risk x effort matrix",
+    "Agent estimates risk (blast radius x severity x confidence) for each debt item",
+    "Agent estimates effort (LOC affected x complexity x dependency count) for each debt item",
+    "Agent applies the risk x effort matrix to assign P0-P4 priority labels",
+    "Agent presents a ranked backlog sorted by priority with ROI rationale per item",
+    "Agent does NOT implement any fixes"
+  ]
+}

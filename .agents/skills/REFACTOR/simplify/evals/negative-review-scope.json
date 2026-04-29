@@ -1,0 +1,12 @@
+{
+  "skills": ["simplify"],
+  "query": "Review these changes for hidden bugs, security issues, and broken edge cases.",
+  "files": [],
+  "expected_behavior": [
+    "Agent does NOT activate simplify for a review-first request",
+    "Agent recognizes this as correctness or security review work",
+    "Agent redirects to honest-review or security-scanner instead of performing a simplification pass",
+    "Agent names the redirect target skill explicitly",
+    "Agent keeps the refusal concise and scoped to why simplify does not fit"
+  ]
+}

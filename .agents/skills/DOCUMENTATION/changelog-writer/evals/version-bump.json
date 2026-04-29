@@ -1,0 +1,13 @@
+{
+  "skills": ["changelog-writer"],
+  "query": "/changelog-writer bump",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates changelog-writer skill in bump mode",
+    "Agent runs commit-classifier.py since last tag",
+    "Agent reads suggested_bump from JSON output",
+    "Agent presents recommendation with commit evidence",
+    "Agent shows which commits drove the recommendation (breaking → major, feat → minor, fix → patch)",
+    "Agent flags uncertainty if non-conventional commits are present"
+  ]
+}

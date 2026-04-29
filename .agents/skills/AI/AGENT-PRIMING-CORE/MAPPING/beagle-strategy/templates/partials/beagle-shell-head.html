@@ -1,0 +1,522 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --font-body: "Manrope", "Segoe UI", sans-serif;
+    --font-display: "Instrument Serif", Georgia, serif;
+    --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+
+    --bg: #f6f1eb;
+    --bg-mesh-a: rgba(201, 91, 42, 0.12);
+    --bg-mesh-b: rgba(15, 107, 91, 0.12);
+    --surface: rgba(255, 251, 247, 0.92);
+    --surface-strong: #fffdfb;
+    --surface-muted: #efe5da;
+    --border: rgba(60, 37, 23, 0.11);
+    --border-strong: rgba(86, 54, 34, 0.18);
+    --text: #2c1d14;
+    --text-dim: #705d4e;
+    --accent: #b65422;
+    --accent-soft: rgba(182, 84, 34, 0.14);
+    --accent-2: #0f6b5b;
+    --accent-2-soft: rgba(15, 107, 91, 0.14);
+    --accent-3: #b28a17;
+    --shadow: 0 18px 40px rgba(53, 32, 18, 0.09);
+    --shadow-soft: 0 8px 18px rgba(53, 32, 18, 0.06);
+    --radius-xl: 28px;
+    --radius-lg: 20px;
+    --radius-md: 14px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #191512;
+      --bg-mesh-a: rgba(251, 146, 60, 0.14);
+      --bg-mesh-b: rgba(94, 234, 212, 0.12);
+      --surface: rgba(33, 28, 25, 0.9);
+      --surface-strong: #27211d;
+      --surface-muted: #1f1a17;
+      --border: rgba(255, 232, 216, 0.09);
+      --border-strong: rgba(255, 232, 216, 0.16);
+      --text: #f4e9df;
+      --text-dim: #c3b2a3;
+      --accent: #fb923c;
+      --accent-soft: rgba(251, 146, 60, 0.15);
+      --accent-2: #5eead4;
+      --accent-2-soft: rgba(94, 234, 212, 0.14);
+      --accent-3: #facc15;
+      --shadow: 0 22px 44px rgba(0, 0, 0, 0.32);
+      --shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.22);
+    }
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    color: var(--text);
+    background:
+      radial-gradient(circle at 12% 0%, var(--bg-mesh-a) 0, transparent 32%),
+      radial-gradient(circle at 88% 18%, var(--bg-mesh-b) 0, transparent 28%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 22%),
+      var(--bg);
+    font-family: var(--font-body);
+    line-height: 1.65;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(124, 87, 56, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124, 87, 56, 0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.16), transparent 60%);
+  }
+
+  a {
+    color: var(--accent-2);
+    text-decoration-color: rgba(15, 107, 91, 0.3);
+    text-underline-offset: 0.16em;
+  }
+
+  a:hover {
+    text-decoration-color: currentColor;
+  }
+
+  .page-progress {
+    height: 8px;
+    background:
+      linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent-2) 72%, white 28%), var(--accent-3));
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.25);
+  }
+
+  .beagle-shell-frame {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 32px 24px 72px;
+  }
+
+  .beagle-shell-frame > header.ve-card {
+    padding: 34px 34px 26px;
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--surface-strong) 88%, var(--accent-soft) 12%), color-mix(in srgb, var(--surface) 90%, var(--accent-2-soft) 10%));
+    border-color: color-mix(in srgb, var(--border-strong) 65%, var(--accent) 35%);
+    box-shadow: var(--shadow);
+  }
+
+  .beagle-shell-frame > header.ve-card h1 {
+    margin: 0;
+    max-width: 11.5ch;
+    font-family: var(--font-display);
+    font-size: clamp(2.8rem, 6vw, 5rem);
+    font-weight: 400;
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+    text-wrap: balance;
+  }
+
+  .beagle-shell-frame > header.ve-card p {
+    max-width: 70ch;
+    font-size: 1.04rem;
+  }
+
+  h1, h2, h3, h4 {
+    margin: 0 0 0.6rem;
+    line-height: 1.05;
+    text-wrap: balance;
+  }
+
+  h2 {
+    font-size: clamp(1.55rem, 2vw, 2.1rem);
+    letter-spacing: -0.03em;
+  }
+
+  h3 {
+    font-size: 1.2rem;
+    letter-spacing: -0.02em;
+  }
+
+  h4 {
+    font-size: 1.02rem;
+    letter-spacing: -0.015em;
+  }
+
+  p, li, td, th {
+    font-size: 0.97rem;
+  }
+
+  strong {
+    color: color-mix(in srgb, var(--text) 92%, var(--accent) 8%);
+  }
+
+  .ve-card,
+  .card,
+  .lane,
+  .gate,
+  .phase-lane,
+  .scenario-card,
+  .beagle-stat {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.2rem 1.25rem;
+    margin-bottom: 1rem;
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .ve-card::after,
+  .card::after,
+  .lane::after,
+  .gate::after,
+  .phase-lane::after,
+  .scenario-card::after,
+  .beagle-stat::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), transparent 72%);
+    opacity: 0.7;
+  }
+
+  .ve-card {
+    padding: 1.35rem 1.45rem;
+    margin-bottom: 1.3rem;
+  }
+
+  .beagle-lane-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .toc {
+    position: sticky;
+    top: 10px;
+    z-index: 20;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.65rem;
+    margin: 0 0 1.5rem;
+    padding: 0.9rem;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent 12%);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .toc a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.48rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+  }
+
+  .toc a:hover {
+    color: var(--text);
+    background: var(--accent-soft);
+    transform: translateY(-1px);
+  }
+
+  .beagle-inline-list,
+  .pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .beagle-chip,
+  .beagle-pill,
+  .pill,
+  .lane-label,
+  .gate-label,
+  .phase-label,
+  .scenario-label,
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--border-strong) 72%, var(--accent) 28%);
+    border-radius: 999px;
+    padding: 0.28rem 0.76rem;
+    margin: 0;
+    font-size: 0.79rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--text);
+    background: color-mix(in srgb, var(--surface-strong) 84%, var(--accent-soft) 16%);
+  }
+
+  .beagle-chip::before,
+  .beagle-pill::before,
+  .pill::before,
+  .status-badge::before {
+    content: "";
+    width: 0.48rem;
+    height: 0.48rem;
+    border-radius: 999px;
+    background: var(--accent);
+    flex: none;
+  }
+
+  .status-badge--covered {
+    background: color-mix(in srgb, var(--surface-strong) 75%, var(--accent-2-soft) 25%);
+    border-color: color-mix(in srgb, var(--accent-2) 26%, var(--border-strong) 74%);
+  }
+
+  .status-badge--covered::before {
+    background: var(--accent-2);
+  }
+
+  .status-badge--partial {
+    background: color-mix(in srgb, var(--surface-strong) 74%, rgba(178, 138, 23, 0.2) 26%);
+    border-color: color-mix(in srgb, var(--accent-3) 32%, var(--border-strong) 68%);
+  }
+
+  .status-badge--partial::before {
+    background: var(--accent-3);
+  }
+
+  .status-badge--missing {
+    background: color-mix(in srgb, var(--surface-strong) 74%, rgba(190, 55, 34, 0.18) 26%);
+    border-color: rgba(190, 55, 34, 0.28);
+  }
+
+  .status-badge--missing::before {
+    background: #be3722;
+  }
+
+  .beagle-kicker,
+  .muted-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.55rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .beagle-kicker::before,
+  .muted-kicker::before {
+    content: "";
+    width: 0.58rem;
+    height: 0.58rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 70%, white 30%);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-soft) 80%, transparent 20%);
+  }
+
+  .lane-header,
+  .gate-header,
+  .phase-head,
+  .scenario-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 0.8rem;
+  }
+
+  .beagle-stat {
+    min-height: 170px;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 90%, var(--accent-soft) 10%), var(--surface));
+  }
+
+  .beagle-stat strong {
+    display: block;
+    margin: 0.35rem 0 0.6rem;
+    font-size: clamp(1.4rem, 2.6vw, 2.3rem);
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+  }
+
+  code,
+  pre,
+  .lane-label,
+  .gate-label,
+  .phase-label,
+  .scenario-label {
+    font-family: var(--font-mono);
+  }
+
+  code {
+    padding: 0.16rem 0.34rem;
+    border-radius: 0.4rem;
+    background: color-mix(in srgb, var(--surface-muted) 78%, var(--accent-soft) 22%);
+    font-size: 0.88em;
+  }
+
+  pre {
+    margin: 0;
+    overflow-x: auto;
+    padding: 1rem 1.05rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-muted) 70%, var(--surface-strong) 30%);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  ul,
+  ol {
+    margin: 0.55rem 0 0;
+    padding-left: 1.15rem;
+  }
+
+  li + li {
+    margin-top: 0.4rem;
+  }
+
+  section {
+    scroll-margin-top: 94px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: color-mix(in srgb, var(--surface-strong) 88%, var(--accent-soft) 12%);
+  }
+
+  th,
+  td {
+    padding: 0.9rem 0.95rem;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th:last-child,
+  td:last-child {
+    border-right: 0;
+  }
+
+  tbody tr:nth-child(even) td {
+    background: color-mix(in srgb, var(--surface) 78%, var(--surface-muted) 22%);
+  }
+
+  tbody tr:hover td {
+    background: color-mix(in srgb, var(--surface-strong) 68%, var(--accent-soft) 32%);
+  }
+
+  .mermaid-wrap {
+    overflow-x: auto;
+  }
+
+  @media (max-width: 860px) {
+    .beagle-shell-frame {
+      padding: 22px 14px 48px;
+    }
+
+    .beagle-shell-frame > header.ve-card {
+      padding: 24px 20px 18px;
+    }
+
+    .beagle-shell-frame > header.ve-card h1 {
+      max-width: none;
+      font-size: clamp(2.35rem, 12vw, 3.7rem);
+    }
+
+    .lane-header,
+    .gate-header,
+    .phase-head,
+    .scenario-head {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    th,
+    td {
+      min-width: 180px;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .ve-card,
+    .card,
+    .lane,
+    .gate,
+    .phase-lane,
+    .scenario-card,
+    .beagle-stat {
+      animation: beagleFadeUp 420ms ease both;
+    }
+
+    .ve-card:nth-of-type(2),
+    .card:nth-of-type(2),
+    .lane:nth-of-type(2),
+    .gate:nth-of-type(2),
+    .phase-lane:nth-of-type(2),
+    .scenario-card:nth-of-type(2),
+    .beagle-stat:nth-of-type(2) {
+      animation-delay: 40ms;
+    }
+
+    .ve-card:nth-of-type(3),
+    .card:nth-of-type(3),
+    .lane:nth-of-type(3),
+    .gate:nth-of-type(3),
+    .phase-lane:nth-of-type(3),
+    .scenario-card:nth-of-type(3),
+    .beagle-stat:nth-of-type(3) {
+      animation-delay: 80ms;
+    }
+  }
+
+  @keyframes beagleFadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+</style>

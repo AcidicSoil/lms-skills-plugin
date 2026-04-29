@@ -1,0 +1,14 @@
+{
+  "skills": ["learn"],
+  "query": "/learn \"Always use uv instead of pip for Python package management\"",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to the correction routing mode based on quoted correction text in arguments",
+    "Agent identifies the scope as language-specific (Python tooling) using the Routing Decision Steps",
+    "Agent routes the learning to the python-conventions skill (convention skill for Python)",
+    "Agent verifies the correction against actual practice and checks for contradictions with existing instructions",
+    "Agent assesses token impact to keep always-loaded content minimal",
+    "Agent requests explicit user approval before modifying any instruction file",
+    "Agent runs 'wagents validate' after any instruction file modification"
+  ]
+}

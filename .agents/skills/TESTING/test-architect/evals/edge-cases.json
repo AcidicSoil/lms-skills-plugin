@@ -1,0 +1,13 @@
+{
+  "skills": ["test-architect"],
+  "query": "/test-architect edge-cases validate_email",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates test-architect skill in edge-cases mode",
+    "Agent reads the validate_email function to extract parameter types",
+    "Agent runs edge-case-generator.py with function name and parameter types",
+    "Agent generates edge cases across categories: null/empty, boundary, unicode, type coercion",
+    "Agent includes rationale for each edge case explaining why it matters",
+    "Agent flags cases where current code would likely fail"
+  ]
+}

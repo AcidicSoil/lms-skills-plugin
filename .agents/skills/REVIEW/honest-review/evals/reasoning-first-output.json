@@ -1,0 +1,10 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review src/core/",
+  "files": ["src/core/service.py"],
+  "expected_behavior": [
+    "Each finding presents Reasoning before Description.",
+    "The compact and expanded output formats both preserve the reasoning-first contract.",
+    "The agent does not emit finding statements without a preceding reasoning chain."
+  ]
+}

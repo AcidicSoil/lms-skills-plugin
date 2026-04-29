@@ -1,0 +1,12 @@
+{
+  "skills": ["simplify"],
+  "query": "This new auth middleware works, but it feels too complex. Simplify it without changing behavior.",
+  "files": [],
+  "expected_behavior": [
+    "Agent recognizes a natural-language simplify request and activates simplify",
+    "Agent routes to Mode B: Apply if an active diff, recent scope, or explicit target is available; otherwise it falls back to Mode A: Analyze",
+    "Agent preserves the skill's clarity-without-behavior-change contract",
+    "Agent focuses on recently modified code by default",
+    "Agent avoids expanding into a generic review or architecture redesign"
+  ]
+}

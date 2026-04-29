@@ -1,0 +1,13 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review audit",
+  "files": [],
+  "expected_behavior": [
+    "Wave 0 triage builds a dependency graph (import/export map) for the project",
+    "High fan-in files (imported by 5+ others) receive elevated risk classification",
+    "Triage report includes dependency graph summary with high fan-in files listed",
+    "Blast radius calculation in Judge Step 8 uses dependency graph data for accurate multipliers",
+    "Cross-file findings reference the dependency relationship in their evidence",
+    "Changed files with importers outside the change set are flagged for cross-file impact review"
+  ]
+}

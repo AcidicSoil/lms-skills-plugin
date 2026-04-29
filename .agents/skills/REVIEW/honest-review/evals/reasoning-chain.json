@@ -1,0 +1,13 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review src/api/",
+  "files": ["src/api/routes.py", "src/api/middleware.py"],
+  "expected_behavior": [
+    "Every reported finding includes a 'Reasoning' field with 2-3 sentences explaining WHY before the finding statement",
+    "The reasoning chain appears before the description/finding statement in the output",
+    "Findings without reasoning chains are rejected during Judge reconciliation",
+    "Every finding includes a citation anchor [file:start-end] referencing exact source lines",
+    "Citation anchors are mechanically verified — referenced lines must exist and contain the described code",
+    "Findings with invalid citation anchors (non-existent lines or mismatched code) are discarded"
+  ]
+}

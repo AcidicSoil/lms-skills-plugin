@@ -1,0 +1,79 @@
+{
+  "categories": {
+    "null_empty": {
+      "description": "Null, None, empty, zero, and falsy values",
+      "applies_to": ["str", "int", "float", "list", "dict", "bool", "object"],
+      "examples": {
+        "str": ["", "None"],
+        "int": [0, "None"],
+        "float": [0.0, "None", "float('nan')"],
+        "list": ["[]", "None"],
+        "dict": ["{}", "None"],
+        "bool": ["None"],
+        "object": ["None"]
+      }
+    },
+    "boundary": {
+      "description": "Min/max values, limits, and edges of valid ranges",
+      "applies_to": ["int", "float", "str", "list", "dict"],
+      "examples": {
+        "int": ["2**31-1", "-(2**31)", "-1", "1"],
+        "float": ["float('inf')", "float('-inf')", "sys.float_info.min", "sys.float_info.max", "float('nan')"],
+        "str": ["'a'*10000", "' '", "'\\n'"],
+        "list": ["[None]", "list(range(100000))", "[[[[]]]]"],
+        "dict": ["{k:v for k,v in zip(range(100000),range(100000))}"]
+      }
+    },
+    "type_coercion": {
+      "description": "Wrong type that may be silently converted or cause unexpected behavior",
+      "applies_to": ["str", "int", "float", "bool"],
+      "examples": {
+        "str": [123, "b'bytes'", "['list']"],
+        "int": ["'123'", 1.5, "True"],
+        "float": ["'3.14'", 1, "True"],
+        "bool": [0, 1, "''", "'false'"]
+      }
+    },
+    "overflow": {
+      "description": "Values exceeding normal numeric or size limits",
+      "applies_to": ["int", "float", "str", "list"],
+      "examples": {
+        "int": ["2**63", "10**100", "-(2**63)"],
+        "float": ["1e308*2", "1e-400"],
+        "str": ["'x'*10**7"],
+        "list": ["list(range(10**7))"]
+      }
+    },
+    "unicode": {
+      "description": "Unicode edge cases: emoji, RTL, zero-width, combining marks",
+      "applies_to": ["str"],
+      "examples": {
+        "str": [
+          "'\\u200b' (zero-width space)",
+          "'\\U0001f600' (emoji)",
+          "'\\u202e' (RTL override)",
+          "'e\\u0301' (combining accent)",
+          "'\\ufeff' (BOM)",
+          "'\\u0000' (null char)"
+        ]
+      }
+    },
+    "concurrent": {
+      "description": "Race conditions, deadlocks, stale reads from shared state",
+      "applies_to": ["list", "dict", "object"],
+      "examples": {
+        "list": ["modify during iteration", "concurrent append"],
+        "dict": ["concurrent key insertion", "modify during iteration"],
+        "object": ["concurrent method calls", "shared mutable state"]
+      }
+    }
+  },
+  "priority_order": [
+    "null_empty",
+    "boundary",
+    "type_coercion",
+    "overflow",
+    "unicode",
+    "concurrent"
+  ]
+}

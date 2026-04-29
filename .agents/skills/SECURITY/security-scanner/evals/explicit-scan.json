@@ -1,0 +1,15 @@
+{
+  "skills": ["security-scanner"],
+  "query": "/security-scanner scan src/",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates security-scanner skill in scan mode",
+    "Agent triages files in src/ by security risk (HIGH/MEDIUM/LOW)",
+    "Agent runs secrets-detector.py on the path",
+    "Agent performs SAST pattern matching against OWASP patterns",
+    "Agent maps findings to CWE IDs and OWASP categories",
+    "Agent assigns severity and confidence scores to each finding",
+    "Agent presents findings grouped by severity with remediation guidance",
+    "Agent does NOT modify any source files"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "skills": ["simplify"],
+  "query": "Inventory the biggest tech debt hotspots in this module and prioritize them for next quarter.",
+  "files": [],
+  "expected_behavior": [
+    "Agent does NOT activate simplify for debt inventory or prioritization work",
+    "Agent recognizes this as tech debt analysis rather than a behavior-preserving simplification pass",
+    "Agent redirects to tech-debt-analyzer instead of attempting to simplify inline",
+    "Agent names tech-debt-analyzer explicitly as the better-fit skill",
+    "Agent keeps the refusal concise and scoped to why simplify does not fit"
+  ]
+}

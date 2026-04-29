@@ -1,0 +1,12 @@
+{
+  "skills": ["tech-debt-analyzer"],
+  "query": "What technical debt does this project have? Give me a full inventory.",
+  "files": [],
+  "expected_behavior": [
+    "Agent activates tech-debt-analyzer skill via auto-invocation",
+    "Agent routes to scan mode based on natural language intent",
+    "Agent runs all 4 analysis scripts",
+    "Agent presents categorized debt inventory with severities and confidence scores",
+    "Agent does NOT modify any code files"
+  ]
+}

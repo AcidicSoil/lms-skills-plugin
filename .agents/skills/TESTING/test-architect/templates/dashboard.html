@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Architect - Coverage Gap Dashboard</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --card: #161b22;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --dim: #8b949e;
+  --accent: #58a6ff;
+  --green: #3fb950;
+  --yellow: #d29922;
+  --red: #f85149;
+  --orange: #db6d28;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --card: #f6f8fa;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --dim: #656d76;
+    --accent: #0969da;
+    --green: #1a7f37;
+    --yellow: #9a6700;
+    --red: #cf222e;
+    --orange: #bc4c00;
+  }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 24px; line-height: 1.5; }
+h1 { font-size: 24px; margin-bottom: 8px; }
+h2 { font-size: 18px; margin-bottom: 12px; color: var(--accent); }
+.subtitle { color: var(--dim); margin-bottom: 24px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.stat { font-size: 36px; font-weight: 700; }
+.stat-label { color: var(--dim); font-size: 14px; }
+.bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+.bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.heatmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-bottom: 24px; }
+.heatmap-item { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 12px; position: relative; overflow: hidden; }
+.heatmap-item::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.heatmap-item.p0::before { background: var(--red); }
+.heatmap-item.p1::before { background: var(--orange); }
+.heatmap-item.p2::before { background: var(--yellow); }
+.heatmap-item.p3::before { background: var(--green); }
+.file-name { font-size: 13px; font-weight: 600; word-break: break-all; }
+.file-stats { font-size: 12px; color: var(--dim); margin-top: 4px; }
+.coverage-val { font-weight: 700; }
+.pyramid { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px; }
+.pyramid-layer { text-align: center; padding: 8px; border-radius: 4px; color: #fff; font-size: 13px; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+th { color: var(--dim); font-weight: 600; }
+.flaky-tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.flaky-tag.timing { background: rgba(210,153,34,0.2); color: var(--yellow); }
+.flaky-tag.ordering { background: rgba(219,109,40,0.2); color: var(--orange); }
+.flaky-tag.resource { background: rgba(248,81,73,0.2); color: var(--red); }
+.flaky-tag.state { background: rgba(88,166,255,0.2); color: var(--accent); }
+.flaky-tag.environment { background: rgba(63,185,80,0.2); color: var(--green); }
+.flaky-tag.unknown { background: rgba(139,148,158,0.2); color: var(--dim); }
+.empty { text-align: center; color: var(--dim); padding: 40px; }
+</style>
+</head>
+<body>
+<script id="data" type="application/json">{"view":"coverage-gaps","overall_coverage":0,"total_files":0,"gap_count":0,"gaps":[],"pyramid":null,"flaky_tests":[]}</script>
+<div id="app"></div>
+<script>
+(function(){
+  var escH = function(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+  var data;
+  try { data = JSON.parse(document.getElementById('data').textContent); }
+  catch(e) { document.getElementById('app').innerHTML = '<div class="empty">Failed to parse dashboard data</div>'; return; }
+
+  var html = '';
+  html += '<h1>Test Architect Dashboard</h1>';
+  html += '<p class="subtitle">Coverage gap analysis and test health overview</p>';
+
+  // Summary cards
+  var covColor = data.overall_coverage >= 80 ? 'var(--green)' : data.overall_coverage >= 60 ? 'var(--yellow)' : 'var(--red)';
+  html += '<div class="grid">';
+  html += '<div class="card"><div class="stat" style="color:' + covColor + '">' + escH(String(data.overall_coverage || 0)) + '%</div><div class="stat-label">Overall Coverage</div><div class="bar"><div class="bar-fill" style="width:' + (data.overall_coverage || 0) + '%;background:' + covColor + '"></div></div></div>';
+  html += '<div class="card"><div class="stat">' + escH(String(data.total_files || 0)) + '</div><div class="stat-label">Total Files</div></div>';
+  html += '<div class="card"><div class="stat" style="color:var(--red)">' + escH(String(data.gap_count || 0)) + '</div><div class="stat-label">Coverage Gaps (&lt;80%)</div></div>';
+  if (data.flaky_tests && data.flaky_tests.length > 0) {
+    html += '<div class="card"><div class="stat" style="color:var(--orange)">' + data.flaky_tests.length + '</div><div class="stat-label">Flaky Tests</div></div>';
+  }
+  html += '</div>';
+
+  // Pyramid
+  if (data.pyramid) {
+    html += '<div class="card" style="margin-bottom:24px"><h2>Test Pyramid</h2><div class="pyramid">';
+    html += '<div class="pyramid-layer" style="width:30%;background:var(--red)">E2E: ' + escH(String(data.pyramid.e2e || 0)) + '</div>';
+    html += '<div class="pyramid-layer" style="width:60%;background:var(--yellow)">Integration: ' + escH(String(data.pyramid.integration || 0)) + '</div>';
+    html += '<div class="pyramid-layer" style="width:90%;background:var(--green)">Unit: ' + escH(String(data.pyramid.unit || 0)) + '</div>';
+    html += '</div></div>';
+  }
+
+  // Coverage gap heatmap
+  var gaps = data.gaps || [];
+  if (gaps.length > 0) {
+    html += '<h2>Coverage Gaps (by risk)</h2>';
+    html += '<div class="heatmap">';
+    for (var i = 0; i < gaps.length && i < 50; i++) {
+      var g = gaps[i];
+      var prio = g.coverage_pct < 30 ? 'p0' : g.coverage_pct < 50 ? 'p1' : g.coverage_pct < 70 ? 'p2' : 'p3';
+      html += '<div class="heatmap-item ' + prio + '">';
+      html += '<div class="file-name">' + escH(g.path || '') + '</div>';
+      html += '<div class="file-stats"><span class="coverage-val">' + escH(String(g.coverage_pct)) + '%</span> covered | ' + escH(String(g.missing_count || 0)) + ' missing | risk: ' + escH(String(g.complexity_weighted_risk || 0)) + '</div>';
+      html += '<div class="bar"><div class="bar-fill" style="width:' + g.coverage_pct + '%;background:' + (g.coverage_pct < 30 ? 'var(--red)' : g.coverage_pct < 50 ? 'var(--orange)' : g.coverage_pct < 70 ? 'var(--yellow)' : 'var(--green)') + '"></div></div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  } else {
+    html += '<div class="card empty">No coverage gaps found. All files above 80% coverage.</div>';
+  }
+
+  // Flaky tests table
+  if (data.flaky_tests && data.flaky_tests.length > 0) {
+    html += '<div class="card" style="margin-top:24px"><h2>Flaky Tests</h2>';
+    html += '<table><tr><th>Test</th><th>Pass</th><th>Fail</th><th>Rate</th><th>Cause</th></tr>';
+    for (var j = 0; j < data.flaky_tests.length; j++) {
+      var ft = data.flaky_tests[j];
+      html += '<tr><td>' + escH(ft.name || '') + '</td><td>' + (ft.pass_count || 0) + '</td><td>' + (ft.failure_count || 0) + '</td><td>' + (ft.failure_rate || 0) + '%</td><td><span class="flaky-tag ' + escH(ft.likely_cause || 'unknown') + '">' + escH(ft.likely_cause || 'unknown') + '</span></td></tr>';
+    }
+    html += '</table></div>';
+  }
+
+  document.getElementById('app').innerHTML = html;
+})();
+</script>
+</body>
+</html>

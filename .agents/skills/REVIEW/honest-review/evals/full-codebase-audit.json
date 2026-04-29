@@ -1,0 +1,15 @@
+{
+  "skills": ["honest-review"],
+  "query": "/honest-review audit",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to Mode 2: Full Codebase Audit based on 'audit' keyword",
+    "Agent runs full Wave 0 triage: project-scanner, git history analysis, risk stratification",
+    "Agent designs team with lead + domain reviewers + specialists based on triage triggers",
+    "Agent assigns file ownership based on risk stratification with no overlapping ownership",
+    "Agent performs cross-domain analysis in parallel (architecture, data flow, error propagation)",
+    "Agent runs Judge reconciliation across all team findings with cross-domain deduplication",
+    "Agent produces report with Critical, Significant, Cross-Domain, Health Summary, and Top 3 Recommendations",
+    "Agent waits for user approval before implementing any fixes"
+  ]
+}

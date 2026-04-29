@@ -1,0 +1,14 @@
+{
+  "skills": ["simplify"],
+  "query": "/simplify analyze src/auth/session.py",
+  "files": ["src/auth/session.py"],
+  "expected_behavior": [
+    "Agent dispatches to Mode A: Analyze based on the 'analyze' keyword",
+    "Agent treats src/auth/session.py as the target scope",
+    "Agent reads references/simplification-taxonomy.md before classifying opportunities",
+    "Agent reads references/output-formats.md to structure the Analyze response",
+    "Agent produces a read-only simplification report with confidence and safer simpler moves",
+    "Agent identifies any behavior boundaries that must remain unchanged",
+    "Agent does NOT edit files in Analyze mode"
+  ]
+}

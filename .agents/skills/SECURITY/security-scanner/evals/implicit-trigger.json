@@ -1,0 +1,15 @@
+{
+  "skills": ["security-scanner"],
+  "query": "Can you check this codebase for any hardcoded API keys, SQL injection vulnerabilities, and see if our dependencies have any known CVEs?",
+  "files": [],
+  "expected_behavior": [
+    "Agent recognizes this as a security scanning task and activates security-scanner",
+    "Agent runs scan mode (full codebase security scan)",
+    "Agent runs secrets-detector.py for API key detection",
+    "Agent performs SAST pattern matching for SQL injection patterns",
+    "Agent runs dependency-checker.py to analyze lockfiles",
+    "Agent maps findings to CWE IDs (CWE-89 for SQL injection, CWE-259/321 for hardcoded keys)",
+    "Agent presents consolidated findings with remediation",
+    "Agent never exposes actual secret values in output"
+  ]
+}

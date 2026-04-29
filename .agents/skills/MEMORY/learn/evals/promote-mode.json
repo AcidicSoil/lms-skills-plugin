@@ -1,0 +1,14 @@
+{
+  "skills": ["learn"],
+  "query": "/learn promote",
+  "files": [],
+  "expected_behavior": [
+    "Agent dispatches to 'promote' mode based on the keyword in arguments",
+    "Agent identifies learnings that meet the promotion threshold: 3+ corrections across 2+ sessions",
+    "Agent applies the Routing Protocol to determine the correct target file for each promotion-ready learning",
+    "Agent routes to the narrowest applicable scope (rule before skill, skill before global)",
+    "Agent applies kaizen principles: incremental change, poka-yoke (prefer hooks/tooling over prose), standards work",
+    "Agent requests explicit user approval before modifying any instruction file",
+    "Agent runs 'wagents validate' after every instruction file modification"
+  ]
+}
