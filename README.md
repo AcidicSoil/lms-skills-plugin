@@ -165,6 +165,7 @@ Frontmatter behavior:
 - `tags` are used for search/scoring.
 - `disable-model-invocation: true` keeps the skill out of automatic routing context, while still allowing explicit `$skill-name` activation.
 - `user-invocable`, `allowed-tools`, `context`, `agent`, `model`, `effort`, `argument-hint`, `arguments`, `license`, `compatibility`, `metadata`, `paths`, `hooks`, and `shell` are parsed when present and may be surfaced to the model as skill metadata.
+- Unknown frontmatter keys are preserved as extension metadata instead of being dropped. This keeps the plugin compatible with other skill ecosystems and future conventions without treating every key as executable behavior.
 - `allowed-tools` is advisory in this plugin. It does not bypass plugin command settings or `run_command` safety validation.
 - `arguments` and `argument-hint` are surfaced as metadata, but this plugin does not currently perform Claude Code-style argument placeholder substitution.
 - `context: fork`, `agent`, `model`, `effort`, `paths`, `hooks`, and `shell` are metadata/advisory fields here unless a future plugin feature explicitly implements their Claude Code behavior.

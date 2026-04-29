@@ -77,6 +77,10 @@ function skillFrontmatterSummary(skill: SkillInfo): Record<string, unknown> | un
     if (value !== undefined) summary[key] = value;
   }
   if (Object.keys(summary).length === 0) return undefined;
+  if (frontmatter.extensionMetadata && Object.keys(frontmatter.extensionMetadata).length > 0) {
+    summary.extensionMetadata = frontmatter.extensionMetadata;
+    summary.extensionMetadataNote = "Unrecognized frontmatter keys are preserved here for compatibility with other skill ecosystems. They are metadata only unless this plugin explicitly implements their behavior.";
+  }
   if (frontmatter.allowedTools?.length) {
     summary.allowedToolsNote = "Skill-declared allowed-tools are advisory in this plugin; run_command still requires plugin command settings and safety validation.";
   }

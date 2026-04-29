@@ -46,6 +46,7 @@ export interface SkillFrontmatter {
   paths?: string[];
   hooks?: string;
   shell?: string;
+  extensionMetadata?: Record<string, string | string[]>;
 }
 
 export interface PersistedSettings {

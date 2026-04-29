@@ -86,8 +86,12 @@ function parseStringList(value: unknown): string[] | undefined {
   return trimmed.split(/\s+/).filter(Boolean);
 }
 
+function canonicalFrontmatterExtensionKey(key: string): string {
+  return key.trim().toLowerCase().replace(/_/g, "-");
+}
+
 function normalizeFrontmatterKey(key: string): keyof SkillFrontmatter | null {
-  switch (key.trim().toLowerCase().replace(/_/g, "-")) {
+  switch (canonicalFrontmatterExtensionKey(key)) {
     case "name":
       return "name";
     case "description":
@@ -138,7 +142,27 @@ function assignFrontmatterValue(
   rawValue: unknown,
 ): void {
   const normalizedKey = normalizeFrontmatterKey(key);
-  if (!normalizedKey) return;
+  if (!normalizedKey) {
+    const extensionKey = canonicalFrontmatterExtensionKey(key);
+    if (!extensionKey) return;
+    if (Array.isArray(rawValue)) {
+      const parsedList = parseStringList(rawValue);
+      if (parsedList) {
+        frontmatter.extensionMetadata = {
+          ...(frontmatter.extensionMetadata ?? {}),
+          [extensionKey]: parsedList,
+        };
+      }
+      return;
+    }
+    if (typeof rawValue === "string" && rawValue.trim()) {
+      frontmatter.extensionMetadata = {
+        ...(frontmatter.extensionMetadata ?? {}),
+        [extensionKey]: rawValue.trim(),
+      };
+    }
+    return;
+  }
 
   if (normalizedKey === "disableModelInvocation" || normalizedKey === "userInvocable") {
     const parsed = parseBoolean(rawValue);
