@@ -72,16 +72,6 @@ export const configSchematics = createConfigSchematics()
     "builtin",
   )
   .field(
-    "qmdCollections",
-    "string",
-    {
-      displayName: "QMD Collections (optional)",
-      subtitle:
-        "Comma- or semicolon-separated QMD collection names to search with -c/--collection. Leave empty to let QMD search its configured/indexed scope.",
-    },
-    "",
-  )
-  .field(
     "skillsEnvironment",
     "select",
     {

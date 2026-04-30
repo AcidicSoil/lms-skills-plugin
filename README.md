@@ -218,13 +218,37 @@ Use `list_skills` with `mode: "route"` to inspect the same routing decision outs
 |---|---:|---|
 | Internal Skills Context | On | Automatically provides skill instructions and available skill context under the hood. No system prompt setup required. |
 | Skill Discovery Budget | 15 | Upper bound for skill scan/consideration work before routing. Normal prompt injection is capped separately by deterministic routing, currently up to 3 routed candidates, so this is not a catalog-injection limit. |
-| Skill Search Backend | Built-in | Optional backend selector for plugin-controlled skill discovery. `qmd` uses QMD's hybrid query path when available; `ck` uses CK hybrid search when available; `auto` tries enhanced local search before built-in fallback. Models should still call `list_skills`, not raw backend commands. |
-| QMD Collections | Empty | Optional comma- or semicolon-separated collection names passed to QMD with `-c`. Empty lets QMD search its configured/indexed scope. QMD/CK executable names are resolved under the hood using standard `qmd` and `ck` commands, with any legacy saved executable overrides still honored from `settings.json`. |
+| Skill Search Backend | Built-in | Optional backend selector for plugin-controlled skill discovery. `qmd` uses a plugin-managed QMD collection/index when available; `ck` uses CK hybrid search when available; `auto` tries enhanced local search before built-in fallback. Models should still call `list_skills`, not raw backend commands. |
 | Skills Runtime Environment | Host-dependent | `Windows`, `WSL`, or `Both`. Controls path resolution, skill reads, and command target behavior. |
 | Skills Paths | Last saved/default | Semicolon-separated skill root directories. |
 | Command Execution Safety | Disabled | Controls whether `run_command` can execute shell commands. |
 
 Runtime details such as the default WSL distro and shell executable are auto-detected under the hood. Windows command execution resolves PowerShell 7, then Windows PowerShell, then `cmd.exe`; WSL command execution uses the default WSL distro and `bash` unless a legacy saved override already exists in `settings.json`.
+
+### Managed QMD indexing
+
+When **Skill Search Backend** is `qmd` or `auto`, the plugin manages QMD setup automatically from the configured **Skills Paths**. Users do not need to choose QMD collection names.
+
+Managed QMD state lives under:
+
+```text
+~/.lmstudio/plugin-data/lms-skills/managed-qmd/
+```
+
+For each unique set of resolved skill roots, the plugin creates a deterministic collection such as `lms-skills-<hash>`, creates a managed workspace, and links each configured skill root into that workspace. If symlinks are not available, it falls back to a bounded copy inside plugin data. Source skill directories are not modified.
+
+The plugin runs QMD maintenance only inside an isolated QMD state directory for that managed workspace by setting `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME` for the QMD subprocess. That keeps `qmd update` / `qmd embed` scoped to the plugin-managed collection instead of the user's global QMD collections.
+
+On stale or first use, the plugin performs:
+
+```text
+qmd collection add <managed-workspace> --name lms-skills-<hash> --mask "**/*.md"
+qmd update
+qmd embed
+qmd query --json --explain -c lms-skills-<hash> ...
+```
+
+If QMD is unavailable, indexing fails, the provider times out, or returned paths do not resolve back to configured skill roots, `list_skills` falls back to built-in exact/fuzzy/route/full-text search.
 
 ### Skills paths
 

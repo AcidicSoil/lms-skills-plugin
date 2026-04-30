@@ -1,6 +1,7 @@
 import * as child_process from "child_process";
 import * as path from "path";
 import { checkAbort, createAbortError } from "./abort";
+import { ensureManagedQmdIndex, mapManagedQmdCandidatePath } from "./managedQmdIndex";
 import { resolveSkillByName } from "./scanner";
 import type { RuntimeRegistry } from "./runtime";
 import type { ResolvedSkillRoot } from "./pathResolver";
@@ -10,7 +11,6 @@ export type ActiveSkillSearchBackend = "builtin" | "qmd" | "ck";
 
 export interface EnhancedSkillSearchOptions {
   qmdExecutable: string;
-  qmdCollections: string[];
   ckExecutable: string;
 }
 
@@ -25,7 +25,6 @@ export interface EnhancedSkillSearchResult {
   };
   options: {
     qmdExecutable: string;
-    qmdCollections: string[];
     ckExecutable: string;
   };
   candidates: SkillInfo[];
@@ -73,12 +72,6 @@ function sanitizeExecutable(raw: string, fallback: string): string {
   return executable;
 }
 
-function sanitizeQmdCollections(collections: string[]): string[] {
-  return collections
-    .map((collection) => collection.trim())
-    .filter((collection) => collection.length > 0 && !UNSAFE_CONTROL_CHARS_PATTERN.test(collection) && !collection.startsWith("-"))
-    .slice(0, 8);
-}
 
 function assertReadOnlyProviderInvocation(executable: string, args: string[]): string | null {
   if (!executable || UNSAFE_CONTROL_CHARS_PATTERN.test(executable)) {
@@ -100,6 +93,7 @@ function runFixedCommand(
   signal?: AbortSignal,
   cwd?: string,
   timeoutMs = ENHANCED_SEARCH_TIMEOUT_MS,
+  envOverrides: Record<string, string> = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }> {
   checkAbort(signal);
   const blockedReason = assertReadOnlyProviderInvocation(executable, args);
@@ -141,6 +135,7 @@ function runFixedCommand(
         windowsHide: true,
         env: {
           ...process.env,
+          ...envOverrides,
           NO_COLOR: "1",
         },
       });
@@ -263,15 +258,18 @@ async function runQmdSearch(
 ): Promise<{ skills: SkillInfo[]; rawResultCount: number; diagnostics: string[] }> {
   const diagnostics: string[] = [];
   const qmdExecutable = sanitizeExecutable(options.qmdExecutable, "qmd");
-  const qmdCollections = sanitizeQmdCollections(options.qmdCollections);
-  const collectionArgs = qmdCollections.flatMap((collection) => ["-c", collection]);
-  const args = ["query", "--json", "--explain", "-n", String(Math.max(limit, 10)), "--candidate-limit", "40", ...collectionArgs, query];
-  diagnostics.push(qmdCollections.length > 0 ? `qmd collections=${qmdCollections.join(",")}` : "qmd collections=default");
-  const result = await runFixedCommand(qmdExecutable, args, signal);
+  const managedIndex = await ensureManagedQmdIndex(roots, qmdExecutable, signal);
+  diagnostics.push(`qmd managed collection=${managedIndex.collection}`);
+  diagnostics.push(`qmd managed workspace=${managedIndex.workspacePath}`);
+  diagnostics.push(`qmd managed sync=${managedIndex.syncMode} stale=${managedIndex.stale} updated=${managedIndex.updated} embedded=${managedIndex.embedded}`);
+  diagnostics.push(...managedIndex.diagnostics);
+  const args = ["query", "--json", "--explain", "-n", String(Math.max(limit, 10)), "--candidate-limit", "40", "-c", managedIndex.collection, query];
+  const result = await runFixedCommand(qmdExecutable, args, signal, managedIndex.workspacePath, ENHANCED_SEARCH_TIMEOUT_MS, managedIndex.qmdEnv);
   if (result.timedOut) return { skills: [], rawResultCount: 0, diagnostics: ["qmd query timed out"] };
   if (result.exitCode !== 0) return { skills: [], rawResultCount: 0, diagnostics: [`qmd query failed: ${result.stderr.slice(0, 240)}`] };
   const candidates = [...new Set([...parseJsonCandidates(result.stdout), ...parseTextCandidatePaths(result.stdout)])];
-  const skills = await resolveCandidatePaths(roots, registry, candidates, limit, signal);
+  const mappedCandidates = candidates.map((candidate) => mapManagedQmdCandidatePath(candidate, managedIndex));
+  const skills = await resolveCandidatePaths(roots, registry, mappedCandidates, limit, signal);
   diagnostics.push(`qmd returned ${candidates.length} path candidate(s), resolved ${skills.length} skill(s)`);
   return { skills, rawResultCount: candidates.length, diagnostics };
 }

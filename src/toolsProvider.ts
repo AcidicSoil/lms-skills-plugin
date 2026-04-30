@@ -75,7 +75,6 @@ function skillSearchBackendSummary(cfg: EffectiveConfig, result?: EnhancedSkillS
     fallbackUsed: false,
     options: {
       qmdExecutable: cfg.qmdExecutable,
-      qmdCollections: cfg.qmdCollections,
       ckExecutable: cfg.ckExecutable,
     },
     workflowHint: SKILL_SEARCH_WORKFLOW_HINT,
@@ -669,7 +668,6 @@ export async function toolsProvider(ctl: PluginController) {
               cap,
               {
                 qmdExecutable: cfg.qmdExecutable,
-                qmdCollections: cfg.qmdCollections,
                 ckExecutable: cfg.ckExecutable,
               },
               toolSignal,

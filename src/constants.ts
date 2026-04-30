@@ -45,3 +45,8 @@ export const SKILLS_PATH_SEPARATOR = ";";
 export const CONFIG_CACHE_TTL_MS = 5_000;
 export const PREPROCESSOR_SCAN_TIMEOUT_MS = 3_000;
 export const INTERNAL_CONTEXT_REFRESH_INTERVAL_MS = 30 * 60 * 1_000;
+
+export const MANAGED_QMD_DIR_NAME = "managed-qmd";
+export const MANAGED_QMD_INDEX_TTL_MS = 10 * 60 * 1_000;
+export const MANAGED_QMD_MAX_COPY_FILES = 2_000;
+export const MANAGED_QMD_MAX_COPY_BYTES = 100 * 1024 * 1024;

@@ -63,7 +63,6 @@ export interface PersistedSettings {
   commandExecutionMode: CommandExecutionMode;
   skillSearchBackend: SkillSearchBackend;
   qmdExecutable: string;
-  qmdCollections: string[];
   ckExecutable: string;
 }
 
@@ -79,7 +78,6 @@ export interface EffectiveConfig {
   commandExecutionMode: CommandExecutionMode;
   skillSearchBackend: SkillSearchBackend;
   qmdExecutable: string;
-  qmdCollections: string[];
   ckExecutable: string;
 }
 

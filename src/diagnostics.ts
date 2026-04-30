@@ -87,6 +87,10 @@ function shouldLog(event: DiagnosticEvent): boolean {
     case "list_skills_result":
     case "list_skills_route_result":
     case "enhanced_search_result":
+    case "qmd_index_start":
+    case "qmd_index_command_result":
+    case "qmd_index_complete":
+    case "qmd_index_error":
     case "list_skill_files_result":
     case "run_command_safety_check":
     case "run_command_result":
@@ -248,6 +252,14 @@ function formatHumanEvent(event: DiagnosticEvent): string {
       return `${prefix} list_skills result mode=${quote(event.mode)} backend=${quote(event.backend)} requested=${quote(event.requestedBackend)} fallback=${quote(event.fallbackUsed)} total=${quote(event.total)} returned=${quote(event.returned)}${id(event)}`;
     case "enhanced_search_result":
       return `${prefix} enhanced_search requested=${quote(event.requestedBackend)} active=${quote(event.activeBackend)} available=${quote(event.available)} fallback=${quote(event.fallbackUsed)} reason=${quote(event.fallbackReason)} raw=${quote(event.rawResultCount)} resolved=${quote(event.resolvedCount)} diagnostics="${quote(event.diagnostics)}"${id(event)}`;
+    case "qmd_index_start":
+      return `${prefix} qmd_index start collection=${quote(event.collection)} roots=${quote(event.rootCount)}${id(event)}`;
+    case "qmd_index_command_result":
+      return `${prefix} qmd_index command=${quote(event.command)} exit=${quote(event.exitCode)} timedOut=${quote(event.timedOut)} stdout=${quote(event.stdoutBytes)}B stderr=${quote(event.stderrBytes)}B${elapsed(event)}${id(event)}`;
+    case "qmd_index_complete":
+      return `${prefix} qmd_index complete collection=${quote(event.collection)} sync=${quote(event.syncMode)} stale=${quote(event.stale)} updated=${quote(event.updated)} embedded=${quote(event.embedded)} diagnostics="${quote(event.diagnostics)}"${elapsed(event)}${id(event)}`;
+    case "qmd_index_error":
+      return `${prefix} qmd_index ERROR collection=${quote(event.collection)} error="${errorMessage(event)}"${elapsed(event)}${id(event)}`;
     case "list_skills_route_result":
       return `${prefix} list_skills route query=${quote(event.query)} selected=${quote(event.selected)} rejectedBest=${quote(event.rejectedBest)} total=${quote(event.total)}${id(event)}`;
     case "list_skill_files_result":
