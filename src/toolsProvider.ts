@@ -364,23 +364,43 @@ async function withToolLogging<T>(
   args: Record<string, unknown>,
   timeoutMs: number,
   fn: (requestId: string, signal: AbortSignal) => Promise<T>,
+  options: { hardTimeout?: boolean } = {},
 ): Promise<T> {
   const requestId = createRequestId(toolName);
   const startedAt = Date.now();
-  const timeout = createTimeoutSignal(
-    ctl.abortSignal,
-    timeoutMs,
-    `${toolName} tool request`,
-  );
-  logDiagnostic({ event: "tool_start", requestId, tool: toolName, timeoutMs, args });
+  const hardTimeout = options.hardTimeout === true;
+  const timeout = hardTimeout
+    ? createTimeoutSignal(
+        ctl.abortSignal,
+        timeoutMs,
+        `${toolName} tool request`,
+      )
+    : undefined;
+  const fallbackController = new AbortController();
+  const signal = timeout?.signal ?? ctl.abortSignal ?? fallbackController.signal;
+  const slowTimer = hardTimeout
+    ? undefined
+    : setTimeout(() => {
+        logDiagnostic({
+          event: "tool_slow",
+          requestId,
+          tool: toolName,
+          elapsedMs: Date.now() - startedAt,
+          softTimeoutMs: timeoutMs,
+          note: "Soft watchdog elapsed; tool continues unless the chat/request is aborted.",
+        });
+      }, timeoutMs);
+
+  logDiagnostic({ event: "tool_start", requestId, tool: toolName, timeoutMs, hardTimeout, args });
   try {
-    const result = await fn(requestId, timeout.signal);
+    const result = await fn(requestId, signal);
     logDiagnostic({
       event: "tool_complete",
       requestId,
       tool: toolName,
       elapsedMs: Date.now() - startedAt,
       timeoutMs,
+      hardTimeout,
     });
     return result;
   } catch (error) {
@@ -391,6 +411,7 @@ async function withToolLogging<T>(
       tool: toolName,
       elapsedMs: Date.now() - startedAt,
       timeoutMs,
+      hardTimeout,
       error: serializeError(error),
     });
     if (timedOut) {
@@ -398,12 +419,13 @@ async function withToolLogging<T>(
         success: false,
         timedOut: true,
         error: error instanceof Error ? error.message : `${toolName} timed out.`,
-        hint: "The plugin aborted this tool request so the model cannot hang indefinitely. Try a narrower skill name/query or reduce the target directory size.",
+        hint: "This hard timeout is only used for bounded command execution. Try increasing timeout_ms or splitting the command into smaller steps.",
       } as T;
     }
     throw error;
   } finally {
-    timeout.cleanup();
+    if (slowTimer) clearTimeout(slowTimer);
+    timeout?.cleanup();
   }
 }
 
@@ -1132,6 +1154,7 @@ export async function toolsProvider(ctl: PluginController) {
               : {}),
           };
         },
+        { hardTimeout: true },
       ),
   });
 

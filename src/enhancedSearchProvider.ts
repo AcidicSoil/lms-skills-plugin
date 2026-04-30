@@ -35,11 +35,65 @@ export interface EnhancedSkillSearchResult {
 
 const ENHANCED_SEARCH_TIMEOUT_MS = 8_000;
 const ENHANCED_SEARCH_MAX_OUTPUT_BYTES = 256_000;
+const EXECUTABLE_TOKEN_PATTERN = /^[A-Za-z0-9._~+:/\\-]+$/;
+const QMD_COLLECTION_PATTERN = /^[A-Za-z0-9._:@/\\-]+$/;
+
+const BLOCKED_PROVIDER_ARGS = new Set([
+  "collection",
+  "context",
+  "update",
+  "embed",
+  "cleanup",
+  "bench",
+  "mcp",
+  "skill",
+  "remove",
+  "rename",
+  "install",
+  "--pull",
+  "--force",
+  "--reindex",
+  "--index",
+  "--clean",
+  "--clean-orphans",
+  "--switch-model",
+  "--add",
+  "--serve",
+  "--tui",
+]);
 
 function truncateOutput(text: string): string {
   const buf = Buffer.from(text, "utf-8");
   if (buf.length <= ENHANCED_SEARCH_MAX_OUTPUT_BYTES) return text;
   return `${buf.slice(0, ENHANCED_SEARCH_MAX_OUTPUT_BYTES).toString("utf-8")}\n[truncated]`;
+}
+
+function sanitizeExecutable(raw: string, fallback: string): string {
+  const executable = raw.trim() || fallback;
+  if (!EXECUTABLE_TOKEN_PATTERN.test(executable)) return fallback;
+  if (executable.includes("..")) return fallback;
+  return executable;
+}
+
+function sanitizeQmdCollections(collections: string[]): string[] {
+  return collections
+    .map((collection) => collection.trim())
+    .filter((collection) => collection.length > 0 && QMD_COLLECTION_PATTERN.test(collection) && !collection.includes(".."))
+    .slice(0, 8);
+}
+
+function assertReadOnlyProviderInvocation(executable: string, args: string[]): string | null {
+  if (!EXECUTABLE_TOKEN_PATTERN.test(executable) || executable.includes("..")) {
+    return "Enhanced search executable contains unsupported characters.";
+  }
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    const lowered = arg.toLowerCase();
+    if ((index === 0 || lowered.startsWith("--")) && BLOCKED_PROVIDER_ARGS.has(lowered)) {
+      return `Enhanced search argument is blocked: ${arg}`;
+    }
+  }
+  return null;
 }
 
 function runFixedCommand(
@@ -50,6 +104,10 @@ function runFixedCommand(
   timeoutMs = ENHANCED_SEARCH_TIMEOUT_MS,
 ): Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }> {
   checkAbort(signal);
+  const blockedReason = assertReadOnlyProviderInvocation(executable, args);
+  if (blockedReason) {
+    return Promise.resolve({ stdout: "", stderr: blockedReason, exitCode: 126, timedOut: false });
+  }
 
   return new Promise((resolve, reject) => {
     let proc: child_process.ChildProcess;
@@ -111,7 +169,7 @@ function runFixedCommand(
 }
 
 async function isExecutableAvailable(executable: string, signal?: AbortSignal): Promise<boolean> {
-  const result = await runFixedCommand(executable, ["--version"], signal, undefined, 2_000).catch(() => null);
+  const result = await runFixedCommand(sanitizeExecutable(executable, executable), ["--version"], signal, undefined, 2_000).catch(() => null);
   return Boolean(result && !result.timedOut && result.exitCode === 0);
 }
 
@@ -206,9 +264,12 @@ async function runQmdSearch(
   signal?: AbortSignal,
 ): Promise<{ skills: SkillInfo[]; rawResultCount: number; diagnostics: string[] }> {
   const diagnostics: string[] = [];
-  const collectionArgs = options.qmdCollections.flatMap((collection) => ["-c", collection]);
-  const args = ["query", "--json", "-n", String(Math.max(limit, 10)), ...collectionArgs, query];
-  const result = await runFixedCommand(options.qmdExecutable, args, signal);
+  const qmdExecutable = sanitizeExecutable(options.qmdExecutable, "qmd");
+  const qmdCollections = sanitizeQmdCollections(options.qmdCollections);
+  const collectionArgs = qmdCollections.flatMap((collection) => ["-c", collection]);
+  const args = ["query", "--json", "--explain", "-n", String(Math.max(limit, 10)), "--candidate-limit", "40", ...collectionArgs, query];
+  diagnostics.push(qmdCollections.length > 0 ? `qmd collections=${qmdCollections.join(",")}` : "qmd collections=default");
+  const result = await runFixedCommand(qmdExecutable, args, signal);
   if (result.timedOut) return { skills: [], rawResultCount: 0, diagnostics: ["qmd query timed out"] };
   if (result.exitCode !== 0) return { skills: [], rawResultCount: 0, diagnostics: [`qmd query failed: ${result.stderr.slice(0, 240)}`] };
   const candidates = [...new Set([...parseJsonCandidates(result.stdout), ...parseTextCandidatePaths(result.stdout)])];
@@ -228,9 +289,10 @@ async function runCkSearch(
   const diagnostics: string[] = [];
   const allCandidates: string[] = [];
 
+  const ckExecutable = sanitizeExecutable(options.ckExecutable, "ck");
   for (const root of roots) {
     checkAbort(signal);
-    const result = await runFixedCommand(options.ckExecutable, ["--jsonl", "--hybrid", "--topk", String(Math.max(limit, 10)), query, root.resolvedPath], signal, root.resolvedPath);
+    const result = await runFixedCommand(ckExecutable, ["--jsonl", "--hybrid", "--rerank", "--topk", String(Math.max(limit, 10)), "--scores", query, root.resolvedPath], signal, root.resolvedPath);
     if (result.timedOut) {
       diagnostics.push(`ck timed out for ${root.displayPath}`);
       continue;

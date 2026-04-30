@@ -41,7 +41,7 @@ Most important current behaviors:
 - `list_skills({ mode: "route" })` without a query now returns a clear structured note that route mode needs a concrete query, instead of scanning/listing everything. This avoids the exported-chat failure where the model used route mode with no query after seeing a placeholder command.
 - `run_command` is disabled by default and protected by schema validation plus command safety policy.
 - Tool inputs are validated by Zod schemas in `src/toolSchemas.ts`.
-- Tool requests have timeout guardrails.
+- Tool requests have watchdog guardrails: skill discovery/read/list tools use soft `tool_slow` diagnostics and continue unless the chat/request is aborted, while `run_command` and internal qmd/ck provider subprocesses remain hard-timeout bounded.
 - Default logs are human-readable route/tool/context summaries; JSON logs require `LMS_SKILLS_DEBUG=1`.
 
 Context-injection proof logging:

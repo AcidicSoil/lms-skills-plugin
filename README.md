@@ -309,17 +309,17 @@ This is policy-level hardening, not a full OS sandbox. For untrusted workloads, 
 
 ## Timeout guardrails
 
-The plugin has layered timeout protection so model/tool requests cannot wait forever:
+The plugin uses layered watchdogs so protection targets real hangs without false-failing slow skill reads:
 
 | Area | Default | Behavior |
 |---|---:|---|
-| Prompt preprocessor scan | 3 seconds | If skill discovery is slow, the model still receives a compact skills reminder instead of hanging. |
-| `read_skill_file` | 30 seconds | Aborts file/path resolution and returns a structured timeout result. |
-| `list_skill_files` | 45 seconds | Aborts directory traversal and returns a structured timeout result. |
-| `list_skills` | 60 seconds | Aborts broad skill scans/searches and returns a structured timeout result. |
-| `run_command` | 30 seconds default + 15 seconds setup budget | Command execution has a timeout and is disabled unless explicitly enabled. |
+| Prompt preprocessor scan | 3 seconds | Hard bounded. If skill discovery is slow, the model still receives a compact skills reminder instead of hanging. |
+| `read_skill_file` | 30 seconds soft watchdog | Logs `tool_slow` if the read takes longer than expected, but continues unless the chat/request itself is aborted. |
+| `list_skill_files` | 45 seconds soft watchdog | Logs `tool_slow` for slow directory traversal, but continues unless the chat/request itself is aborted. |
+| `list_skills` | 60 seconds soft watchdog | Logs `tool_slow` for broad scans/searches, but continues unless the chat/request itself is aborted. Enhanced qmd/ck subprocesses still have their own short provider timeouts and built-in fallback. |
+| `run_command` | 30 seconds default + 15 seconds setup budget | Hard bounded because it executes external commands and is disabled unless explicitly enabled. |
 
-Timeouts are enforced with `AbortSignal`, so WSL/runtime subprocesses are killed when possible. Timeout events are logged as `tool_timeout` or `runtime_exec_abort`.
+Only command execution and internal provider subprocesses use hard timeouts. Normal skill discovery/read/list tools use soft watchdog diagnostics to avoid the false timeout failures seen with slower models or slower filesystems.
 
 ---
 
