@@ -51,7 +51,9 @@ const SKILL_STRUCTURE_HINT =
   "A skill directory uses SKILL.md as the entrypoint. Supporting assets may live in references/, templates/, examples/, scripts/, or other relative paths. Read SKILL.md first, then call list_skill_files and read_skill_file with a relative file_path for referenced support files when needed.";
 
 const SKILL_SEARCH_WORKFLOW_HINT =
-  "Use list_skills for skill discovery. The plugin controls the search backend internally: exact lookup, fuzzy matching, route scoring, optional enhanced local search when available, and built-in fallback. Do not call qmd, ck, grep, or shell commands directly for skill discovery.";
+  "Skill workflow: if the user wrote $skill-name and the preprocessor expanded it, apply the expanded skill directly and do not rediscover it. If an explicit $skill-name was not expanded or is unresolved, call list_skills with that exact token first. For normal specialized tasks, use routed candidates first; otherwise call list_skills with a concise task query. After choosing a candidate, call read_skill_file with the exact skill name. Use list_skill_files only after SKILL.md references supporting assets. Do not call qmd, ck, grep, shell commands, or run_command for skill discovery.";
+
+const LIST_SKILLS_HARD_RECOVERY_MS = 180_000;
 
 function skillSearchBackendSummary(cfg: EffectiveConfig, result?: EnhancedSkillSearchResult) {
   if (result) {
@@ -364,7 +366,7 @@ async function withToolLogging<T>(
   args: Record<string, unknown>,
   timeoutMs: number,
   fn: (requestId: string, signal: AbortSignal) => Promise<T>,
-  options: { hardTimeout?: boolean } = {},
+  options: { hardTimeout?: boolean; recoveryTimeoutMs?: number } = {},
 ): Promise<T> {
   const requestId = createRequestId(toolName);
   const startedAt = Date.now();
@@ -391,9 +393,37 @@ async function withToolLogging<T>(
         });
       }, timeoutMs);
 
-  logDiagnostic({ event: "tool_start", requestId, tool: toolName, timeoutMs, hardTimeout, args });
+  let recoveryTimerHandle: ReturnType<typeof setTimeout> | undefined;
+  const recoveryTimer =
+    !hardTimeout && options.recoveryTimeoutMs
+      ? new Promise<T>((resolve) => {
+          recoveryTimerHandle = setTimeout(() => {
+            logDiagnostic({
+              event: "tool_recovery_timeout",
+              requestId,
+              tool: toolName,
+              elapsedMs: Date.now() - startedAt,
+              recoveryTimeoutMs: options.recoveryTimeoutMs,
+              note: "Returning a bounded recovery result so the model can continue debugging instead of waiting indefinitely.",
+            });
+            resolve({
+              success: false,
+              timedOut: true,
+              recovered: true,
+              tool: toolName,
+              elapsedMs: Date.now() - startedAt,
+              error: `${toolName} did not return within ${options.recoveryTimeoutMs}ms.`,
+              hint:
+                "The tool is still bounded for model usability. Try an exact skill name, use mode='route' with a concise query, reduce skill roots, check external search backend settings, or inspect plugin diagnostics.",
+            } as T);
+          }, options.recoveryTimeoutMs);
+        })
+      : undefined;
+
+  logDiagnostic({ event: "tool_start", requestId, tool: toolName, timeoutMs, hardTimeout, recoveryTimeoutMs: options.recoveryTimeoutMs, args });
   try {
-    const result = await fn(requestId, signal);
+    const work = fn(requestId, signal);
+    const result = recoveryTimer ? await Promise.race([work, recoveryTimer]) : await work;
     logDiagnostic({
       event: "tool_complete",
       requestId,
@@ -425,6 +455,7 @@ async function withToolLogging<T>(
     throw error;
   } finally {
     if (slowTimer) clearTimeout(slowTimer);
+    if (recoveryTimerHandle) clearTimeout(recoveryTimerHandle);
     timeout?.cleanup();
   }
 }
@@ -810,7 +841,7 @@ export async function toolsProvider(ctl: PluginController) {
             frontmatter: skillFrontmatterSummary(s),
           })),
         };
-      }),
+      }, { recoveryTimeoutMs: LIST_SKILLS_HARD_RECOVERY_MS }),
   });
 
   const readSkillFileTool = tool({

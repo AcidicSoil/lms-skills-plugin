@@ -36,6 +36,8 @@ function shouldLog(event: DiagnosticEvent): boolean {
     case "tool_complete":
     case "tool_error":
     case "tool_timeout":
+    case "tool_slow":
+    case "tool_recovery_timeout":
     case "step_error":
     case "skill_not_found":
     case "skill_resolved":
@@ -182,6 +184,10 @@ function formatHumanEvent(event: DiagnosticEvent): string {
       return `${prefix} ${event.tool} done${elapsed(event)}${id(event)}`;
     case "tool_timeout":
       return `${prefix} ${event.tool} TIMEOUT${elapsed(event)} timeout=${event.timeoutMs ?? "-"}ms error="${errorMessage(event)}"${id(event)}`;
+    case "tool_slow":
+      return `${prefix} ${event.tool} slow${elapsed(event)} soft=${event.softTimeoutMs ?? "-"}ms note="${quote(event.note)}"${id(event)}`;
+    case "tool_recovery_timeout":
+      return `${prefix} ${event.tool} recovery${elapsed(event)} recovery=${event.recoveryTimeoutMs ?? "-"}ms note="${quote(event.note)}"${id(event)}`;
     case "tool_error":
       return `${prefix} ${event.tool} ERROR${elapsed(event)} error="${errorMessage(event)}"${id(event)}`;
     case "step_error":
