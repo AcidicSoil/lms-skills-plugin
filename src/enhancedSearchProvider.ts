@@ -35,8 +35,7 @@ export interface EnhancedSkillSearchResult {
 
 const ENHANCED_SEARCH_TIMEOUT_MS = 8_000;
 const ENHANCED_SEARCH_MAX_OUTPUT_BYTES = 256_000;
-const EXECUTABLE_TOKEN_PATTERN = /^[A-Za-z0-9._~+:/\\-]+$/;
-const QMD_COLLECTION_PATTERN = /^[A-Za-z0-9._:@/\\-]+$/;
+const UNSAFE_CONTROL_CHARS_PATTERN = /[\0\r\n]/;
 
 const BLOCKED_PROVIDER_ARGS = new Set([
   "collection",
@@ -70,21 +69,20 @@ function truncateOutput(text: string): string {
 
 function sanitizeExecutable(raw: string, fallback: string): string {
   const executable = raw.trim() || fallback;
-  if (!EXECUTABLE_TOKEN_PATTERN.test(executable)) return fallback;
-  if (executable.includes("..")) return fallback;
+  if (!executable || UNSAFE_CONTROL_CHARS_PATTERN.test(executable)) return fallback;
   return executable;
 }
 
 function sanitizeQmdCollections(collections: string[]): string[] {
   return collections
     .map((collection) => collection.trim())
-    .filter((collection) => collection.length > 0 && QMD_COLLECTION_PATTERN.test(collection) && !collection.includes(".."))
+    .filter((collection) => collection.length > 0 && !UNSAFE_CONTROL_CHARS_PATTERN.test(collection) && !collection.startsWith("-"))
     .slice(0, 8);
 }
 
 function assertReadOnlyProviderInvocation(executable: string, args: string[]): string | null {
-  if (!EXECUTABLE_TOKEN_PATTERN.test(executable) || executable.includes("..")) {
-    return "Enhanced search executable contains unsupported characters.";
+  if (!executable || UNSAFE_CONTROL_CHARS_PATTERN.test(executable)) {
+    return "Enhanced search executable contains unsupported control characters.";
   }
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];

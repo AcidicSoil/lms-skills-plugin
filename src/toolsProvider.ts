@@ -379,7 +379,10 @@ async function withToolLogging<T>(
       )
     : undefined;
   const fallbackController = new AbortController();
-  const signal = timeout?.signal ?? ctl.abortSignal ?? fallbackController.signal;
+  const forwardParentAbort = () => fallbackController.abort(ctl.abortSignal?.reason);
+  if (ctl.abortSignal?.aborted) forwardParentAbort();
+  else ctl.abortSignal?.addEventListener("abort", forwardParentAbort, { once: true });
+  const signal = timeout?.signal ?? fallbackController.signal;
   const slowTimer = hardTimeout
     ? undefined
     : setTimeout(() => {
@@ -406,6 +409,9 @@ async function withToolLogging<T>(
               recoveryTimeoutMs: options.recoveryTimeoutMs,
               note: "Returning a bounded recovery result so the model can continue debugging instead of waiting indefinitely.",
             });
+            const error = new Error(`${toolName} recovery timeout after ${options.recoveryTimeoutMs}ms.`);
+            error.name = "TimeoutError";
+            fallbackController.abort(error);
             resolve({
               success: false,
               timedOut: true,
@@ -456,6 +462,7 @@ async function withToolLogging<T>(
   } finally {
     if (slowTimer) clearTimeout(slowTimer);
     if (recoveryTimerHandle) clearTimeout(recoveryTimerHandle);
+    ctl.abortSignal?.removeEventListener("abort", forwardParentAbort);
     timeout?.cleanup();
   }
 }
