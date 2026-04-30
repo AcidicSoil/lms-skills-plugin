@@ -677,6 +677,20 @@ export async function toolsProvider(ctl: PluginController) {
             { query: trimmedQuery, backend: cfg.skillSearchBackend, rootCount: roots.length },
           );
           const enhancedSearchBackend = skillSearchBackendSummary(cfg, enhanced);
+          logDiagnostic({
+            event: "enhanced_search_result",
+            requestId,
+            tool: "list_skills",
+            query: trimmedQuery,
+            requestedBackend: enhanced.requested,
+            activeBackend: enhanced.active,
+            available: JSON.stringify(enhanced.available),
+            fallbackUsed: enhanced.fallbackUsed,
+            fallbackReason: enhanced.fallbackReason,
+            rawResultCount: enhanced.rawResultCount,
+            resolvedCount: enhanced.candidates.length,
+            diagnostics: enhanced.diagnostics.join(" | "),
+          });
 
           if (enhanced.candidates.length > 0) {
             logDiagnostic({

@@ -42,6 +42,7 @@ Most important current behaviors:
 - `run_command` is disabled by default and protected by schema validation plus command safety policy.
 - Tool inputs are validated by Zod schemas in `src/toolSchemas.ts`.
 - Tool requests have watchdog guardrails: skill discovery/read/list tools use soft `tool_slow` diagnostics and continue unless the chat/request is aborted, while `run_command` and internal qmd/ck provider subprocesses remain hard-timeout bounded.
+- Diagnostics are emitted to console/LM Studio dev log and persisted to `~/.lmstudio/plugin-data/lms-skills/diagnostics.log` with one-file rotation at `diagnostics.log.1` (default max 5MB, configurable via `LMS_SKILLS_DIAGNOSTICS_MAX_BYTES`). The logger now exposes `getDiagnosticsLogPath()` and includes explicit `enhanced_search_result` trace lines for backend availability/fallback/raw/resolved counts.
 - Default logs are human-readable route/tool/context summaries; JSON logs require `LMS_SKILLS_DEBUG=1`.
 
 Context-injection proof logging:

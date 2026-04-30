@@ -1,3 +1,7 @@
+import * as fs from "fs";
+import * as path from "path";
+import { PLUGIN_DATA_DIR } from "./constants";
+
 let nextRequestId = 0;
 
 const DEBUG_LOGGING = /^(1|true|yes|debug)$/i.test(
@@ -5,6 +9,15 @@ const DEBUG_LOGGING = /^(1|true|yes|debug)$/i.test(
 );
 const SLOW_STEP_MS = Number(process.env.LMS_SKILLS_SLOW_STEP_MS ?? 250);
 const SLOW_RUNTIME_MS = Number(process.env.LMS_SKILLS_SLOW_RUNTIME_MS ?? 500);
+const DIAGNOSTICS_LOG_FILE = path.join(PLUGIN_DATA_DIR, "diagnostics.log");
+const DIAGNOSTICS_ROTATED_LOG_FILE = path.join(PLUGIN_DATA_DIR, "diagnostics.log.1");
+const DIAGNOSTICS_MAX_BYTES = Number(process.env.LMS_SKILLS_DIAGNOSTICS_MAX_BYTES ?? 5_000_000);
+let diagnosticsLogInitialized = false;
+let diagnosticsLogWriteFailed = false;
+
+export function getDiagnosticsLogPath(): string {
+  return DIAGNOSTICS_LOG_FILE;
+}
 
 export interface DiagnosticEvent {
   event: string;
@@ -19,6 +32,34 @@ export interface DiagnosticEvent {
 export function createRequestId(prefix = "req"): string {
   nextRequestId = (nextRequestId + 1) % Number.MAX_SAFE_INTEGER;
   return `${prefix}-${Date.now().toString(36)}-${nextRequestId.toString(36)}`;
+}
+
+function ensureDiagnosticsLogFile(): void {
+  if (diagnosticsLogInitialized || diagnosticsLogWriteFailed) return;
+  diagnosticsLogInitialized = true;
+  try {
+    fs.mkdirSync(PLUGIN_DATA_DIR, { recursive: true });
+    if (fs.existsSync(DIAGNOSTICS_LOG_FILE)) {
+      const stat = fs.statSync(DIAGNOSTICS_LOG_FILE);
+      if (stat.size > DIAGNOSTICS_MAX_BYTES) {
+        try { fs.unlinkSync(DIAGNOSTICS_ROTATED_LOG_FILE); } catch {}
+        fs.renameSync(DIAGNOSTICS_LOG_FILE, DIAGNOSTICS_ROTATED_LOG_FILE);
+      }
+    }
+  } catch {
+    diagnosticsLogWriteFailed = true;
+  }
+}
+
+function appendDiagnosticLine(line: string): void {
+  if (diagnosticsLogWriteFailed) return;
+  try {
+    ensureDiagnosticsLogFile();
+    if (diagnosticsLogWriteFailed) return;
+    fs.appendFileSync(DIAGNOSTICS_LOG_FILE, `${line}\n`, "utf8");
+  } catch {
+    diagnosticsLogWriteFailed = true;
+  }
 }
 
 function shouldLog(event: DiagnosticEvent): boolean {
@@ -45,6 +86,7 @@ function shouldLog(event: DiagnosticEvent): boolean {
     case "list_skills_exact_result":
     case "list_skills_result":
     case "list_skills_route_result":
+    case "enhanced_search_result":
     case "list_skill_files_result":
     case "run_command_safety_check":
     case "run_command_result":
@@ -203,7 +245,9 @@ function formatHumanEvent(event: DiagnosticEvent): string {
     case "list_skills_exact_result":
       return `${prefix} list_skills exact query=${quote(event.query)} -> ${quote(event.skill)} env=${quote(event.environment)}${id(event)}`;
     case "list_skills_result":
-      return `${prefix} list_skills result total=${quote(event.total)} returned=${quote(event.returned)}${id(event)}`;
+      return `${prefix} list_skills result mode=${quote(event.mode)} backend=${quote(event.backend)} requested=${quote(event.requestedBackend)} fallback=${quote(event.fallbackUsed)} total=${quote(event.total)} returned=${quote(event.returned)}${id(event)}`;
+    case "enhanced_search_result":
+      return `${prefix} enhanced_search requested=${quote(event.requestedBackend)} active=${quote(event.activeBackend)} available=${quote(event.available)} fallback=${quote(event.fallbackUsed)} reason=${quote(event.fallbackReason)} raw=${quote(event.rawResultCount)} resolved=${quote(event.resolvedCount)} diagnostics="${quote(event.diagnostics)}"${id(event)}`;
     case "list_skills_route_result":
       return `${prefix} list_skills route query=${quote(event.query)} selected=${quote(event.selected)} rejectedBest=${quote(event.rejectedBest)} total=${quote(event.total)}${id(event)}`;
     case "list_skill_files_result":
@@ -228,16 +272,17 @@ export function logDiagnostic(event: DiagnosticEvent): void {
   if (!shouldLog(event)) return;
 
   const payload = compactEvent(event);
+  let line = "";
   try {
-    if (DEBUG_LOGGING) {
-      console.log(`[lms-skills:debug] ${JSON.stringify(payload)}`);
-    } else {
-      console.log(formatHumanEvent(payload));
-    }
+    line = DEBUG_LOGGING
+      ? `[lms-skills:debug] ${JSON.stringify(payload)}`
+      : formatHumanEvent(payload);
+    console.log(line);
+    appendDiagnosticLine(line);
   } catch {
-    console.log(
-      `[lms-skills] ${payload.event}${payload.requestId ? ` id=${payload.requestId}` : ""}`,
-    );
+    line = `[lms-skills] ${payload.event}${payload.requestId ? ` id=${payload.requestId}` : ""}`;
+    console.log(line);
+    appendDiagnosticLine(line);
   }
 }
 
