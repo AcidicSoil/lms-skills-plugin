@@ -225,10 +225,8 @@ Use `list_skills` with `mode: "route"` to inspect the same routing decision outs
 | Skills Runtime Environment | Host-dependent | `Windows`, `WSL`, or `Both`. Controls path resolution, skill reads, and command target behavior. |
 | Skills Paths | Last saved/default | Semicolon-separated skill root directories. |
 | Command Execution Safety | Disabled | Controls whether `run_command` can execute shell commands. |
-| WSL Distro | Empty | Optional WSL distribution name. Empty uses the default WSL distro. |
-| Windows Shell Path | Empty | Optional override for Windows command execution shell. |
-| WSL Shell Path | Empty | Optional override for WSL command execution shell. |
-| Legacy Shell Path | Empty | Backward-compatible Windows shell override. Prefer Windows Shell Path. |
+
+Runtime details such as the default WSL distro and shell executable are auto-detected under the hood. Windows command execution resolves PowerShell 7, then Windows PowerShell, then `cmd.exe`; WSL command execution uses the default WSL distro and `bash` unless a legacy saved override already exists in `settings.json`.
 
 ### Skills paths
 

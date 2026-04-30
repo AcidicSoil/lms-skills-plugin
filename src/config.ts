@@ -160,44 +160,4 @@ export const configSchematics = createConfigSchematics()
     },
     "disabled",
   )
-  .field(
-    "wslDistro",
-    "string",
-    {
-      displayName: "WSL Distro (optional)",
-      subtitle:
-        "Optional WSL distribution name. Leave empty to use the default WSL distribution.",
-    },
-    "",
-  )
-  .field(
-    "windowsShellPath",
-    "string",
-    {
-      displayName: "Windows Shell Path (optional)",
-      subtitle:
-        "Override the Windows shell used by run_command. Leave empty to auto-detect PowerShell or cmd.",
-    },
-    "",
-  )
-  .field(
-    "wslShellPath",
-    "string",
-    {
-      displayName: "WSL Shell Path (optional)",
-      subtitle:
-        "Override the WSL shell used by run_command. Leave empty to use bash.",
-    },
-    "",
-  )
-  .field(
-    "shellPath",
-    "string",
-    {
-      displayName: "Legacy Shell Path (optional)",
-      subtitle:
-        "Legacy Windows shell override retained for backward compatibility. Prefer Windows Shell Path.",
-    },
-    "",
-  )
   .build();
