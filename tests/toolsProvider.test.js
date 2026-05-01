@@ -9,27 +9,27 @@ async function withTempSkills(fn) {
   const skillsRoot = path.join(workspace, 'skills');
   const fakeHome = path.join(workspace, 'home');
   try {
-    await fs.mkdir(path.join(skillsRoot, 'PROMPTS', 'caveman', 'references'), { recursive: true });
+    await fs.mkdir(path.join(skillsRoot, 'PROMPTS', 'example-skill', 'references'), { recursive: true });
     await fs.mkdir(path.join(fakeHome, '.lmstudio', 'plugin-data', 'lms-skills'), { recursive: true });
     await fs.writeFile(
-      path.join(skillsRoot, 'PROMPTS', 'caveman', 'SKILL.md'),
+      path.join(skillsRoot, 'PROMPTS', 'example-skill', 'SKILL.md'),
       [
         '---',
-        'name: caveman',
-        'description: Primitive style helper.',
-        'tags: [style, primitive]',
+        'name: example-skill',
+        'description: Generic fixture helper.',
+        'tags: [example, fixture]',
         '---',
         '',
-        '# Caveman',
+        '# Example Skill',
         '',
-        'Use terse primitive wording.',
+        'Use the example fixture workflow.',
         '',
       ].join('\n'),
       'utf8',
     );
     await fs.writeFile(
-      path.join(skillsRoot, 'PROMPTS', 'caveman', 'references', 'guide.md'),
-      'Reference says: short words.',
+      path.join(skillsRoot, 'PROMPTS', 'example-skill', 'references', 'guide.md'),
+      'Reference says: use fixture details.',
       'utf8',
     );
     return await fn({ workspace, skillsRoot, fakeHome });
@@ -112,44 +112,44 @@ test('toolsProvider registers and exercises every available tool with visible de
         'search_skill_roots',
       ]);
 
-      const list = await callTool(tools.get('list_skills'), { query: 'caveman' });
+      const list = await callTool(tools.get('list_skills'), { query: 'example-skill' });
       assert.equal(list.result.found, 1);
-      assert.equal(list.result.skills[0].name, 'caveman');
+      assert.equal(list.result.skills[0].name, 'example-skill');
       assertHasDebugStatus('list_skills', list.statuses);
       assert.ok(list.statuses.some((message) => message.includes('resolving skill roots')));
       assert.ok(list.statuses.some((message) => message.includes('checking exact skill match')));
       assert.equal(list.warnings.length, 0);
 
-      const readSkill = await callTool(tools.get('read_skill_file'), { skill_name: 'caveman' });
+      const readSkill = await callTool(tools.get('read_skill_file'), { skill_name: 'example-skill' });
       assert.equal(readSkill.result.success, true);
-      assert.equal(readSkill.result.skill, 'caveman');
-      assert.match(readSkill.result.content, /Use terse primitive wording/);
+      assert.equal(readSkill.result.skill, 'example-skill');
+      assert.match(readSkill.result.content, /Use the example fixture workflow/);
       assert.doesNotMatch(readSkill.result.content, /^---/);
       assertHasDebugStatus('read_skill_file', readSkill.statuses);
 
-      const listFiles = await callTool(tools.get('list_skill_files'), { skill_name: 'caveman' });
+      const listFiles = await callTool(tools.get('list_skill_files'), { skill_name: 'example-skill' });
       assert.equal(listFiles.result.success, true);
       assert.ok(listFiles.result.entries.some((entry) => entry.path === 'SKILL.md'));
       assert.ok(listFiles.result.entries.some((entry) => entry.path === 'references/guide.md'));
       assertHasDebugStatus('list_skill_files', listFiles.statuses);
 
       const readSupport = await callTool(tools.get('read_skill_file'), {
-        skill_name: 'caveman',
+        skill_name: 'example-skill',
         file_path: 'references/guide.md',
       });
       assert.equal(readSupport.result.success, true);
-      assert.equal(readSupport.result.content, 'Reference says: short words.');
+      assert.equal(readSupport.result.content, 'Reference says: use fixture details.');
       assertHasDebugStatus('read_skill_file', readSupport.statuses);
 
       const listRoots = await callTool(tools.get('list_skill_roots'), {});
       assert.equal(listRoots.result.success, true);
-      assert.ok(listRoots.result.discoveredSkillEntrypoints.some((entry) => entry.path === 'PROMPTS/caveman/SKILL.md'));
+      assert.ok(listRoots.result.discoveredSkillEntrypoints.some((entry) => entry.path === 'PROMPTS/example-skill/SKILL.md'));
       assertHasDebugStatus('list_skill_roots', listRoots.statuses);
 
       const searchRoots = await callTool(tools.get('search_skill_roots'), { pattern: 'PROMPTS/**/SKILL.md' });
       assert.equal(searchRoots.result.success, true);
       assert.equal(searchRoots.result.skillEntrypointCount, 1);
-      assert.equal(searchRoots.result.discoveredSkillEntrypoints[0].path, 'PROMPTS/caveman/SKILL.md');
+      assert.equal(searchRoots.result.discoveredSkillEntrypoints[0].path, 'PROMPTS/example-skill/SKILL.md');
       assertHasDebugStatus('search_skill_roots', searchRoots.statuses);
 
       const blockedCommand = await callTool(tools.get('run_command'), { command: 'pwd' });

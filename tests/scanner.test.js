@@ -16,16 +16,16 @@ const {
 async function withTempSkills(fn) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lms-skills-test-'));
   try {
-    await fs.mkdir(path.join(root, 'PROMPTS', 'caveman'), { recursive: true });
+    await fs.mkdir(path.join(root, 'PROMPTS', 'example-skill'), { recursive: true });
     await fs.mkdir(path.join(root, 'direct'), { recursive: true });
     await fs.writeFile(
-      path.join(root, 'PROMPTS', 'caveman', 'SKILL.md'),
-      '# Caveman\n\nUse terse primitive wording.\n',
+      path.join(root, 'PROMPTS', 'example-skill', 'SKILL.md'),
+      '# Example Skill\n\nUse the example fixture workflow.\n',
       'utf8',
     );
     await fs.writeFile(
-      path.join(root, 'PROMPTS', 'caveman', 'example.txt'),
-      'unga bunga',
+      path.join(root, 'PROMPTS', 'example-skill', 'example.txt'),
+      'example support content',
       'utf8',
     );
     await fs.writeFile(
@@ -88,44 +88,44 @@ function createRoot(root) {
 test('scanSkills discovers direct and nested SKILL.md entrypoints', async () => {
   await withTempSkills(async (rootPath) => {
     const skills = await scanSkills([createRoot(rootPath)], createRegistry());
-    assert.deepEqual(skills.map((skill) => skill.name).sort(), ['caveman', 'direct']);
+    assert.deepEqual(skills.map((skill) => skill.name).sort(), ['direct', 'example-skill']);
     assert.ok(
-      skills.some((skill) => skill.resolvedDirectoryPath.endsWith('/PROMPTS/caveman')),
-      'nested caveman skill should retain its nested directory path',
+      skills.some((skill) => skill.resolvedDirectoryPath.endsWith('/PROMPTS/example-skill')),
+      'nested example-skill skill should retain its nested directory path',
     );
   });
 });
 
 test('resolveSkillByName finds a nested directory by exact skill name', async () => {
   await withTempSkills(async (rootPath) => {
-    const skill = await resolveSkillByName([createRoot(rootPath)], createRegistry(), 'caveman');
-    assert.ok(skill, 'expected caveman skill to resolve');
-    assert.equal(skill.name, 'caveman');
-    assert.ok(skill.resolvedSkillMdPath.endsWith('/PROMPTS/caveman/SKILL.md'));
+    const skill = await resolveSkillByName([createRoot(rootPath)], createRegistry(), 'example-skill');
+    assert.ok(skill, 'expected example-skill skill to resolve');
+    assert.equal(skill.name, 'example-skill');
+    assert.ok(skill.resolvedSkillMdPath.endsWith('/PROMPTS/example-skill/SKILL.md'));
   });
 });
 
 test('searchSkillSet reuses an existing scan result for scoring', async () => {
   await withTempSkills(async (rootPath) => {
     const skills = await scanSkills([createRoot(rootPath)], createRegistry());
-    const results = searchSkillSet(skills, 'caveman');
-    assert.equal(results[0]?.skill.name, 'caveman');
+    const results = searchSkillSet(skills, 'example-skill');
+    assert.equal(results[0]?.skill.name, 'example-skill');
   });
 });
 
 test('readSkillFile reads SKILL.md without frontmatter and support files by relative path', async () => {
   await withTempSkills(async (rootPath) => {
     const registry = createRegistry();
-    const skill = await resolveSkillByName([createRoot(rootPath)], registry, 'caveman');
-    assert.ok(skill, 'expected caveman skill to resolve');
+    const skill = await resolveSkillByName([createRoot(rootPath)], registry, 'example-skill');
+    assert.ok(skill, 'expected example-skill skill to resolve');
 
     const skillMd = await readSkillFile(skill, undefined, registry);
     assert.equal('error' in skillMd, false);
-    assert.match(skillMd.content, /Use terse primitive wording/);
+    assert.match(skillMd.content, /Use the example fixture workflow/);
 
     const support = await readSkillFile(skill, 'example.txt', registry);
     assert.equal('error' in support, false);
-    assert.equal(support.content, 'unga bunga');
+    assert.equal(support.content, 'example support content');
 
     const traversal = await readSkillFile(skill, '../direct/SKILL.md', registry);
     assert.equal('error' in traversal, true);
@@ -135,8 +135,8 @@ test('readSkillFile reads SKILL.md without frontmatter and support files by rela
 test('listSkillDirectory lists only entries inside a resolved skill directory', async () => {
   await withTempSkills(async (rootPath) => {
     const registry = createRegistry();
-    const skill = await resolveSkillByName([createRoot(rootPath)], registry, 'caveman');
-    assert.ok(skill, 'expected caveman skill to resolve');
+    const skill = await resolveSkillByName([createRoot(rootPath)], registry, 'example-skill');
+    assert.ok(skill, 'expected example-skill skill to resolve');
 
     const entries = await listSkillDirectory(skill, undefined, registry);
     assert.ok(entries.some((entry) => entry.relativePath === 'SKILL.md'));
@@ -150,7 +150,7 @@ test('listSkillDirectory lists only entries inside a resolved skill directory', 
 test('listAbsoluteDirectory exposes nested skill tree entries without file reads by caller', async () => {
   await withTempSkills(async (rootPath) => {
     const entries = await listAbsoluteDirectory(`WSL:${rootPath}`, [createRoot(rootPath)], createRegistry());
-    assert.ok(entries.some((entry) => entry.relativePath === 'PROMPTS/caveman/SKILL.md'));
-    assert.ok(entries.some((entry) => entry.relativePath === 'PROMPTS/caveman/example.txt'));
+    assert.ok(entries.some((entry) => entry.relativePath === 'PROMPTS/example-skill/SKILL.md'));
+    assert.ok(entries.some((entry) => entry.relativePath === 'PROMPTS/example-skill/example.txt'));
   });
 });

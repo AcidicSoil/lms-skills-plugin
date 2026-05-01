@@ -1380,7 +1380,7 @@ export async function toolsProvider(ctl: PluginController) {
   const searchSkillRootsTool = tool({
     name: "search_skill_roots",
     description:
-      "Search configured skill-root directory trees by simple substring or glob-like pattern without shell commands or file-content reads. Use this for lightweight problem-solving when list_skills misses an expected skill and a full tree is too much. Examples: 'caveman', '**/caveman/**', 'PROMPTS/**/SKILL.md'. Results are bounded and only include entries inside configured skill roots.",
+      "Search configured skill-root directory trees by simple substring or glob-like pattern without shell commands or file-content reads. Use this for lightweight problem-solving when list_skills misses an expected skill and a full tree is too much. Examples: 'example-skill', '**/example-skill/**', 'PROMPTS/**/SKILL.md'. Results are bounded and only include entries inside configured skill roots.",
     parameters: {
       pattern: skillRootSearchPatternSchema.describe("Substring or glob-like path pattern to match against relative paths under configured skill roots."),
       root_index: z.number().int().min(0).optional().describe("Optional zero-based index of a configured skill root to search. Omit to search all configured roots."),
