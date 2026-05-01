@@ -51,9 +51,26 @@ const SKILL_STRUCTURE_HINT =
   "A skill directory uses SKILL.md as the entrypoint. Supporting assets may live in references/, templates/, examples/, scripts/, or other relative paths. Read SKILL.md first, then call list_skill_files and read_skill_file with a relative file_path for referenced support files when needed.";
 
 const SKILL_SEARCH_WORKFLOW_HINT =
-  "Skill workflow: if the user wrote $skill-name and the preprocessor expanded it, apply the expanded skill directly and do not rediscover it. If an explicit $skill-name was not expanded or is unresolved, call list_skills with that exact token first. For normal specialized tasks, use routed candidates first; otherwise call list_skills with a concise task query. After choosing a candidate, call read_skill_file with the exact skill name. Use list_skill_files only after SKILL.md references supporting assets. Do not call qmd, ck, grep, shell commands, or run_command for skill discovery.";
+  "Skill workflow: if the user wrote $skill-name and the preprocessor expanded it, apply the expanded skill directly and do not rediscover it. If an explicit $skill-name was not expanded or is unresolved, call list_skills with that exact token first. If list_skills finds nothing and the user suspects a custom or nested skill collection, call search_skill_roots for likely patterns or list_skill_roots to inspect the configured skill-root tree. For normal specialized tasks, use routed candidates first; otherwise call list_skills with a concise task query. After choosing a candidate, call read_skill_file with the exact skill name. Use list_skill_files only after SKILL.md references supporting assets. Do not call qmd, ck, grep, shell commands, or run_command for skill discovery.";
 
 const LIST_SKILLS_HARD_RECOVERY_MS = 180_000;
+const SKILL_ROOT_SEARCH_DEFAULT_LIMIT = 50;
+const SKILL_ROOT_SEARCH_MAX_LIMIT = 200;
+
+const skillRootSearchPatternSchema = z
+  .string()
+  .trim()
+  .min(1, "Search pattern is required.")
+  .max(500, "Search pattern is too long.")
+  .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Search pattern cannot contain control characters.");
+
+const skillRootSearchLimitSchema = z
+  .number()
+  .int()
+  .min(1)
+  .max(SKILL_ROOT_SEARCH_MAX_LIMIT)
+  .optional()
+  .describe(`Maximum number of matching root entries to return. Defaults to ${SKILL_ROOT_SEARCH_DEFAULT_LIMIT}.`);
 
 function skillSearchBackendSummary(cfg: EffectiveConfig, result?: EnhancedSkillSearchResult) {
   if (result) {
@@ -281,6 +298,48 @@ async function suggestSkillsForQuery(
 ): Promise<ToolSkillCandidate[]> {
   const skills = await scanSkills(roots, registry, signal);
   return fuzzySkillCandidates(query, skills, limit);
+}
+
+function joinRootSubPath(root: ResolvedSkillRoot, subPath?: string): string {
+  if (!subPath) return root.resolvedPath;
+  return root.environment === "windows"
+    ? path.win32.join(root.resolvedPath, subPath)
+    : path.posix.join(root.resolvedPath, subPath);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function globPatternToRegExp(pattern: string): RegExp {
+  const normalized = pattern.replace(/\\/g, "/").replace(/^\/+/, "");
+  let source = "^";
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index];
+    const next = normalized[index + 1];
+    if (char === "*" && next === "*") {
+      source += ".*";
+      index += 1;
+    } else if (char === "*") {
+      source += "[^/]*";
+    } else if (char === "?") {
+      source += "[^/]";
+    } else {
+      source += escapeRegExp(char);
+    }
+  }
+  source += "$";
+  return new RegExp(source, "i");
+}
+
+function entryMatchesSkillRootSearch(entry: DirectoryEntry, pattern: string): boolean {
+  const normalizedPath = entry.relativePath.replace(/\\/g, "/");
+  const normalizedPattern = pattern.replace(/\\/g, "/").trim();
+  if (!normalizedPattern.includes("*") && !normalizedPattern.includes("?")) {
+    const needle = normalizedPattern.toLowerCase();
+    return normalizedPath.toLowerCase().includes(needle) || entry.name.toLowerCase().includes(needle);
+  }
+  return globPatternToRegExp(normalizedPattern).test(normalizedPath);
 }
 
 function formatDirEntries(entries: DirectoryEntry[], rootName: string) {
@@ -1107,6 +1166,209 @@ export async function toolsProvider(ctl: PluginController) {
       }),
   });
 
+  const listSkillRootsTool = tool({
+    name: "list_skill_roots",
+    description:
+      "List the bounded directory tree under configured skill roots so the model can inspect custom or nested skill collections when list_skills cannot find an expected skill. Use this for structural discovery only; after locating a candidate directory with SKILL.md, call list_skills or read_skill_file with the exact skill name or display path. This tool does not use shell commands and only reads inside configured skill roots.",
+    parameters: {
+      root_index: z.number().int().min(0).optional().describe("Optional zero-based index of a configured skill root to inspect. Omit to inspect all configured roots."),
+      sub_path: optionalRelativeSkillPathSchema.describe("Optional relative sub-path inside the selected configured root, such as PROMPTS."),
+    },
+    implementation: async ({ root_index, sub_path }, { status }) =>
+      withToolLogging(ctl, "list_skill_roots", { root_index, sub_path }, TOOL_LIST_SKILL_FILES_TIMEOUT_MS, async (requestId, toolSignal) => {
+        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skill_roots", toolSignal);
+        status(sub_path ? `Inspecting skill roots under ${sub_path}..` : "Inspecting configured skill roots..");
+
+        const selectedRoots = root_index === undefined ? roots : roots[root_index] ? [roots[root_index]] : [];
+        if (selectedRoots.length === 0) {
+          return {
+            success: false,
+            error: root_index === undefined
+              ? "No configured skill roots were resolved."
+              : `No configured skill root exists at index ${root_index}.`,
+            skillsEnvironment: cfg.skillsEnvironment,
+            roots,
+            hint: "Check plugin skill path settings, then call list_skill_roots again.",
+          };
+        }
+
+        const rootTrees = [];
+        for (const root of selectedRoots) {
+          const resolvedPath = joinRootSubPath(root, sub_path);
+          const displayPath = `${root.environmentLabel}:${resolvedPath}`;
+          const entries = await timedStep(
+            requestId,
+            "list_skill_roots",
+            "list_configured_skill_root",
+            async () => listAbsoluteDirectory(displayPath, roots, registry, toolSignal),
+            { root: root.displayPath, displayPath, sub_path },
+          );
+          rootTrees.push({
+            rootIndex: roots.indexOf(root),
+            environment: root.environment,
+            rawPath: root.rawPath,
+            resolvedPath,
+            displayPath,
+            entryCount: entries.length,
+            tree: formatDirEntries(entries, path.basename(resolvedPath) || resolvedPath),
+            entries: entries.map((e) => ({
+              name: e.name,
+              path: e.relativePath,
+              type: e.type,
+              environment: e.environment,
+              displayPath: e.displayPath,
+              ...(e.sizeBytes !== undefined ? { sizeBytes: e.sizeBytes } : {}),
+            })),
+          });
+        }
+
+        const discoveredSkillEntrypoints = rootTrees.flatMap((tree) =>
+          tree.entries
+            .filter((entry) => entry.type === "file" && entry.name === "SKILL.md")
+            .map((entry) => ({
+              rootIndex: tree.rootIndex,
+              environment: tree.environment,
+              path: entry.path,
+              displayPath: entry.displayPath,
+            })),
+        );
+
+        logDiagnostic({
+          event: "list_skill_roots_result",
+          requestId,
+          tool: "list_skill_roots",
+          rootCount: rootTrees.length,
+          entryCount: rootTrees.reduce((sum, tree) => sum + tree.entryCount, 0),
+          skillEntrypointCount: discoveredSkillEntrypoints.length,
+          sub_path: sub_path || undefined,
+        });
+
+        return {
+          success: true,
+          skillsEnvironment: cfg.skillsEnvironment,
+          roots,
+          inspectedRootCount: rootTrees.length,
+          skillEntrypointCount: discoveredSkillEntrypoints.length,
+          discoveredSkillEntrypoints,
+          rootTrees,
+          skillStructureHint: SKILL_STRUCTURE_HINT,
+          nextStep: discoveredSkillEntrypoints.length > 0
+            ? "Use a discovered SKILL.md parent directory name or display path with read_skill_file, or call list_skills again with a nearby name from the tree."
+            : "No SKILL.md entrypoints were visible within the bounded tree. Try a narrower sub_path if the configured root is large, or check whether the configured path points at the intended collection.",
+        };
+      }),
+  });
+
+  const searchSkillRootsTool = tool({
+    name: "search_skill_roots",
+    description:
+      "Search configured skill-root directory trees by simple substring or glob-like pattern without shell commands or file-content reads. Use this for lightweight problem-solving when list_skills misses an expected skill and a full tree is too much. Examples: 'caveman', '**/caveman/**', 'PROMPTS/**/SKILL.md'. Results are bounded and only include entries inside configured skill roots.",
+    parameters: {
+      pattern: skillRootSearchPatternSchema.describe("Substring or glob-like path pattern to match against relative paths under configured skill roots."),
+      root_index: z.number().int().min(0).optional().describe("Optional zero-based index of a configured skill root to search. Omit to search all configured roots."),
+      sub_path: optionalRelativeSkillPathSchema.describe("Optional relative sub-path inside the selected configured root, such as PROMPTS."),
+      limit: skillRootSearchLimitSchema,
+    },
+    implementation: async ({ pattern, root_index, sub_path, limit }, { status }) =>
+      withToolLogging(ctl, "search_skill_roots", { pattern, root_index, sub_path, limit }, TOOL_LIST_SKILL_FILES_TIMEOUT_MS, async (requestId, toolSignal) => {
+        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "search_skill_roots", toolSignal);
+        const selectedRoots = root_index === undefined ? roots : roots[root_index] ? [roots[root_index]] : [];
+        const cap = limit ?? SKILL_ROOT_SEARCH_DEFAULT_LIMIT;
+
+        if (selectedRoots.length === 0) {
+          return {
+            success: false,
+            error: root_index === undefined
+              ? "No configured skill roots were resolved."
+              : `No configured skill root exists at index ${root_index}.`,
+            skillsEnvironment: cfg.skillsEnvironment,
+            roots,
+            hint: "Call list_skill_roots to inspect available root indexes, or check plugin skill path settings.",
+          };
+        }
+
+        status(`Searching skill roots for ${pattern}..`);
+        const rootResults = [];
+        const matches = [];
+
+        for (const root of selectedRoots) {
+          const resolvedPath = joinRootSubPath(root, sub_path);
+          const displayPath = `${root.environmentLabel}:${resolvedPath}`;
+          const entries = await timedStep(
+            requestId,
+            "search_skill_roots",
+            "list_configured_skill_root_for_search",
+            async () => listAbsoluteDirectory(displayPath, roots, registry, toolSignal),
+            { root: root.displayPath, displayPath, pattern, sub_path },
+          );
+          const rootMatches = entries.filter((entry) => entryMatchesSkillRootSearch(entry, pattern));
+          const remaining = Math.max(0, cap - matches.length);
+          const limitedRootMatches = rootMatches.slice(0, remaining);
+          const mappedMatches = limitedRootMatches.map((entry) => ({
+            rootIndex: roots.indexOf(root),
+            environment: root.environment,
+            name: entry.name,
+            path: entry.relativePath,
+            type: entry.type,
+            displayPath: entry.displayPath,
+            ...(entry.sizeBytes !== undefined ? { sizeBytes: entry.sizeBytes } : {}),
+          }));
+          matches.push(...mappedMatches);
+          rootResults.push({
+            rootIndex: roots.indexOf(root),
+            environment: root.environment,
+            rawPath: root.rawPath,
+            resolvedPath,
+            displayPath,
+            scannedEntryCount: entries.length,
+            matchedEntryCount: rootMatches.length,
+          });
+          if (matches.length >= cap) break;
+        }
+
+        const discoveredSkillEntrypoints = matches
+          .filter((entry) => entry.type === "file" && entry.name === "SKILL.md")
+          .map((entry) => ({
+            rootIndex: entry.rootIndex,
+            environment: entry.environment,
+            path: entry.path,
+            displayPath: entry.displayPath,
+          }));
+
+        const totalMatchedEntries = rootResults.reduce((total, rootResult) => total + rootResult.matchedEntryCount, 0);
+        logDiagnostic({
+          event: "search_skill_roots_result",
+          requestId,
+          tool: "search_skill_roots",
+          pattern,
+          rootCount: rootResults.length,
+          returned: matches.length,
+          totalMatchedEntries,
+          skillEntrypointCount: discoveredSkillEntrypoints.length,
+          sub_path: sub_path || undefined,
+        });
+
+        return {
+          success: true,
+          pattern,
+          skillsEnvironment: cfg.skillsEnvironment,
+          rootCount: rootResults.length,
+          returned: matches.length,
+          totalMatchedEntries,
+          limit: cap,
+          truncated: totalMatchedEntries > matches.length,
+          roots: rootResults,
+          matches,
+          skillEntrypointCount: discoveredSkillEntrypoints.length,
+          discoveredSkillEntrypoints,
+          skillStructureHint: SKILL_STRUCTURE_HINT,
+          nextStep: discoveredSkillEntrypoints.length > 0
+            ? "Use a discovered SKILL.md parent directory name or display path with read_skill_file, or call list_skills with a nearby name from the matched path."
+            : "Try another concise substring or glob-like pattern, or call list_skill_roots to inspect nearby directory structure.",
+        };
+      }),
+  });
+
   const runCommandTool = tool({
     name: "run_command",
     description:
@@ -1208,5 +1470,5 @@ export async function toolsProvider(ctl: PluginController) {
       ),
   });
 
-  return [listSkillsTool, readSkillFileTool, listSkillFilesTool, runCommandTool];
+  return [listSkillsTool, readSkillFileTool, listSkillFilesTool, listSkillRootsTool, searchSkillRootsTool, runCommandTool];
 }
