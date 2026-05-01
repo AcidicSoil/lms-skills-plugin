@@ -18,7 +18,7 @@ import {
 } from "./constants";
 import {
   scanSkills,
-  searchSkills,
+  searchSkillSet,
   resolveSkillByName,
   readSkillFile,
   readAbsolutePath,
@@ -61,6 +61,7 @@ const SKILL_SEARCH_WORKFLOW_HINT =
 const LIST_SKILLS_HARD_RECOVERY_MS = 180_000;
 const SKILL_ROOT_SEARCH_DEFAULT_LIMIT = 50;
 const SKILL_ROOT_SEARCH_MAX_LIMIT = 200;
+const TOOL_VISIBLE_STILL_WORKING_MS = 5_000;
 
 function compactToolStatusValue(value: unknown): string {
   if (value === undefined || value === null || value === "") return "-";
@@ -496,6 +497,14 @@ async function withToolLogging<T>(
   if (ctl.abortSignal?.aborted) forwardParentAbort();
   else ctl.abortSignal?.addEventListener("abort", forwardParentAbort, { once: true });
   const signal = timeout?.signal ?? fallbackController.signal;
+  const visibleStillWorkingTimer = setTimeout(() => {
+    emitToolDebugWarning(options.ui, `${toolName}: still working`, {
+      requestId,
+      elapsedMs: Date.now() - startedAt,
+      note: "current stage may be filesystem or backend search",
+    });
+  }, Math.min(TOOL_VISIBLE_STILL_WORKING_MS, Math.max(1_000, timeoutMs)));
+
   const slowTimer = hardTimeout
     ? undefined
     : setTimeout(() => {
@@ -505,7 +514,7 @@ async function withToolLogging<T>(
           tool: toolName,
           elapsedMs: Date.now() - startedAt,
           softTimeoutMs: timeoutMs,
-          note: "Soft watchdog elapsed; tool continues unless the chat/request is aborted.",
+          note: "Soft watchdog elapsed; tool continues unless the chat/request itself is aborted.",
         });
         emitToolDebugWarning(options.ui, `${toolName}: still running`, {
           requestId,
@@ -597,6 +606,7 @@ async function withToolLogging<T>(
     }
     throw error;
   } finally {
+    clearTimeout(visibleStillWorkingTimer);
     if (slowTimer) clearTimeout(slowTimer);
     if (recoveryTimerHandle) clearTimeout(recoveryTimerHandle);
     ctl.abortSignal?.removeEventListener("abort", forwardParentAbort);
@@ -641,8 +651,15 @@ export async function toolsProvider(ctl: PluginController) {
         if (query && query.trim()) {
           const trimmedQuery = query.trim();
           status(`Searching skills for "${trimmedQuery}"..`);
+          emitToolDebugStatus({ status }, "list_skills: query search plan", {
+            query: trimmedQuery,
+            mode: mode ?? "search",
+            roots: roots.length,
+            limit: cap,
+          });
 
           if (mode === "route") {
+            emitToolDebugStatus({ status }, "list_skills: checking exact skill match", { query: trimmedQuery });
             const exact = await timedStep(
               requestId,
               "list_skills",
@@ -697,6 +714,7 @@ export async function toolsProvider(ctl: PluginController) {
               };
             }
 
+            emitToolDebugStatus({ status }, "list_skills: exact route miss; scanning skills for routing", { roots: roots.length });
             const skills = await timedStep(
               requestId,
               "list_skills",
@@ -747,6 +765,7 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
+          emitToolDebugStatus({ status }, "list_skills: checking exact skill match", { query: trimmedQuery });
           const exact = await timedStep(
             requestId,
             "list_skills",
@@ -794,6 +813,9 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
+          emitToolDebugStatus({ status }, "list_skills: exact miss; trying configured search backend", {
+            backend: cfg.skillSearchBackend,
+          });
           const enhanced = await timedStep(
             requestId,
             "list_skills",
@@ -868,12 +890,28 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
+          emitToolDebugStatus({ status }, "list_skills: backend miss; scanning skills once for fuzzy and full-text scoring", {
+            query: trimmedQuery,
+            roots: roots.length,
+          });
+          const scannedSkills = await timedStep(
+            requestId,
+            "list_skills",
+            "scan_skills_for_builtin_search",
+            async () => scanSkills(roots, registry, toolSignal),
+            { query: trimmedQuery, rootCount: roots.length },
+          );
+          emitToolDebugStatus({ status }, "list_skills: scan complete", {
+            skills: scannedSkills.length,
+            query: trimmedQuery,
+          });
+
           const fuzzy = await timedStep(
             requestId,
             "list_skills",
             "fuzzy_skill_candidates",
-            async () => suggestSkillsForQuery(roots, registry, trimmedQuery, cap, toolSignal),
-            { query: trimmedQuery, rootCount: roots.length },
+            async () => fuzzySkillCandidates(trimmedQuery, scannedSkills, cap),
+            { query: trimmedQuery, skillCount: scannedSkills.length },
           );
 
           if (fuzzy.length > 0) {
@@ -900,12 +938,13 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
+          emitToolDebugStatus({ status }, "list_skills: fuzzy miss; scoring scanned skill text", { query: trimmedQuery });
           const results = await timedStep(
             requestId,
             "list_skills",
-            "search_skills",
-            async () => searchSkills(roots, registry, trimmedQuery, toolSignal),
-            { query: trimmedQuery, rootCount: roots.length },
+            "score_scanned_skills",
+            async () => searchSkillSet(scannedSkills, trimmedQuery, toolSignal),
+            { query: trimmedQuery, skillCount: scannedSkills.length },
           );
 
           if (results.length === 0) {

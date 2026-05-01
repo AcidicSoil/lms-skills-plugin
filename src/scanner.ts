@@ -646,21 +646,19 @@ function scoreField(
   return coverage * 0.7 + density * 0.3;
 }
 
-export async function searchSkills(
-  roots: ResolvedSkillRoot[],
-  registry: RuntimeRegistry,
+export function searchSkillSet(
+  skills: SkillInfo[],
   query: string,
   signal?: AbortSignal,
-): Promise<SkillSearchResult[]> {
+): SkillSearchResult[] {
   const queryTokens = tokenize(query);
   if (queryTokens.length === 0) return [];
 
   const queryLower = query.toLowerCase().trim();
-  const allSkills = await scanSkills(roots, registry, signal);
-  const idf = computeIdf(allSkills);
+  const idf = computeIdf(skills);
   const results: SkillSearchResult[] = [];
 
-  for (const skill of allSkills) {
+  for (const skill of skills) {
     checkAbort(signal);
     const nameLower = skill.name.toLowerCase();
 
@@ -714,6 +712,16 @@ export async function searchSkills(
   }
 
   return results.sort((a, b) => b.score - a.score);
+}
+
+export async function searchSkills(
+  roots: ResolvedSkillRoot[],
+  registry: RuntimeRegistry,
+  query: string,
+  signal?: AbortSignal,
+): Promise<SkillSearchResult[]> {
+  const allSkills = await scanSkills(roots, registry, signal);
+  return searchSkillSet(allSkills, query, signal);
 }
 
 function hasPathSeparator(value: string): boolean {
@@ -793,28 +801,55 @@ async function resolveSkillByDirectoryName(
   }
 
   const lower = requested.toLowerCase();
-  for (const root of roots) {
+
+  async function findNestedDirectoryMatch(
+    root: ResolvedSkillRoot,
+    runtime: RuntimeAdapter,
+    dir: string,
+    depth: number,
+  ): Promise<SkillInfo | null> {
     checkAbort(signal);
-    const runtime = registry.getRuntime(root.environment);
-    const entries = await runtime.readDir(root.resolvedPath, signal).catch((error) => {
+    if (depth > MAX_DIRECTORY_DEPTH) return null;
+
+    const entries = await runtime.readDir(dir, signal).catch((error) => {
       if (isAbortError(error)) throw error;
       return [];
     });
 
-    const match = entries.find(
-      (entry) => entry.type === "directory" && entry.name.toLowerCase() === lower,
-    );
-    if (!match) continue;
+    for (const entry of entries) {
+      checkAbort(signal);
+      if (entry.type !== "directory") continue;
+      if (entry.name.toLowerCase() !== lower) continue;
 
-    const skillDir = joinForTarget(root.environment, root.resolvedPath, match.name);
-    const skill = await buildSkillInfoFromDirectory(
-      root,
-      runtime,
-      skillDir,
-      match.name,
-      signal,
-    );
-    if (skill) return skill;
+      const skillDir = joinForTarget(root.environment, dir, entry.name);
+      const skill = await buildSkillInfoFromDirectory(
+        root,
+        runtime,
+        skillDir,
+        entry.name,
+        signal,
+      );
+      if (skill) return skill;
+    }
+
+    if (depth >= MAX_DIRECTORY_DEPTH) return null;
+
+    for (const entry of entries) {
+      checkAbort(signal);
+      if (entry.type !== "directory") continue;
+      const childDir = joinForTarget(root.environment, dir, entry.name);
+      const nested = await findNestedDirectoryMatch(root, runtime, childDir, depth + 1);
+      if (nested) return nested;
+    }
+
+    return null;
+  }
+
+  for (const root of roots) {
+    checkAbort(signal);
+    const runtime = registry.getRuntime(root.environment);
+    const nested = await findNestedDirectoryMatch(root, runtime, root.resolvedPath, 0);
+    if (nested) return nested;
   }
 
   return null;
