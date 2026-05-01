@@ -359,7 +359,7 @@ When the log exceeds `LMS_SKILLS_DIAGNOSTICS_MAX_BYTES` (default `5000000`), it 
 ~/.lmstudio/plugin-data/lms-skills/diagnostics.log.1
 ```
 
-In LM Studio, the same console lines are also visible in the plugin/developer log stream. Use the `id=...` request id to correlate preprocessing, routing, tool calls, slow/recovery events, and backend fallback for one user turn.
+In LM Studio, the same console lines are also visible in the plugin/developer log stream. Tool calls also emit visible LM Studio tool status updates while they run, including start/completion, request ids, runtime-target/root resolution, slow/recovery warnings, and errors. Use the `id=...` request id to correlate preprocessing, routing, visible tool status, tool results, slow/recovery events, and backend fallback for one user turn.
 
 Default logs are human-readable route, context-injection, enhanced-search, and tool summaries. Every prompt injection logs proof of what was inserted, including injection kind, selected/expanded skills, source paths, byte counts, short SHA-256 hashes, and compact previews:
 

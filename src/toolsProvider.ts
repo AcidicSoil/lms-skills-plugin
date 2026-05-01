@@ -47,6 +47,11 @@ import type { ResolvedSkillRoot } from "./pathResolver";
 import type { PluginController } from "./pluginTypes";
 import type { DirectoryEntry, EffectiveConfig, SkillInfo } from "./types";
 
+type ToolUiReporter = {
+  status?: (message: string) => void;
+  warn?: (message: string) => void;
+};
+
 const SKILL_STRUCTURE_HINT =
   "A skill directory uses SKILL.md as the entrypoint. Supporting assets may live in references/, templates/, examples/, scripts/, or other relative paths. Read SKILL.md first, then call list_skill_files and read_skill_file with a relative file_path for referenced support files when needed.";
 
@@ -56,6 +61,41 @@ const SKILL_SEARCH_WORKFLOW_HINT =
 const LIST_SKILLS_HARD_RECOVERY_MS = 180_000;
 const SKILL_ROOT_SEARCH_DEFAULT_LIMIT = 50;
 const SKILL_ROOT_SEARCH_MAX_LIMIT = 200;
+
+function compactToolStatusValue(value: unknown): string {
+  if (value === undefined || value === null || value === "") return "-";
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  const compact = text.replace(/\s+/g, " ").trim();
+  return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
+}
+
+function emitToolDebugStatus(
+  ui: ToolUiReporter | undefined,
+  message: string,
+  details: Record<string, unknown> = {},
+): void {
+  if (!ui?.status) return;
+  const compactDetails = Object.entries(details)
+    .filter(([, value]) => value !== undefined && value !== "")
+    .map(([key, value]) => `${key}=${compactToolStatusValue(value)}`)
+    .join(" ");
+  ui.status(`[debug] ${message}${compactDetails ? ` (${compactDetails})` : ""}`);
+}
+
+function emitToolDebugWarning(
+  ui: ToolUiReporter | undefined,
+  message: string,
+  details: Record<string, unknown> = {},
+): void {
+  if (!ui?.warn && !ui?.status) return;
+  const compactDetails = Object.entries(details)
+    .filter(([, value]) => value !== undefined && value !== "")
+    .map(([key, value]) => `${key}=${compactToolStatusValue(value)}`)
+    .join(" ");
+  const text = `[debug] ${message}${compactDetails ? ` (${compactDetails})` : ""}`;
+  if (ui.warn) ui.warn(text);
+  else ui.status?.(text);
+}
 
 const skillRootSearchPatternSchema = z
   .string()
@@ -369,19 +409,29 @@ async function getRuntimeContext(
   requestId: string,
   toolName: string,
   signal: AbortSignal,
+  ui?: ToolUiReporter,
 ): Promise<{
   cfg: EffectiveConfig;
   registry: RuntimeRegistry;
   targets: RuntimeTargetName[];
   roots: ResolvedSkillRoot[];
 }> {
+  emitToolDebugStatus(ui, `${toolName}: resolving configuration`, { requestId });
   const cfg = await timedStep(requestId, toolName, "resolve_config", async () =>
     resolveEffectiveConfig(ctl),
   );
+  emitToolDebugStatus(ui, `${toolName}: creating runtime registry`, {
+    environment: cfg.skillsEnvironment,
+    paths: cfg.skillsPaths.length,
+  });
   const registry = await timedStep(requestId, toolName, "create_runtime_registry", async () =>
     createRuntimeRegistry(cfg),
   );
   const targets = deriveRuntimeTargets(cfg.skillsEnvironment);
+  emitToolDebugStatus(ui, `${toolName}: runtime targets ready`, {
+    targets: targets.join(","),
+    backend: cfg.skillSearchBackend,
+  });
   logDiagnostic({
     event: "runtime_context",
     requestId,
@@ -396,6 +446,10 @@ async function getRuntimeContext(
     hasWindowsShellPath: Boolean(cfg.windowsShellPath),
     hasWslShellPath: Boolean(cfg.wslShellPath),
   });
+  emitToolDebugStatus(ui, `${toolName}: resolving skill roots`, {
+    targets: targets.length,
+    rawPaths: cfg.skillsPaths.length,
+  });
   const roots = await timedStep(
     requestId,
     toolName,
@@ -403,6 +457,7 @@ async function getRuntimeContext(
     async () => resolveSkillRoots(cfg.skillsPaths, targets, registry, signal),
     { targetCount: targets.length, rawPathCount: cfg.skillsPaths.length },
   );
+  emitToolDebugStatus(ui, `${toolName}: resolved skill roots`, { roots: roots.length });
   logDiagnostic({
     event: "roots_resolved",
     requestId,
@@ -424,7 +479,7 @@ async function withToolLogging<T>(
   args: Record<string, unknown>,
   timeoutMs: number,
   fn: (requestId: string, signal: AbortSignal) => Promise<T>,
-  options: { hardTimeout?: boolean; recoveryTimeoutMs?: number } = {},
+  options: { hardTimeout?: boolean; recoveryTimeoutMs?: number; ui?: ToolUiReporter } = {},
 ): Promise<T> {
   const requestId = createRequestId(toolName);
   const startedAt = Date.now();
@@ -452,6 +507,11 @@ async function withToolLogging<T>(
           softTimeoutMs: timeoutMs,
           note: "Soft watchdog elapsed; tool continues unless the chat/request is aborted.",
         });
+        emitToolDebugWarning(options.ui, `${toolName}: still running`, {
+          requestId,
+          elapsedMs: Date.now() - startedAt,
+          softTimeoutMs: timeoutMs,
+        });
       }, timeoutMs);
 
   let recoveryTimerHandle: ReturnType<typeof setTimeout> | undefined;
@@ -470,6 +530,11 @@ async function withToolLogging<T>(
             const error = new Error(`${toolName} recovery timeout after ${options.recoveryTimeoutMs}ms.`);
             error.name = "TimeoutError";
             fallbackController.abort(error);
+            emitToolDebugWarning(options.ui, `${toolName}: recovery timeout`, {
+              requestId,
+              elapsedMs: Date.now() - startedAt,
+              recoveryTimeoutMs: options.recoveryTimeoutMs,
+            });
             resolve({
               success: false,
               timedOut: true,
@@ -485,28 +550,42 @@ async function withToolLogging<T>(
       : undefined;
 
   logDiagnostic({ event: "tool_start", requestId, tool: toolName, timeoutMs, hardTimeout, recoveryTimeoutMs: options.recoveryTimeoutMs, args });
+  emitToolDebugStatus(options.ui, `${toolName}: started`, {
+    requestId,
+    timeoutMs,
+    hardTimeout,
+    args: compactToolStatusValue(args),
+  });
   try {
     const work = fn(requestId, signal);
     const result = recoveryTimer ? await Promise.race([work, recoveryTimer]) : await work;
+    const elapsedMs = Date.now() - startedAt;
     logDiagnostic({
       event: "tool_complete",
       requestId,
       tool: toolName,
-      elapsedMs: Date.now() - startedAt,
+      elapsedMs,
       timeoutMs,
       hardTimeout,
     });
+    emitToolDebugStatus(options.ui, `${toolName}: completed`, { requestId, elapsedMs });
     return result;
   } catch (error) {
     const timedOut = isTimeoutError(error);
+    const elapsedMs = Date.now() - startedAt;
     logDiagnostic({
       event: timedOut ? "tool_timeout" : "tool_error",
       requestId,
       tool: toolName,
-      elapsedMs: Date.now() - startedAt,
+      elapsedMs,
       timeoutMs,
       hardTimeout,
       error: serializeError(error),
+    });
+    emitToolDebugWarning(options.ui, timedOut ? `${toolName}: timed out` : `${toolName}: failed`, {
+      requestId,
+      elapsedMs,
+      error: error instanceof Error ? error.message : String(error),
     });
     if (timedOut) {
       return {
@@ -544,7 +623,7 @@ export async function toolsProvider(ctl: PluginController) {
     },
     implementation: async ({ query, limit, mode }, { status }) =>
       withToolLogging(ctl, "list_skills", { query, limit, mode }, TOOL_LIST_SKILLS_TIMEOUT_MS, async (requestId, toolSignal) => {
-        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skills", toolSignal);
+        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skills", toolSignal, { status });
         const cap = limit ?? LIST_SKILLS_DEFAULT_LIMIT;
         const searchBackend = skillSearchBackendSummary(cfg);
 
@@ -919,7 +998,7 @@ export async function toolsProvider(ctl: PluginController) {
             frontmatter: skillFrontmatterSummary(s),
           })),
         };
-      }, { recoveryTimeoutMs: LIST_SKILLS_HARD_RECOVERY_MS }),
+      }, { recoveryTimeoutMs: LIST_SKILLS_HARD_RECOVERY_MS, ui: { status } }),
   });
 
   const readSkillFileTool = tool({
@@ -932,7 +1011,7 @@ export async function toolsProvider(ctl: PluginController) {
     },
     implementation: async ({ skill_name, file_path }, { status }) =>
       withToolLogging(ctl, "read_skill_file", { skill_name, file_path }, TOOL_READ_SKILL_FILE_TIMEOUT_MS, async (requestId, toolSignal) => {
-        const { registry, roots } = await getRuntimeContext(ctl, requestId, "read_skill_file", toolSignal);
+        const { registry, roots } = await getRuntimeContext(ctl, requestId, "read_skill_file", toolSignal, { status });
         status(`Reading ${skill_name}${file_path ? ` / ${file_path}` : ""}..`);
 
         if (
@@ -1050,7 +1129,7 @@ export async function toolsProvider(ctl: PluginController) {
             ? { hint: "This skill has additional files. Call list_skill_files to explore references/templates/examples/scripts, then read needed relative paths with read_skill_file(file_path)." }
             : {}),
         };
-      }),
+      }, { ui: { status } }),
   });
 
   const listSkillFilesTool = tool({
@@ -1063,7 +1142,7 @@ export async function toolsProvider(ctl: PluginController) {
     },
     implementation: async ({ skill_name, sub_path }, { status }) =>
       withToolLogging(ctl, "list_skill_files", { skill_name, sub_path }, TOOL_LIST_SKILL_FILES_TIMEOUT_MS, async (requestId, toolSignal) => {
-        const { registry, roots } = await getRuntimeContext(ctl, requestId, "list_skill_files", toolSignal);
+        const { registry, roots } = await getRuntimeContext(ctl, requestId, "list_skill_files", toolSignal, { status });
         status(`Listing files in ${skill_name}..`);
 
         if (
@@ -1163,7 +1242,7 @@ export async function toolsProvider(ctl: PluginController) {
             ...(e.sizeBytes !== undefined ? { sizeBytes: e.sizeBytes } : {}),
           })),
         };
-      }),
+      }, { ui: { status } }),
   });
 
   const listSkillRootsTool = tool({
@@ -1176,7 +1255,7 @@ export async function toolsProvider(ctl: PluginController) {
     },
     implementation: async ({ root_index, sub_path }, { status }) =>
       withToolLogging(ctl, "list_skill_roots", { root_index, sub_path }, TOOL_LIST_SKILL_FILES_TIMEOUT_MS, async (requestId, toolSignal) => {
-        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skill_roots", toolSignal);
+        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "list_skill_roots", toolSignal, { status });
         status(sub_path ? `Inspecting skill roots under ${sub_path}..` : "Inspecting configured skill roots..");
 
         const selectedRoots = root_index === undefined ? roots : roots[root_index] ? [roots[root_index]] : [];
@@ -1256,7 +1335,7 @@ export async function toolsProvider(ctl: PluginController) {
             ? "Use a discovered SKILL.md parent directory name or display path with read_skill_file, or call list_skills again with a nearby name from the tree."
             : "No SKILL.md entrypoints were visible within the bounded tree. Try a narrower sub_path if the configured root is large, or check whether the configured path points at the intended collection.",
         };
-      }),
+      }, { ui: { status } }),
   });
 
   const searchSkillRootsTool = tool({
@@ -1271,7 +1350,7 @@ export async function toolsProvider(ctl: PluginController) {
     },
     implementation: async ({ pattern, root_index, sub_path, limit }, { status }) =>
       withToolLogging(ctl, "search_skill_roots", { pattern, root_index, sub_path, limit }, TOOL_LIST_SKILL_FILES_TIMEOUT_MS, async (requestId, toolSignal) => {
-        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "search_skill_roots", toolSignal);
+        const { cfg, registry, roots } = await getRuntimeContext(ctl, requestId, "search_skill_roots", toolSignal, { status });
         const selectedRoots = root_index === undefined ? roots : roots[root_index] ? [roots[root_index]] : [];
         const cap = limit ?? SKILL_ROOT_SEARCH_DEFAULT_LIMIT;
 
@@ -1366,7 +1445,7 @@ export async function toolsProvider(ctl: PluginController) {
             ? "Use a discovered SKILL.md parent directory name or display path with read_skill_file, or call list_skills with a nearby name from the matched path."
             : "Try another concise substring or glob-like pattern, or call list_skill_roots to inspect nearby directory structure.",
         };
-      }),
+      }, { ui: { status } }),
   });
 
   const runCommandTool = tool({
@@ -1466,7 +1545,7 @@ export async function toolsProvider(ctl: PluginController) {
               : {}),
           };
         },
-        { hardTimeout: true },
+        { hardTimeout: true, ui: { status } },
       ),
   });
 
