@@ -492,29 +492,53 @@ async function scanSkillsRoot(
   limit?: number,
 ): Promise<SkillInfo[]> {
   const runtime = registry.getRuntime(root.environment);
-  try {
-    checkAbort(signal);
-    if (!(await runtime.exists(root.resolvedPath, signal))) return [];
 
-    const skills: SkillInfo[] = [];
-    const entries = await runtime.readDir(root.resolvedPath, signal);
+  async function visitDirectory(
+    dir: string,
+    fallbackName: string,
+    depth: number,
+    skills: SkillInfo[],
+  ): Promise<void> {
+    checkAbort(signal);
+    if (limit !== undefined && skills.length >= limit) return;
+    if (depth > MAX_DIRECTORY_DEPTH) return;
+
+    const skill = await buildSkillInfoFromDirectory(
+      root,
+      runtime,
+      dir,
+      fallbackName,
+      signal,
+    );
+    if (skill) {
+      skills.push(skill);
+      return;
+    }
+
+    let entries;
+    try {
+      entries = await runtime.readDir(dir, signal);
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      return;
+    }
 
     for (const entry of entries) {
       checkAbort(signal);
       if (limit !== undefined && skills.length >= limit) break;
       if (entry.type !== "directory") continue;
 
-      const skillDir = joinForTarget(root.environment, root.resolvedPath, entry.name);
-      const skill = await buildSkillInfoFromDirectory(
-        root,
-        runtime,
-        skillDir,
-        entry.name,
-        signal,
-      );
-      if (skill) skills.push(skill);
+      const childDir = joinForTarget(root.environment, dir, entry.name);
+      await visitDirectory(childDir, entry.name, depth + 1, skills);
     }
+  }
 
+  try {
+    checkAbort(signal);
+    if (!(await runtime.exists(root.resolvedPath, signal))) return [];
+
+    const skills: SkillInfo[] = [];
+    await visitDirectory(root.resolvedPath, path.basename(root.resolvedPath), 0, skills);
     return skills;
   } catch (error) {
     if (isAbortError(error)) throw error;

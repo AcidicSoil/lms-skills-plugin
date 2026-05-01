@@ -6,7 +6,7 @@ A Claude-style internal skill system for LM Studio. When the plugin is active, i
 
 `lms-plugin-skills` discovers local skill directories, deterministically routes the current request to the smallest relevant skill set, and provides tools for reading skill instructions and supporting files.
 
-A skill is a directory containing a `SKILL.md` file. Normal requests receive only routed candidates; explicit `$skill-name` activations expand the matching `SKILL.md` body before the model begins reasoning.
+A skill is a directory containing a `SKILL.md` file. Skill roots may contain skill directories directly or grouped one or more levels below category folders, up to the configured directory-depth limit. Normal requests receive only routed candidates; explicit `$skill-name` activations expand the matching `SKILL.md` body before the model begins reasoning.
 
 ## Key features
 
