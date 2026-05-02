@@ -32,6 +32,23 @@ async function withTempSkills(fn) {
       'Reference says: use fixture details.',
       'utf8',
     );
+    await fs.mkdir(path.join(skillsRoot, 'PROMPTS', 'prompt-engineering'), { recursive: true });
+    await fs.writeFile(
+      path.join(skillsRoot, 'PROMPTS', 'prompt-engineering', 'SKILL.md'),
+      [
+        '---',
+        'name: prompt-engineering',
+        'description: Helps craft, improve, and evaluate prompts.',
+        'tags: [prompts, writing]',
+        '---',
+        '',
+        '# Prompt Engineering',
+        '',
+        'Use this skill to craft prompts.',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
     return await fn({ workspace, skillsRoot, fakeHome });
   } finally {
     await fs.rm(workspace, { recursive: true, force: true });
@@ -130,6 +147,13 @@ test('toolsProvider registers and exercises every available tool with visible de
       assert.doesNotMatch(readSkill.result.content, /^---/);
       assertHasDebugStatus('read_skill_file', readSkill.statuses);
 
+      const promptSearch = await callTool(tools.get('list_skills'), { query: 'prompts' });
+      assert.equal(promptSearch.result.found >= 1, true);
+      assert.equal(promptSearch.result.skills[0].name, 'prompt-engineering');
+      assert.equal(promptSearch.result.mode, 'fuzzy');
+      assert.match(promptSearch.result.note, /Fast fuzzy skill-name candidates/);
+      assertHasDebugStatus('list_skills', promptSearch.statuses);
+
       const listFiles = await callTool(tools.get('list_skill_files'), { skill_name: 'example-skill' });
       assert.equal(listFiles.result.success, true);
       assert.ok(listFiles.result.entries.some((entry) => entry.path === 'SKILL.md'));
@@ -174,9 +198,34 @@ test('toolsProvider registers and exercises every available tool with visible de
 
       const searchRoots = await callTool(tools.get('search_skill_roots'), { pattern: 'PROMPTS/**/SKILL.md' });
       assert.equal(searchRoots.result.success, true);
-      assert.equal(searchRoots.result.skillEntrypointCount, 1);
-      assert.equal(searchRoots.result.discoveredSkillEntrypoints[0].path, 'PROMPTS/example-skill/SKILL.md');
+      assert.equal(searchRoots.result.skillEntrypointCount, 2);
+      assert.ok(searchRoots.result.discoveredSkillEntrypoints.some((entry) => entry.path === 'PROMPTS/example-skill/SKILL.md'));
+      assert.ok(searchRoots.result.discoveredSkillEntrypoints.some((entry) => entry.path === 'PROMPTS/prompt-engineering/SKILL.md'));
       assertHasDebugStatus('search_skill_roots', searchRoots.statuses);
+
+      const promptRootSearch = await callTool(tools.get('search_skill_roots'), { pattern: 'prompt' });
+      assert.equal(promptRootSearch.result.success, true);
+      const promptEntrypoint = promptRootSearch.result.discoveredSkillEntrypoints.find(
+        (entry) => entry.path === 'PROMPTS/prompt-engineering/SKILL.md',
+      );
+      assert.ok(promptEntrypoint);
+      assert.equal(promptEntrypoint.skillDirectoryPath, 'PROMPTS/prompt-engineering');
+      assert.equal(promptEntrypoint.skillNameCandidate, 'prompt-engineering');
+      assert.deepEqual(promptEntrypoint.readSkillFileArgs, { skill_name: 'prompt-engineering' });
+      assert.match(promptEntrypoint.note, /Do not pass this SKILL\.md path as file_path/);
+
+      const readPromptFromEntrypoint = await callTool(tools.get('read_skill_file'), promptEntrypoint.readSkillFileArgs);
+      assert.equal(readPromptFromEntrypoint.result.success, true);
+      assert.equal(readPromptFromEntrypoint.result.skill, 'prompt-engineering');
+      assert.match(readPromptFromEntrypoint.result.content, /Use this skill to craft prompts/);
+
+      const readPromptFromBadFollowup = await callTool(tools.get('read_skill_file'), {
+        skill_name: 'PROMPTS/prompt-engineering',
+        file_path: 'PROMPTS/prompt-engineering/SKILL.md',
+      });
+      assert.equal(readPromptFromBadFollowup.result.success, true);
+      assert.equal(readPromptFromBadFollowup.result.skill, 'prompt-engineering');
+      assert.match(readPromptFromBadFollowup.result.content, /Use this skill to craft prompts/);
 
       const blockedCommand = await callTool(tools.get('run_command'), { command: 'pwd' });
       assert.equal(blockedCommand.result.success, false);

@@ -13,10 +13,13 @@ test('source examples use generic skill names', () => {
   }
 });
 
-test('list_skills has a short bounded recovery timeout instead of a multi-minute wait', () => {
+test('list_skills has a short bounded recovery timeout and clear non-empty-result guidance', () => {
   const content = read('src/toolsProvider.ts');
-  assert.match(content, /const LIST_SKILLS_RECOVERY_TIMEOUT_MS = 20_000;/);
-  assert.doesNotMatch(content, /LIST_SKILLS_(?:HARD_)?RECOVERY_.*180_000|recoveryTimeoutMs:\s*180_000/);
+  assert.match(content, /const LIST_SKILLS_RECOVERY_TIMEOUT_MS = 10_000;/);
+  assert.doesNotMatch(content, /LIST_SKILLS_(?:HARD_)?RECOVERY_.*(?:180_000|20_000)|recoveryTimeoutMs:\s*(?:180_000|20_000)/);
+  assert.match(content, /This timeout is not an empty search result/);
+  assert.match(content, /Do not tell the user that no matching skills exist based only on this response/);
+  assert.match(content, /recommendedRecovery/);
 });
 
 test('file operation schemas count UTF-8 bytes and allow multiline edit text', () => {

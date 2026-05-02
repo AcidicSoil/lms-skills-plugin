@@ -22,6 +22,12 @@ Current implementation state:
 - Tool operation timeout constant: `TOOL_FILE_OPERATION_TIMEOUT_MS = 30_000`.
 - Automated validation exists through `npm test`, which runs build plus Node test files.
 
+Observed skill-discovery failure evidence:
+- Uploaded export `Skill Discovery Failure - 2026-05-01 23.54.md` shows `google/gemma-4-e2b` repeatedly calling `list_skills` for `crafting prompts` / `prompts`, receiving `timedOut: true` recovery results around 20 seconds, then incorrectly telling the user no prompt-related skills existed.
+- The corrective behavior is: timeout is not an empty result; model-facing recovery should say to retry with `mode='route'` or inspect roots, and the implementation should return cheap exact/fuzzy metadata matches before slower enhanced/full-text search.
+- Regression fixture now includes `prompt-engineering`; `list_skills({ query: "prompts" })` must return that candidate in fuzzy mode before enhanced backend work.
+- Follow-up failure evidence showed the model misusing a discovered root-relative `SKILL.md` path as `read_skill_file.file_path`. Root search results should include `readSkillFileArgs` and `read_skill_file` should normalize deterministic duplicated entrypoint paths.
+
 Remaining validation gaps:
 - Successful guarded `write_file` / `edit_file` paths should get focused automated tests or manual LM Studio smoke tests.
 - Windows-hosted WSL write behavior should be manually tested in the real LM Studio/WSL environment.

@@ -91,7 +91,7 @@ Explicit activation works even when the regular internal context is disabled, be
 | `read_skill_file` | Read `SKILL.md` or another relative file inside a skill directory. Defaults to `SKILL.md`; pass `file_path` for support files found with `list_skill_files`. |
 | `list_skill_files` | Explore the relative file tree inside a skill directory, including common support folders such as `references/`, `templates/`, `examples/`, and `scripts/`. |
 | `list_skill_roots` | Inspect bounded directory trees under configured skill roots before a skill name is known, useful for nested collections such as `PROMPTS/<skill>/SKILL.md`. |
-| `search_skill_roots` | Search configured skill-root trees with safe glob-style patterns such as `**/example-skill/**` or `PROMPTS/**/SKILL.md` before a skill name is known. |
+| `search_skill_roots` | Search configured skill-root trees with safe glob-style patterns such as `**/example-skill/**` or `PROMPTS/**/SKILL.md` before a skill name is known. If it returns `discoveredSkillEntrypoints`, use the entrypoint's `readSkillFileArgs` exactly with `read_skill_file`; do not pass the discovered `SKILL.md` path as `file_path`. |
 | `run_command` | Execute shell commands only when explicitly enabled by the command safety setting and required by the active skill/task. Disabled by default. |
 
 ### 4. Runtime environments

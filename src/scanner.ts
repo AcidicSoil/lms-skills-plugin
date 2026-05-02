@@ -774,6 +774,45 @@ async function resolveSkillByDisplayOrAbsolutePath(
   return null;
 }
 
+async function resolveSkillByRootRelativePath(
+  roots: ResolvedSkillRoot[],
+  registry: RuntimeRegistry,
+  skillName: string,
+  signal?: AbortSignal,
+): Promise<SkillInfo | null> {
+  const requested = skillName.trim();
+  if (!requested || !hasPathSeparator(requested)) return null;
+  if (parseDisplayPath(requested).environment || path.isAbsolute(requested)) return null;
+
+  for (const root of roots) {
+    checkAbort(signal);
+    const runtime = registry.getRuntime(root.environment);
+    const normalizedRequested = normalizeForTarget(root.environment, requested);
+    const requestedDir = normalizedRequested.endsWith(`/${SKILL_ENTRY_POINT.toLowerCase()}`) || normalizedRequested.endsWith(`\\${SKILL_ENTRY_POINT.toLowerCase()}`)
+      ? (root.environment === "windows"
+          ? path.win32.dirname(requested)
+          : path.posix.dirname(requested))
+      : requested;
+    const resolved = joinForTarget(root.environment, root.resolvedPath, requestedDir);
+    if (!isInsideTarget(root.environment, resolved, root.resolvedPath)) continue;
+    const fallbackName = root.environment === "windows"
+      ? path.win32.basename(resolved)
+      : path.posix.basename(resolved);
+    const skill = await buildSkillInfoFromDirectory(
+      root,
+      runtime,
+      resolved,
+      fallbackName,
+      signal,
+    ).catch((error) => {
+      if (isAbortError(error)) throw error;
+      return null;
+    });
+    if (skill) return skill;
+  }
+  return null;
+}
+
 async function resolveSkillByDirectoryName(
   roots: ResolvedSkillRoot[],
   registry: RuntimeRegistry,
@@ -864,7 +903,7 @@ export async function resolveSkillByName(
   const lower = skillName.toLowerCase().trim();
   const display = parseDisplayPath(skillName);
 
-  if (display.environment || hasPathSeparator(display.path) || path.isAbsolute(skillName)) {
+  if (display.environment || path.isAbsolute(skillName)) {
     const directPath = await resolveSkillByDisplayOrAbsolutePath(
       roots,
       registry,
@@ -873,6 +912,14 @@ export async function resolveSkillByName(
     );
     if (directPath) return directPath;
   }
+
+  const rootRelativePath = await resolveSkillByRootRelativePath(
+    roots,
+    registry,
+    skillName,
+    signal,
+  );
+  if (rootRelativePath) return rootRelativePath;
 
   const directDirectory = await resolveSkillByDirectoryName(
     roots,

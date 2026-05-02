@@ -66,7 +66,7 @@ const SKILL_STRUCTURE_HINT =
 const SKILL_SEARCH_WORKFLOW_HINT =
   "Skill workflow: if the user wrote $skill-name and the preprocessor expanded it, apply the expanded skill directly and do not rediscover it. If an explicit $skill-name was not expanded or is unresolved, call list_skills with that exact token first. If list_skills finds nothing and the user suspects a custom or nested skill collection, call search_skill_roots for likely patterns or list_skill_roots to inspect the configured skill-root tree. For normal specialized tasks, use routed candidates first; otherwise call list_skills with a concise task query. After choosing a candidate, call read_skill_file with the exact skill name. Use list_skill_files only after SKILL.md references supporting assets. Do not call qmd, ck, grep, shell commands, or run_command for skill discovery.";
 
-const LIST_SKILLS_RECOVERY_TIMEOUT_MS = 20_000;
+const LIST_SKILLS_RECOVERY_TIMEOUT_MS = 10_000;
 const SKILL_ROOT_SEARCH_DEFAULT_LIMIT = 50;
 const SKILL_ROOT_SEARCH_MAX_LIMIT = 200;
 const TOOL_VISIBLE_STILL_WORKING_MS = 5_000;
@@ -413,6 +413,72 @@ function formatDirEntries(entries: DirectoryEntry[], rootName: string) {
   return lines.join("\n");
 }
 
+function dirnameForTarget(environment: RuntimeTargetName, value: string): string {
+  return environment === "windows" ? path.win32.dirname(value) : path.posix.dirname(value);
+}
+
+function basenameForTarget(environment: RuntimeTargetName, value: string): string {
+  return environment === "windows" ? path.win32.basename(value) : path.posix.basename(value);
+}
+
+function dirnameDisplayPath(displayPath: string): string {
+  const parsed = displayPath.match(/^(Windows|WSL):(.*)$/);
+  if (!parsed) return path.posix.dirname(displayPath);
+  const label = parsed[1];
+  const rawPath = parsed[2];
+  const dir = label === "Windows" ? path.win32.dirname(rawPath) : path.posix.dirname(rawPath);
+  return `${label}:${dir}`;
+}
+
+function skillEntrypointFollowup(entry: {
+  rootIndex: number;
+  environment: RuntimeTargetName;
+  path: string;
+  displayPath?: string;
+}) {
+  const skillDirectoryPath = dirnameForTarget(entry.environment, entry.path);
+  const skillNameCandidate = basenameForTarget(entry.environment, skillDirectoryPath);
+  const displayPath = entry.displayPath;
+  const skillDirectoryDisplayPath = displayPath ? dirnameDisplayPath(displayPath) : undefined;
+  return {
+    rootIndex: entry.rootIndex,
+    environment: entry.environment,
+    path: entry.path,
+    skillDirectoryPath,
+    skillNameCandidate,
+    ...(displayPath ? { displayPath } : {}),
+    ...(skillDirectoryDisplayPath ? { skillDirectoryDisplayPath } : {}),
+    readSkillFileArgs: { skill_name: skillNameCandidate },
+    ...(displayPath ? { readSkillFileDisplayPathArgs: { skill_name: displayPath } } : {}),
+    note: "Use readSkillFileArgs exactly to read this skill entrypoint. Do not pass this SKILL.md path as file_path; omit file_path for SKILL.md.",
+  };
+}
+
+function normalizeReadSkillFileRequest(skillName: string, filePath?: string): { skillName: string; filePath?: string; note?: string } {
+  const normalizedSkill = skillName.trim();
+  const normalizedFile = filePath?.trim();
+  if (!normalizedFile || normalizedFile === "SKILL.md") {
+    return { skillName: normalizedSkill, filePath: undefined };
+  }
+
+  const fileNormalized = normalizedFile.replace(/\\/g, "/");
+  const skillNormalized = normalizedSkill.replace(/\\/g, "/").replace(/\/$/, "");
+  if (fileNormalized.endsWith("/SKILL.md")) {
+    const fileParent = fileNormalized.slice(0, -"/SKILL.md".length).replace(/\/$/, "");
+    const fileParentBase = fileParent.split("/").filter(Boolean).pop();
+    const skillBase = skillNormalized.split("/").filter(Boolean).pop();
+    if (fileParent === skillNormalized || (fileParentBase && skillBase && fileParentBase === skillBase)) {
+      return {
+        skillName: normalizedSkill,
+        filePath: undefined,
+        note: "Normalized duplicated SKILL.md path from file_path; omit file_path when reading a skill entrypoint.",
+      };
+    }
+  }
+
+  return { skillName: normalizedSkill, filePath: normalizedFile };
+}
+
 async function getRuntimeContext(
   ctl: PluginController,
   requestId: string,
@@ -480,6 +546,53 @@ async function getRuntimeContext(
     })),
   });
   return { cfg, registry, targets, roots };
+}
+
+function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, elapsedMs: number, recoveryTimeoutMs: number): T {
+  if (toolName === "list_skills") {
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    const mode = typeof args.mode === "string" ? args.mode : undefined;
+    const recommendedParameters = query
+      ? { query, mode: "route" as const, limit: 10 }
+      : { limit: 20 };
+    return {
+      success: false,
+      timedOut: true,
+      recovered: true,
+      tool: toolName,
+      elapsedMs,
+      timeoutMs: recoveryTimeoutMs,
+      query: query || undefined,
+      mode,
+      found: null,
+      skills: undefined,
+      error: `${toolName} did not return within ${recoveryTimeoutMs}ms.`,
+      note: "This timeout is not an empty search result. Do not tell the user that no matching skills exist based only on this response.",
+      hint: query
+        ? "Retry once with list_skills using mode='route', the same concise query, and a small limit. If that also times out, use search_skill_roots with likely prompt-related path terms or list_skill_roots to inspect configured roots."
+        : "Retry once with a concise query and mode='route', or inspect configured roots with list_skill_roots/search_skill_roots.",
+      recommendedRecovery: {
+        tool: "list_skills",
+        parameters: recommendedParameters,
+        reason: query
+          ? "Route mode uses deterministic metadata routing and is the preferred recovery path after a broad skill search timeout."
+          : "A bounded skill listing timed out without a query; narrow the request before retrying.",
+      },
+      fallbackTools: ["search_skill_roots", "list_skill_roots"],
+      finalAnswerGuidance: "Report that skill discovery timed out and describe the recommended retry/inspection path; do not report that no skill exists unless a non-timeout result returns found=0.",
+    } as T;
+  }
+
+  return {
+    success: false,
+    timedOut: true,
+    recovered: true,
+    tool: toolName,
+    elapsedMs,
+    error: `${toolName} did not return within ${recoveryTimeoutMs}ms.`,
+    hint:
+      "The tool is still bounded for model usability. Try an exact skill name, use mode='route' with a concise query, reduce skill roots, check external search backend settings, or inspect plugin diagnostics.",
+  } as T;
 }
 
 async function withToolLogging<T>(
@@ -552,16 +665,12 @@ async function withToolLogging<T>(
               elapsedMs: Date.now() - startedAt,
               recoveryTimeoutMs: options.recoveryTimeoutMs,
             });
-            resolve({
-              success: false,
-              timedOut: true,
-              recovered: true,
-              tool: toolName,
-              elapsedMs: Date.now() - startedAt,
-              error: `${toolName} did not return within ${options.recoveryTimeoutMs}ms.`,
-              hint:
-                "The tool is still bounded for model usability. Try an exact skill name, use mode='route' with a concise query, reduce skill roots, check external search backend settings, or inspect plugin diagnostics.",
-            } as T);
+            resolve(toolRecoveryResult<T>(
+              toolName,
+              args,
+              Date.now() - startedAt,
+              options.recoveryTimeoutMs ?? 0,
+            ));
           }, options.recoveryTimeoutMs);
         })
       : undefined;
@@ -821,7 +930,55 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
-          emitToolDebugStatus({ status }, "list_skills: exact miss; trying configured search backend", {
+          emitToolDebugStatus({ status }, "list_skills: exact miss; scanning skills once for fast fuzzy metadata search", {
+            query: trimmedQuery,
+            roots: roots.length,
+          });
+          const scannedSkills = await timedStep(
+            requestId,
+            "list_skills",
+            "scan_skills_for_builtin_search",
+            async () => scanSkills(roots, registry, toolSignal),
+            { query: trimmedQuery, rootCount: roots.length },
+          );
+          emitToolDebugStatus({ status }, "list_skills: scan complete", {
+            skills: scannedSkills.length,
+            query: trimmedQuery,
+          });
+
+          const fuzzy = await timedStep(
+            requestId,
+            "list_skills",
+            "fuzzy_skill_candidates",
+            async () => fuzzySkillCandidates(trimmedQuery, scannedSkills, cap),
+            { query: trimmedQuery, skillCount: scannedSkills.length },
+          );
+
+          if (fuzzy.length > 0) {
+            logDiagnostic({
+              event: "list_skills_result",
+              requestId,
+              tool: "list_skills",
+              total: fuzzy.length,
+              returned: fuzzy.length,
+              mode: "fuzzy",
+              query: trimmedQuery,
+            });
+            return {
+              query: trimmedQuery,
+              mode: "fuzzy",
+              total: fuzzy.length,
+              found: fuzzy.length,
+              skillsEnvironment: cfg.skillsEnvironment,
+              roots,
+              searchBackend,
+              note: "Fast fuzzy skill-name candidates matched before enhanced or full-text search. Pick the intended skill and call read_skill_file with its exact name.",
+              skillStructureHint: SKILL_STRUCTURE_HINT,
+              skills: fuzzy.map(skillCandidateResult),
+            };
+          }
+
+          emitToolDebugStatus({ status }, "list_skills: fuzzy miss; trying configured enhanced backend", {
             backend: cfg.skillSearchBackend,
           });
           const enhanced = await timedStep(
@@ -878,7 +1035,7 @@ export async function toolsProvider(ctl: PluginController) {
               skillsEnvironment: cfg.skillsEnvironment,
               roots,
               searchBackend: enhancedSearchBackend,
-              note: `Enhanced ${enhanced.active} search returned resolvable skill candidates. Pick the intended skill and call read_skill_file with its exact name.`,
+              note: `Enhanced ${enhanced.active} search returned resolvable skill candidates after fast fuzzy metadata search found no candidates. Pick the intended skill and call read_skill_file with its exact name.`,
               skillStructureHint: SKILL_STRUCTURE_HINT,
               skills: enhanced.candidates.map((skill, index) => ({
                 name: skill.name,
@@ -898,55 +1055,7 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
-          emitToolDebugStatus({ status }, "list_skills: backend miss; scanning skills once for fuzzy and full-text scoring", {
-            query: trimmedQuery,
-            roots: roots.length,
-          });
-          const scannedSkills = await timedStep(
-            requestId,
-            "list_skills",
-            "scan_skills_for_builtin_search",
-            async () => scanSkills(roots, registry, toolSignal),
-            { query: trimmedQuery, rootCount: roots.length },
-          );
-          emitToolDebugStatus({ status }, "list_skills: scan complete", {
-            skills: scannedSkills.length,
-            query: trimmedQuery,
-          });
-
-          const fuzzy = await timedStep(
-            requestId,
-            "list_skills",
-            "fuzzy_skill_candidates",
-            async () => fuzzySkillCandidates(trimmedQuery, scannedSkills, cap),
-            { query: trimmedQuery, skillCount: scannedSkills.length },
-          );
-
-          if (fuzzy.length > 0) {
-            logDiagnostic({
-              event: "list_skills_result",
-              requestId,
-              tool: "list_skills",
-              total: fuzzy.length,
-              returned: fuzzy.length,
-              mode: "fuzzy",
-              query: trimmedQuery,
-            });
-            return {
-              query: trimmedQuery,
-              mode: "fuzzy",
-              total: fuzzy.length,
-              found: fuzzy.length,
-              skillsEnvironment: cfg.skillsEnvironment,
-              roots,
-              searchBackend: enhancedSearchBackend,
-              note: "Fuzzy skill-name candidates matched before full-text search. Pick the intended skill and call read_skill_file with its exact name.",
-              skillStructureHint: SKILL_STRUCTURE_HINT,
-              skills: fuzzy.map(skillCandidateResult),
-            };
-          }
-
-          emitToolDebugStatus({ status }, "list_skills: fuzzy miss; scoring scanned skill text", { query: trimmedQuery });
+          emitToolDebugStatus({ status }, "list_skills: enhanced miss; scoring scanned skill text", { query: trimmedQuery });
           const results = await timedStep(
             requestId,
             "list_skills",
@@ -1059,19 +1168,34 @@ export async function toolsProvider(ctl: PluginController) {
     implementation: async ({ skill_name, file_path }, { status }) =>
       withToolLogging(ctl, "read_skill_file", { skill_name, file_path }, TOOL_READ_SKILL_FILE_TIMEOUT_MS, async (requestId, toolSignal) => {
         const { registry, roots } = await getRuntimeContext(ctl, requestId, "read_skill_file", toolSignal, { status });
-        status(`Reading ${skill_name}${file_path ? ` / ${file_path}` : ""}..`);
+        const normalizedRequest = normalizeReadSkillFileRequest(skill_name, file_path);
+        if (normalizedRequest.note) {
+          logDiagnostic({
+            event: "read_skill_file_request_normalized",
+            requestId,
+            tool: "read_skill_file",
+            requestedSkill: skill_name,
+            requestedFilePath: file_path,
+            normalizedSkill: normalizedRequest.skillName,
+            normalizedFilePath: normalizedRequest.filePath,
+            note: normalizedRequest.note,
+          });
+        }
+        const normalizedSkillName = normalizedRequest.skillName;
+        const normalizedFilePath = normalizedRequest.filePath;
+        status(`Reading ${normalizedSkillName}${normalizedFilePath ? ` / ${normalizedFilePath}` : ""}..`);
 
         if (
-          skill_name.startsWith("WSL:") ||
-          skill_name.startsWith("Windows:") ||
-          path.isAbsolute(skill_name)
+          normalizedSkillName.startsWith("WSL:") ||
+          normalizedSkillName.startsWith("Windows:") ||
+          path.isAbsolute(normalizedSkillName)
         ) {
           const result = await timedStep(
             requestId,
             "read_skill_file",
             "read_absolute_path",
-            async () => readAbsolutePath(skill_name, roots, registry, toolSignal),
-            { skill_name, file_path },
+            async () => readAbsolutePath(normalizedSkillName, roots, registry, toolSignal),
+            { skill_name: normalizedSkillName, file_path: normalizedFilePath },
           );
           if ("error" in result) return { success: false, error: result.error };
           status(`Read ${Math.round(result.content.length / 1024)}KB`);
@@ -1097,8 +1221,8 @@ export async function toolsProvider(ctl: PluginController) {
           requestId,
           "read_skill_file",
           "resolve_skill_by_name",
-          async () => resolveSkillByName(roots, registry, skill_name, toolSignal),
-          { skill_name, rootCount: roots.length },
+          async () => resolveSkillByName(roots, registry, normalizedSkillName, toolSignal),
+          { skill_name: normalizedSkillName, rootCount: roots.length },
         );
 
         if (!skill) {
@@ -1106,20 +1230,20 @@ export async function toolsProvider(ctl: PluginController) {
             requestId,
             "read_skill_file",
             "suggest_skill_candidates",
-            async () => suggestSkillsForQuery(roots, registry, skill_name, 8, toolSignal),
-            { skill_name, rootCount: roots.length },
+            async () => suggestSkillsForQuery(roots, registry, normalizedSkillName, 8, toolSignal),
+            { skill_name: normalizedSkillName, rootCount: roots.length },
           );
           logDiagnostic({
             event: "skill_not_found",
             requestId,
             tool: "read_skill_file",
-            skill_name,
+            skill_name: normalizedSkillName,
             rootCount: roots.length,
             suggestions: suggestions.map((candidate) => candidate.skill.name).join(",") || "-",
           });
           return {
             success: false,
-            error: `Skill "${skill_name}" not found.`,
+            error: `Skill "${normalizedSkillName}" not found.`,
             hint: suggestions.length > 0
               ? "Use one of the suggested exact skill names, then call read_skill_file again."
               : "Call list_skills with a broader query to see available skills.",
@@ -1132,7 +1256,7 @@ export async function toolsProvider(ctl: PluginController) {
           event: "skill_resolved",
           requestId,
           tool: "read_skill_file",
-          requestedSkill: skill_name,
+          requestedSkill: normalizedSkillName,
           resolvedSkill: skill.name,
           environment: skill.environment,
           resolvedDirectoryPath: skill.resolvedDirectoryPath,
@@ -1143,10 +1267,10 @@ export async function toolsProvider(ctl: PluginController) {
           requestId,
           "read_skill_file",
           "read_skill_file_content",
-          async () => readSkillFile(skill, file_path, registry, toolSignal),
-          { skill: skill.name, file_path: file_path || "SKILL.md", environment: skill.environment },
+          async () => readSkillFile(skill, normalizedFilePath, registry, toolSignal),
+          { skill: skill.name, file_path: normalizedFilePath || "SKILL.md", environment: skill.environment },
         );
-        if ("error" in result) return { success: false, skill: skill_name, error: result.error };
+        if ("error" in result) return { success: false, skill: normalizedSkillName, error: result.error };
 
         status(`Read ${Math.round(result.content.length / 1024)}KB from ${skill.name}`);
         logDiagnostic({
@@ -1165,7 +1289,7 @@ export async function toolsProvider(ctl: PluginController) {
           success: true,
           skill: skill.name,
           environment: skill.environment,
-          filePath: file_path || "SKILL.md",
+          filePath: normalizedFilePath || "SKILL.md",
           resolvedPath: result.resolvedPath,
           displayPath: `${skill.environment === "wsl" ? "WSL" : "Windows"}:${result.resolvedPath}`,
           content: result.content,
@@ -1351,7 +1475,7 @@ export async function toolsProvider(ctl: PluginController) {
         const discoveredSkillEntrypoints = rootTrees.flatMap((tree) =>
           tree.entries
             .filter((entry) => entry.type === "file" && entry.name === "SKILL.md")
-            .map((entry) => ({
+            .map((entry) => skillEntrypointFollowup({
               rootIndex: tree.rootIndex,
               environment: tree.environment,
               path: entry.path,
@@ -1379,7 +1503,7 @@ export async function toolsProvider(ctl: PluginController) {
           rootTrees,
           skillStructureHint: SKILL_STRUCTURE_HINT,
           nextStep: discoveredSkillEntrypoints.length > 0
-            ? "Use a discovered SKILL.md parent directory name or display path with read_skill_file, or call list_skills again with a nearby name from the tree."
+            ? "Use a discovered entrypoint's readSkillFileArgs exactly with read_skill_file. Do not pass the discovered SKILL.md path as file_path; omit file_path to read SKILL.md."
             : "No SKILL.md entrypoints were visible within the bounded tree. Try a narrower sub_path if the configured root is large, or check whether the configured path points at the intended collection.",
         };
       }, { ui: { status } }),
@@ -1454,7 +1578,7 @@ export async function toolsProvider(ctl: PluginController) {
 
         const discoveredSkillEntrypoints = matches
           .filter((entry) => entry.type === "file" && entry.name === "SKILL.md")
-          .map((entry) => ({
+          .map((entry) => skillEntrypointFollowup({
             rootIndex: entry.rootIndex,
             environment: entry.environment,
             path: entry.path,
@@ -1489,7 +1613,7 @@ export async function toolsProvider(ctl: PluginController) {
           discoveredSkillEntrypoints,
           skillStructureHint: SKILL_STRUCTURE_HINT,
           nextStep: discoveredSkillEntrypoints.length > 0
-            ? "Use a discovered SKILL.md parent directory name or display path with read_skill_file, or call list_skills with a nearby name from the matched path."
+            ? "Use a discovered entrypoint's readSkillFileArgs exactly with read_skill_file. Do not pass the discovered SKILL.md path as file_path; omit file_path to read SKILL.md."
             : "Try another concise substring or glob-like pattern, or call list_skill_roots to inspect nearby directory structure.",
         };
       }, { ui: { status } }),
