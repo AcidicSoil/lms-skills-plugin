@@ -27,6 +27,7 @@ Observed skill-discovery failure evidence:
 - The corrective behavior is: timeout is not an empty result; model-facing recovery should say to retry with `mode='route'` or inspect roots, and the implementation should return cheap exact/fuzzy metadata matches before slower enhanced/full-text search.
 - Regression fixture now includes `prompt-engineering`; `list_skills({ query: "prompts" })` must return that candidate in fuzzy mode before enhanced backend work.
 - Follow-up failure evidence showed the model misusing a discovered root-relative `SKILL.md` path as `read_skill_file.file_path`. Root search results should include `readSkillFileArgs` and `read_skill_file` should normalize deterministic duplicated entrypoint paths.
+- Additional failure evidence showed the model asking the user whether to continue after a timeout despite `recommendedRecovery`. Timeout payloads should include an explicit `nextToolCall` with `required: true`, a `fallbackToolCall`, and guidance that a final answer is prohibited until recovery/inspection is attempted.
 
 Remaining validation gaps:
 - Successful guarded `write_file` / `edit_file` paths should get focused automated tests or manual LM Studio smoke tests.

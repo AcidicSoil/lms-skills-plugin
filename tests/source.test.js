@@ -20,6 +20,11 @@ test('list_skills has a short bounded recovery timeout and clear non-empty-resul
   assert.match(content, /This timeout is not an empty search result/);
   assert.match(content, /Do not tell the user that no matching skills exist based only on this response/);
   assert.match(content, /recommendedRecovery/);
+  assert.match(content, /nextToolCall/);
+  assert.match(content, /Call this tool now/);
+  assert.match(content, /Do not ask the user for permission/);
+  assert.match(content, /Do not produce a final user-facing answer from this timeout result/);
+  assert.match(content, /fallbackToolCall/);
 });
 
 test('file operation schemas count UTF-8 bytes and allow multiline edit text', () => {

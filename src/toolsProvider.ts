@@ -555,6 +555,13 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
     const recommendedParameters = query
       ? { query, mode: "route" as const, limit: 10 }
       : { limit: 20 };
+    const fallbackPattern = query
+      ? query
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter((token) => token.length >= 3)
+          .sort((a, b) => a.length - b.length)[0] ?? query
+      : "SKILL.md";
     return {
       success: false,
       timedOut: true,
@@ -567,10 +574,10 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
       found: null,
       skills: undefined,
       error: `${toolName} did not return within ${recoveryTimeoutMs}ms.`,
-      note: "This timeout is not an empty search result. Do not tell the user that no matching skills exist based only on this response.",
+      note: "This timeout is not an empty search result. Do not tell the user that no matching skills exist based only on this response, and do not ask whether to continue before trying the provided nextToolCall.",
       hint: query
-        ? "Retry once with list_skills using mode='route', the same concise query, and a small limit. If that also times out, use search_skill_roots with likely prompt-related path terms or list_skill_roots to inspect configured roots."
-        : "Retry once with a concise query and mode='route', or inspect configured roots with list_skill_roots/search_skill_roots.",
+        ? "Immediately make nextToolCall. If that also times out, immediately call search_skill_roots with fallbackToolCall.parameters. Only answer the user after a non-timeout result or after both recovery tools fail."
+        : "Immediately narrow the request with a concise query and mode='route', or inspect configured roots with list_skill_roots/search_skill_roots before answering.",
       recommendedRecovery: {
         tool: "list_skills",
         parameters: recommendedParameters,
@@ -578,8 +585,19 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
           ? "Route mode uses deterministic metadata routing and is the preferred recovery path after a broad skill search timeout."
           : "A bounded skill listing timed out without a query; narrow the request before retrying.",
       },
+      nextToolCall: {
+        tool: "list_skills",
+        parameters: recommendedParameters,
+        required: true,
+        instruction: "Call this tool now. Do not ask the user for permission and do not produce a final answer from this timeout result.",
+      },
+      fallbackToolCall: {
+        tool: "search_skill_roots",
+        parameters: { pattern: fallbackPattern, limit: 50 },
+        instruction: "Use this immediately if nextToolCall also times out or returns no candidates. Then read any discovered entrypoint using readSkillFileArgs.",
+      },
       fallbackTools: ["search_skill_roots", "list_skill_roots"],
-      finalAnswerGuidance: "Report that skill discovery timed out and describe the recommended retry/inspection path; do not report that no skill exists unless a non-timeout result returns found=0.",
+      finalAnswerGuidance: "Do not produce a final user-facing answer from this timeout result. Continue with nextToolCall first. Only say no matching skill exists after a non-timeout result returns found=0 and root inspection finds no relevant SKILL.md entrypoint.",
     } as T;
   }
 
