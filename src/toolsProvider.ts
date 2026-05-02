@@ -58,7 +58,7 @@ const SKILL_STRUCTURE_HINT =
 const SKILL_SEARCH_WORKFLOW_HINT =
   "Skill workflow: if the user wrote $skill-name and the preprocessor expanded it, apply the expanded skill directly and do not rediscover it. If an explicit $skill-name was not expanded or is unresolved, call list_skills with that exact token first. If list_skills finds nothing and the user suspects a custom or nested skill collection, call search_skill_roots for likely patterns or list_skill_roots to inspect the configured skill-root tree. For normal specialized tasks, use routed candidates first; otherwise call list_skills with a concise task query. After choosing a candidate, call read_skill_file with the exact skill name. Use list_skill_files only after SKILL.md references supporting assets. Do not call qmd, ck, grep, shell commands, or run_command for skill discovery.";
 
-const LIST_SKILLS_HARD_RECOVERY_MS = 180_000;
+const LIST_SKILLS_RECOVERY_TIMEOUT_MS = 20_000;
 const SKILL_ROOT_SEARCH_DEFAULT_LIMIT = 50;
 const SKILL_ROOT_SEARCH_MAX_LIMIT = 200;
 const TOOL_VISIBLE_STILL_WORKING_MS = 5_000;
@@ -1037,7 +1037,7 @@ export async function toolsProvider(ctl: PluginController) {
             frontmatter: skillFrontmatterSummary(s),
           })),
         };
-      }, { recoveryTimeoutMs: LIST_SKILLS_HARD_RECOVERY_MS, ui: { status } }),
+      }, { recoveryTimeoutMs: LIST_SKILLS_RECOVERY_TIMEOUT_MS, ui: { status } }),
   });
 
   const readSkillFileTool = tool({

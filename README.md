@@ -338,10 +338,10 @@ The plugin uses layered watchdogs so protection targets real hangs without false
 | Prompt preprocessor scan | 3 seconds | Hard bounded. If skill discovery is slow, the model still receives a compact skills reminder instead of hanging. |
 | `read_skill_file` | 30 seconds soft watchdog | Logs `tool_slow` if the read takes longer than expected, but continues unless the chat/request itself is aborted. |
 | `list_skill_files` | 45 seconds soft watchdog | Logs `tool_slow` for slow directory traversal, but continues unless the chat/request itself is aborted. |
-| `list_skills` | 60 seconds soft watchdog | Logs `tool_slow` for broad scans/searches, but continues unless the chat/request itself is aborted. Enhanced qmd/ck subprocesses still have their own short provider timeouts and built-in fallback. |
+| `list_skills` | 5 seconds visible still-working warning, 20 seconds recovery timeout, 60 seconds soft watchdog | Shows visible progress, returns a bounded recovery result after 20 seconds, and logs `tool_slow` if an operation reaches the soft watchdog. Enhanced qmd/ck subprocesses still have their own short provider timeouts and built-in fallback. |
 | `run_command` | 30 seconds default + 15 seconds setup budget | Hard bounded because it executes external commands and is disabled unless explicitly enabled. |
 
-Only command execution and internal provider subprocesses use hard timeouts. Normal skill discovery/read/list tools use soft watchdog diagnostics to avoid the false timeout failures seen with slower models or slower filesystems.
+Command execution and internal provider subprocesses use hard timeouts. `list_skills` also has a bounded recovery timeout so broad natural-language queries cannot wait for minutes before returning a model-actionable recovery hint. Other normal skill read/list tools use soft watchdog diagnostics to avoid false timeout failures seen with slower models or slower filesystems.
 
 ---
 
