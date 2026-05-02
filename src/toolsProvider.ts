@@ -580,10 +580,23 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
     const mode = typeof args.mode === "string" ? args.mode : undefined;
     const recommendedParameters = query
       ? { query, limit: 10 }
-      : { limit: 20 };
+      : undefined;
     const fallbackPattern = query
       ? preferredSkillRootFallbackPattern(query)
       : "SKILL.md";
+    const nextToolCall = query
+      ? {
+          tool: "list_skills",
+          parameters: recommendedParameters,
+          required: true,
+          instruction: "Call this tool now. Do not ask the user for permission and do not produce a final answer from this timeout result.",
+        }
+      : {
+          tool: "search_skill_roots",
+          parameters: { pattern: fallbackPattern, limit: 50 },
+          required: true,
+          instruction: "Call this tool now to inspect SKILL.md entrypoints. Do not retry an unfiltered list_skills call, do not ask the user for permission, and do not infer the total skill count from this timeout.",
+        };
     return {
       success: false,
       timedOut: true,
@@ -599,27 +612,26 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
       note: "This timeout is not an empty search result. Do not tell the user that no matching skills exist based only on this response, and do not ask whether to continue before trying the provided nextToolCall.",
       hint: query
         ? "Immediately make nextToolCall. If that also times out, immediately call search_skill_roots with fallbackToolCall.parameters. Only answer the user after a non-timeout result or after both recovery tools fail."
-        : "Immediately narrow the request with a concise query and mode='route', or inspect configured roots with list_skill_roots/search_skill_roots before answering.",
-      recommendedRecovery: {
-        tool: "list_skills",
-        parameters: recommendedParameters,
-        reason: query
-          ? "A small query search can use plugin-controlled qmd/ck enhanced search when available, then fall back to built-in matching."
-          : "A bounded skill listing timed out without a query; narrow the request before retrying.",
-      },
-      nextToolCall: {
-        tool: "list_skills",
-        parameters: recommendedParameters,
-        required: true,
-        instruction: "Call this tool now. Do not ask the user for permission and do not produce a final answer from this timeout result.",
-      },
+        : "Immediately call nextToolCall to inspect SKILL.md entrypoints. Do not retry the same unfiltered list_skills call and do not infer that previously found skills are the only available skills.",
+      recommendedRecovery: query
+        ? {
+            tool: "list_skills",
+            parameters: recommendedParameters,
+            reason: "A small query search can use plugin-controlled qmd/ck enhanced search when available, then fall back to built-in matching.",
+          }
+        : {
+            tool: "search_skill_roots",
+            parameters: { pattern: fallbackPattern, limit: 50 },
+            reason: "An unfiltered skill listing timed out. Inspect SKILL.md entrypoints instead of retrying the same broad list or inferring the total catalog size.",
+          },
+      nextToolCall,
       fallbackToolCall: {
         tool: "search_skill_roots",
         parameters: { pattern: fallbackPattern, limit: 50 },
         instruction: "Use this immediately if nextToolCall also times out or returns no candidates. Then read any discovered entrypoint using readSkillFileArgs.",
       },
       fallbackTools: ["search_skill_roots", "list_skill_roots"],
-      finalAnswerGuidance: "Do not produce a final user-facing answer from this timeout result. Continue with nextToolCall first. Only say no matching skill exists after a non-timeout result returns found=0 and root inspection finds no relevant SKILL.md entrypoint.",
+      finalAnswerGuidance: "Do not produce a final user-facing answer from this timeout result. Continue with nextToolCall first. Never infer total skill count or say previously found skills are the only available skills from a timeout. Only say no matching skill exists after a non-timeout result returns found=0 and root inspection finds no relevant SKILL.md entrypoint.",
     } as T;
   }
 

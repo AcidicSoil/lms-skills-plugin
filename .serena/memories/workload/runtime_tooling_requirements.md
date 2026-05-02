@@ -29,6 +29,7 @@ Observed skill-discovery failure evidence:
 - Follow-up failure evidence showed the model misusing a discovered root-relative `SKILL.md` path as `read_skill_file.file_path`. Root search results should include `readSkillFileArgs` and `read_skill_file` should normalize deterministic duplicated entrypoint paths.
 - Additional failure evidence showed the model asking the user whether to continue after a timeout despite `recommendedRecovery`. Timeout payloads should include an explicit `nextToolCall` with `required: true`, a `fallbackToolCall`, and guidance that a final answer is prohibited until recovery/inspection is attempted.
 - qmd/ck enhanced search should be available through `list_skills`, not raw model-issued shell commands. Default backend is `auto`; non-builtin query search should try plugin-controlled qmd/ck before slow built-in filesystem scans, then fall back safely.
+- No-query `list_skills` timeouts are not catalog-size evidence. Recovery should inspect `SKILL.md` entrypoints with `search_skill_roots` instead of retrying the same broad listing or claiming only previously found skills exist.
 - Later failure evidence showed phrase fallback (`writing prompts`) returning no root matches despite prompt skills existing. Root search should expand non-glob phrases into token/singular variants, and fallback pattern selection should prefer `prompt` over generic `writing`/`crafting` tokens.
 
 Remaining validation gaps:
