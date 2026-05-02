@@ -104,12 +104,15 @@ test('toolsProvider registers and exercises every available tool with visible de
       const { toolsProvider } = require('../dist/toolsProvider.js');
       const tools = byName(await toolsProvider(createController(skillsRoot)));
       assert.deepEqual([...tools.keys()].sort(), [
+        'edit_file',
         'list_skill_files',
         'list_skill_roots',
         'list_skills',
+        'read_file',
         'read_skill_file',
         'run_command',
         'search_skill_roots',
+        'write_file',
       ]);
 
       const list = await callTool(tools.get('list_skills'), { query: 'example-skill' });
@@ -140,6 +143,29 @@ test('toolsProvider registers and exercises every available tool with visible de
       assert.equal(readSupport.result.success, true);
       assert.equal(readSupport.result.content, 'Reference says: use fixture details.');
       assertHasDebugStatus('read_skill_file', readSupport.statuses);
+
+      const absoluteGuidePath = path.join(skillsRoot, 'PROMPTS', 'example-skill', 'references', 'guide.md');
+      const readFile = await callTool(tools.get('read_file'), { file_path: absoluteGuidePath });
+      assert.equal(readFile.result.success, true);
+      assert.equal(readFile.result.content, 'Reference says: use fixture details.');
+      assertHasDebugStatus('read_file', readFile.statuses);
+
+      const blockedWrite = await callTool(tools.get('write_file'), {
+        file_path: path.join(skillsRoot, 'PROMPTS', 'example-skill', 'notes.md'),
+        content: 'new note',
+      });
+      assert.equal(blockedWrite.result.success, false);
+      assert.equal(blockedWrite.result.blocked, true);
+      assertHasDebugStatus('write_file', blockedWrite.statuses);
+
+      const blockedEdit = await callTool(tools.get('edit_file'), {
+        file_path: absoluteGuidePath,
+        old_text: 'fixture',
+        new_text: 'updated fixture',
+      });
+      assert.equal(blockedEdit.result.success, false);
+      assert.equal(blockedEdit.result.blocked, true);
+      assertHasDebugStatus('edit_file', blockedEdit.statuses);
 
       const listRoots = await callTool(tools.get('list_skill_roots'), {});
       assert.equal(listRoots.result.success, true);

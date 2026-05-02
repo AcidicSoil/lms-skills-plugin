@@ -10,7 +10,8 @@ Build and local development:
 - `bun run push` or `npm run push` — run `lms push` to publish/push the plugin.
 
 Required validation:
-- `npm run build` — primary completion check. Run this after code changes.
+- `npm test` — preferred full local verification; runs `npm run build && node --test tests/*.test.js`.
+- `npm run build` — minimum build/typecheck gate. Run this after code changes when a narrower check is sufficient.
 - `npx tsc --noEmit` — optional no-output type check if build artifacts should be avoided.
 
 Ad hoc smoke tests:
@@ -20,6 +21,7 @@ Ad hoc smoke tests:
   - `dist/scanner.js` for exact skill lookup and scan limits.
   - `dist/toolSchemas.js` for Zod schema rejection/acceptance checks.
   - `dist/commandSafety.js` for command safety policy checks.
+  - `dist/toolsProvider.js` for tool registration and blocked file/command behavior.
 
 Runtime diagnostics:
 - `LMS_SKILLS_DEBUG=1 npm run dev` — verbose `[lms-skills]` step/runtime logs.
@@ -27,7 +29,7 @@ Runtime diagnostics:
 - `LMS_SKILLS_SLOW_RUNTIME_MS=500 npm run dev` — override slow runtime log threshold.
 
 Testing/linting/formatting:
-- No `test`, `lint`, or `format` scripts are currently defined in `package.json`.
+- `test` is defined in `package.json` and should be used for behavior changes. No `lint` or `format` scripts are currently defined.
 - If such tooling is added, prefer package scripts and use those scripts as standard commands.
 
 Useful Linux shell commands:

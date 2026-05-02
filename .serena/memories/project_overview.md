@@ -8,7 +8,7 @@ Current purpose:
 - Protect model context from overload by routing each normal prompt to a tiny candidate set instead of dumping a full skills catalog.
 - Expand explicitly requested `$skill-name` activations before model reasoning so the model receives the relevant `SKILL.md` body immediately and is told the skill is preloaded/read/understood.
 - Log proof of every model-facing context injection, including packet type, selected/expanded skills, content hashes, sizes, previews, and payload summaries.
-- Expose LM Studio tools for listing/routing skills, reading skill files, listing skill directory contents, and optionally executing commands.
+- Expose LM Studio tools for listing/routing skills, reading skill files, listing skill directory contents, sandboxed file read/write/edit operations, and optionally executing commands.
 - Support Windows, WSL, and Both runtime environments for path resolution, skill reads, directory listing, and command routing.
 - Persist plugin configuration under `~/.lmstudio/plugin-data/lms-skills/settings.json` because LM Studio plugin settings may not persist across new chats.
 
@@ -45,7 +45,7 @@ Core behavior:
 - Exact skill reads are optimized: `read_skill_file("skill-name")` checks `<root>/<skill-name>/SKILL.md` directly before broader scans.
 - File reads are bounded/truncated by configured constants to avoid huge outputs.
 - Tool input schemas are centralized in `src/toolSchemas.ts` using Zod and reject invalid/traversal/control-character inputs before implementation logic runs.
-- Tool-level timeouts prevent model/tool requests from hanging indefinitely.
+- Tool-level timeouts and bounded recovery behavior prevent model/tool requests from hanging indefinitely. `list_skills` has a short recovery path; file-operation tools use `TOOL_FILE_OPERATION_TIMEOUT_MS = 30_000`.
 - Command execution is disabled by default and guarded by policy before any shell runtime is created.
 - Default diagnostics are human-readable route/tool/context summaries. Full JSON diagnostics are available with `LMS_SKILLS_DEBUG=1`.
 
@@ -79,7 +79,7 @@ Repository structure:
 - `src/settings.ts`: persistent/effective configuration resolution and settings migration.
 - `src/constants.ts`: paths and operational limits, including routing/timeouts.
 - `src/environment.ts`: host/runtime environment types and target derivation.
-- `src/runtime/types.ts`: runtime adapter interfaces.
+- `src/runtime/types.ts`: runtime adapter interfaces, including read/write filesystem primitives.
 - `src/runtime/windowsRuntime.ts`: Windows filesystem and command adapter.
 - `src/runtime/wslRuntime.ts`: WSL/Linux filesystem and command adapter.
 - `src/runtime/index.ts`: runtime registry factory.
@@ -87,7 +87,7 @@ Repository structure:
 - `src/scanner.ts`: skill discovery, frontmatter parsing, exact lookup, manifest parsing, description/body extraction, search, safe reads, directory listing.
 - `src/skillRouter.ts`: deterministic metadata router for prompt injection and `list_skills(mode="route")`.
 - `src/preprocessor.ts`: internal routed context injection, compact reminder, explicit `$skill` expansion, context-injection proof logging.
-- `src/toolsProvider.ts`: LM Studio tools (`list_skills`, `read_skill_file`, `list_skill_files`, `run_command`), request logging, tool-level timeout wiring.
+- `src/toolsProvider.ts`: LM Studio tools (`list_skills`, `read_skill_file`, `list_skill_files`, `list_skill_roots`, `search_skill_roots`, `read_file`, `write_file`, `edit_file`, `run_command`), request logging, tool-level timeout wiring.
 - `src/executor.ts`: target-aware command routing layer.
 - `src/commandSafety.ts`: command execution mode and safety policy.
 - `src/toolSchemas.ts`: reusable Zod schemas for tool inputs.

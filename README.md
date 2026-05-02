@@ -326,6 +326,17 @@ encoded PowerShell
 
 This is policy-level hardening, not a full OS sandbox. For untrusted workloads, use an external sandbox such as a container, VM, or locked-down WSL environment with read-only mounts, no network, and resource limits.
 
+### Runtime filesystem tools
+
+The plugin also exposes bounded text-file tools for workflows that need file IO inside the configured skills sandbox:
+
+| Tool | Capability | Guardrail |
+|---|---|---|
+| `read_file` | Reads a UTF-8 text file by absolute or environment-prefixed path. | Path must resolve inside a configured skills root. Large reads are bounded/truncated by the normal file-size limit. |
+| `write_file` | Creates or overwrites a UTF-8 text file. | Path must resolve inside a configured skills root, content is capped at 1 MiB, and writes require Command Execution Safety = Guarded. Existing files require `overwrite=true`. |
+| `edit_file` | Replaces exact text in a UTF-8 text file. | Path must resolve inside a configured skills root, writes require Guarded mode, and `expected_replacements` can be used to reject ambiguous edits. |
+
+These tools are intended for authorized skill workflows, not arbitrary project-wide filesystem access. They share the same runtime target resolution, abort handling, structured diagnostics, and timeout wrapping as the other plugin tools.
 
 ---
 
@@ -338,6 +349,7 @@ The plugin uses layered watchdogs so protection targets real hangs without false
 | Prompt preprocessor scan | 3 seconds | Hard bounded. If skill discovery is slow, the model still receives a compact skills reminder instead of hanging. |
 | `read_skill_file` | 30 seconds soft watchdog | Logs `tool_slow` if the read takes longer than expected, but continues unless the chat/request itself is aborted. |
 | `list_skill_files` | 45 seconds soft watchdog | Logs `tool_slow` for slow directory traversal, but continues unless the chat/request itself is aborted. |
+| `read_file` / `write_file` / `edit_file` | 30 seconds soft watchdog | Logs `tool_slow` for slow bounded filesystem operations, but continues unless the chat/request itself is aborted. Mutating operations are still permission-gated. |
 | `list_skills` | 5 seconds visible still-working warning, 20 seconds recovery timeout, 60 seconds soft watchdog | Shows visible progress, returns a bounded recovery result after 20 seconds, and logs `tool_slow` if an operation reaches the soft watchdog. Enhanced qmd/ck subprocesses still have their own short provider timeouts and built-in fallback. |
 | `run_command` | 30 seconds default + 15 seconds setup budget | Hard bounded because it executes external commands and is disabled unless explicitly enabled. |
 

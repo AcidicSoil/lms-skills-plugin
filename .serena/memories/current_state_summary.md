@@ -40,8 +40,9 @@ Most important current behaviors:
 - `run_command` tool description now emphasizes command execution should only be used when settings allow it and the active skill/task genuinely requires it; skill discovery should prefer skill reads and file listing.
 - `list_skills({ mode: "route" })` without a query now returns a clear structured note that route mode needs a concrete query, instead of scanning/listing everything. This avoids the exported-chat failure where the model used route mode with no query after seeing a placeholder command.
 - `run_command` is disabled by default and protected by schema validation plus command safety policy.
-- Tool inputs are validated by Zod schemas in `src/toolSchemas.ts`.
-- Tool requests have watchdog guardrails: skill discovery/read/list tools use soft `tool_slow` diagnostics and continue unless the chat/request is aborted, while `run_command` and internal qmd/ck provider subprocesses remain hard-timeout bounded.
+- Runtime filesystem tools now exist for skill workflows: `read_file`, `write_file`, and `edit_file`. These resolve only inside configured skill roots. `write_file`/`edit_file` require `commandExecutionMode: "guarded"`; `read_file` is read-only and still skill-root bounded.
+- Tool inputs are validated by Zod schemas in `src/toolSchemas.ts`; file content and edit text limits are enforced by UTF-8 byte length, and multiline edit text is allowed.
+- Tool requests have watchdog guardrails: skill discovery/read/list/file tools use soft `tool_slow` diagnostics and continue unless the chat/request is aborted, while `run_command` and internal qmd/ck provider subprocesses remain hard-timeout bounded. `list_skills` also has a bounded recovery timeout so broad queries return actionable recovery instead of multi-minute hangs.
 - Diagnostics are emitted to console/LM Studio dev log and persisted to `~/.lmstudio/plugin-data/lms-skills/diagnostics.log` with one-file rotation at `diagnostics.log.1` (default max 5MB, configurable via `LMS_SKILLS_DIAGNOSTICS_MAX_BYTES`). The logger now exposes `getDiagnosticsLogPath()` and includes explicit `enhanced_search_result` trace lines for backend availability/fallback/raw/resolved counts.
 - Default logs are human-readable route/tool/context summaries; JSON logs require `LMS_SKILLS_DEBUG=1`.
 
@@ -65,14 +66,15 @@ Context-injection proof logging:
 Key files:
 - `src/preprocessor.ts`: normal routed context, no-route reminder, explicit `$skill` expansion, context-injection audit logging.
 - `src/skillRouter.ts`: deterministic routing algorithm.
-- `src/scanner.ts`: skill discovery, frontmatter parsing, exact lookup, read/list helpers.
-- `src/toolsProvider.ts`: tool schemas/handlers and `list_skills(mode="route")`; route-mode exact match fast path.
+- `src/scanner.ts`: skill discovery, frontmatter parsing, exact lookup, read/list helpers, and skill-root-bounded `readFileWithinRoots` / `writeFileWithinRoots` / `editFileWithinRoots` helpers.
+- `src/toolsProvider.ts`: tool handlers and `list_skills(mode="route")`; route-mode exact match fast path; runtime file tools (`read_file`, `write_file`, `edit_file`).
 - `src/diagnostics.ts`: default human-readable logs, compact context proof logs, full context_content blocks, debug JSON logs.
 - `src/commandSafety.ts`: command execution policy.
+- `.serena/memories/workload/runtime_tooling_requirements.md`: concise memory of the raw runtime-tooling requirements captured from `.serena/memories/Optimizing Skills Plugin Query.md`.
 - `README.md`: should reflect routed context, explicit expansion, and context-injection proof logging.
 
 Validation command:
-- `npm run build`
+- `npm test` (runs `npm run build && node --test tests/*.test.js`); use `npm run build` as the minimum typecheck/build gate when a narrower check is needed.
 
 Recommended smoke tests after routing/preprocessor/logging changes:
 - Normal docs/readme-like prompt routes to a relevant skill and injects <=3 candidates.
@@ -83,4 +85,7 @@ Recommended smoke tests after routing/preprocessor/logging changes:
 - Disabled skill does not auto-route but can be explicitly expanded.
 - Logs contain `context kind=explicit_expanded ... sha=... payloadSha=...` and a matching `context_content` block for explicit activations.
 - Noisy internal WSL/runtime `exit=1 stdout=0B stderr=0B` completion lines should not flood default logs.
+- `read_file` should reject paths outside configured skill roots.
+- `write_file` and `edit_file` should return `blocked: true` unless command execution safety is `guarded`.
+- Guarded write/edit success paths still need real LM Studio/WSL smoke coverage.
 - `list_skills({ query: "exact-skill-name", mode: "route" })` should return the exact skill directly instead of timing out or returning `total: 0`.

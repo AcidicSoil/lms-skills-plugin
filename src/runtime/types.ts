@@ -41,6 +41,7 @@ export interface RuntimeAdapter {
   exists(filePath: string, signal?: AbortSignal): Promise<boolean>;
   stat(filePath: string, signal?: AbortSignal): Promise<RuntimeFileStat>;
   readFile(filePath: string, signal?: AbortSignal): Promise<string>;
+  writeFile(filePath: string, content: string, signal?: AbortSignal): Promise<void>;
   readDir(dirPath: string, signal?: AbortSignal): Promise<RuntimeDirectoryEntry[]>;
   exec(command: string, options?: RuntimeExecOptions): Promise<RuntimeExecResult>;
 }

@@ -18,24 +18,27 @@ Current state highlights:
 - Environment-aware runtime support exists in `src/environment.ts`, `src/runtime/*`, and `src/pathResolver.ts`.
 - Config/settings now include `skillsEnvironment`, `wslDistro`, `windowsShellPath`, `wslShellPath`, legacy `shellPath`, and `commandExecutionMode`.
 - Scanner reads/list/search operations are adapter-based and support exact skill lookup before full scans.
-- Tools include environment metadata and timeout/logging/safety behavior.
+- Tools include environment metadata and timeout/logging/safety behavior; runtime filesystem tools now include `read_file`, `write_file`, and `edit_file` bounded to configured skill roots.
 - Prompt injection is internal, no system prompt required.
 - Explicit `$skill-name` activation exists and is a key feature.
 - README has been synced to current behavior.
 
 If resuming Taskmaster bookkeeping:
 - Do not blindly mark all tasks done without functional validation.
-- Code compiles with `npm run build`.
+- Code compiles with `npm run build`, and the current preferred verification is `npm test`.
 - Still desirable to do manual LM Studio testing on Windows+WSL for:
   - WSL path expansion and distro selection.
   - `Both` mode duplicate/label behavior.
   - prompt preprocessor abort behavior.
   - tool-level timeout behavior.
   - command safety disabled/readOnly/guarded modes.
+  - guarded `write_file` / `edit_file` success behavior.
+  - Windows-hosted WSL write behavior.
   - explicit `$skill-name` activation in real model runs.
 
 Known caveats:
-- No formal automated test suite is configured.
+- A formal Node test script is now configured: `npm test` runs build plus `node --test tests/*.test.js`.
 - Command safety is not a true sandbox.
 - Some runtime filesystem operations on Windows host + WSL still rely on subprocess calls, so performance/quoting should be tested in real WSL.
 - `.env.example` has previously appeared as deleted in git status but was not intentionally changed by README/onboarding work; check before committing.
+- Raw runtime-tooling requirements are preserved in `.serena/memories/Optimizing Skills Plugin Query.md`; concise operational summary lives in `.serena/memories/workload/runtime_tooling_requirements.md`.

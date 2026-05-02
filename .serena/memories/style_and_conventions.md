@@ -28,11 +28,11 @@ Naming conventions:
 - `camelCase` for variables and functions.
 - `PascalCase` for interfaces and type aliases.
 - `UPPER_SNAKE_CASE` for exported constants.
-- Plugin tool names use snake_case (`list_skills`, `read_skill_file`, `list_skill_files`, `run_command`).
+- Plugin tool names use snake_case (`list_skills`, `read_skill_file`, `list_skill_files`, `list_skill_roots`, `search_skill_roots`, `read_file`, `write_file`, `edit_file`, `run_command`).
 - Runtime targets use lowercase literals: `windows`, `wsl`, `both` where applicable.
 
 Security and robustness patterns:
-- Prevent path traversal when reading within skill directories.
+- Prevent path traversal and root escape when reading or writing within skill/configured root directories.
 - Restrict absolute skill file/directory access to configured skills roots.
 - Validate tool inputs with Zod before implementation logic.
 - Keep runtime path containment checks even when schemas reject invalid paths; schemas are not the only safety layer.
@@ -42,7 +42,7 @@ Security and robustness patterns:
 - Bound command length, timeout, setup budget, and output size.
 - Tool requests should use tool-level timeout budgets from `src/constants.ts` and return structured timeout responses.
 - Subprocesses should be killed on abort where possible.
-- Truncate large file reads rather than loading/returning unbounded content.
+- Truncate large file reads rather than loading/returning unbounded content; bound write/edit content by UTF-8 byte length.
 - Normalize command output line endings.
 - Avoid leaking noisy stack traces in normal logs; verbose logs are gated by `LMS_SKILLS_DEBUG=1`.
 
@@ -69,13 +69,15 @@ Documentation conventions:
 - If behavior changes, update README and project memories in the same task when feasible.
 
 Testing conventions:
-- No formal test framework or test scripts are currently configured in `package.json`.
-- Use `npm run build` as the required verification step.
-- For focused validation, ad hoc Node smoke tests against compiled `dist/` modules are acceptable and have been used during development.
+- Node test scripts are configured in `package.json`; `npm test` runs `npm run build && node --test tests/*.test.js`.
+- Use `npm test` as the preferred verification step when behavior changes; `npm run build` remains the minimum typecheck/build gate.
+- For focused validation, prefer adding/using Node tests under `tests/*.test.js`; ad hoc Node smoke tests against compiled `dist/` modules are acceptable when a permanent test would be overkill.
 - Current important smoke-test targets:
   - deterministic route selection and no-route behavior,
   - max routed candidates <= 3,
   - `$skill-name` expansion includes stripped body before model reasoning,
   - `disable-model-invocation` excluded from automatic routing but usable explicitly,
   - tool schemas reject traversal/control/malformed command inputs,
-  - command safety blocks dangerous commands by default.
+  - command safety blocks dangerous commands by default,
+  - filesystem tools stay inside configured skill roots,
+  - `write_file` / `edit_file` are blocked unless command execution safety is `guarded`.

@@ -158,6 +158,13 @@ export function createWindowsRuntime(shellPath?: string): RuntimeAdapter {
       return { size: stat.size, sizeBytes: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory() };
     },
     async readFile(filePath) { return fs.readFile(expandWindowsPath(filePath), "utf-8"); },
+    async writeFile(filePath, content, signal) {
+      checkAbort(signal);
+      const resolved = expandWindowsPath(filePath);
+      await fs.mkdir(path.win32.dirname(resolved), { recursive: true });
+      checkAbort(signal);
+      await fs.writeFile(resolved, content, "utf-8");
+    },
     async readDir(dirPath): Promise<RuntimeDirectoryEntry[]> {
       const resolvedDir = expandWindowsPath(dirPath);
       const entries = await fs.readdir(resolvedDir, { withFileTypes: true });

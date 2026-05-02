@@ -326,6 +326,20 @@ export function createWslRuntime(options: WslRuntimeOptions = {}): RuntimeAdapte
       if (result.exitCode !== 0) throw new Error(result.stderr || `Unable to read file: ${resolved}`);
       return result.stdout;
     },
+    async writeFile(filePath, content, signal) {
+      const resolved = await expandPath(filePath, signal);
+      if (detectHostPlatform() === "linux") {
+        checkAbort(signal);
+        await fs.mkdir(path.posix.dirname(resolved), { recursive: true });
+        checkAbort(signal);
+        await fs.writeFile(resolved, content, "utf-8");
+        return;
+      }
+      const encoded = Buffer.from(content, "utf-8").toString("base64");
+      const script = `python3 - <<'PY'\nimport base64, os\np=${JSON.stringify(resolved)}\nos.makedirs(os.path.dirname(p), exist_ok=True)\nwith open(p, 'wb') as f:\n    f.write(base64.b64decode(${JSON.stringify(encoded)}))\nPY`;
+      const result = await execRaw(script, { signal }, options);
+      if (result.exitCode !== 0) throw new Error(result.stderr || `Unable to write file: ${resolved}`);
+    },
     async readDir(dirPath, signal): Promise<RuntimeDirectoryEntry[]> {
       const resolved = await expandPath(dirPath, signal);
       if (detectHostPlatform() === "linux") {

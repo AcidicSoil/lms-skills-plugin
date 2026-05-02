@@ -18,3 +18,15 @@ test('list_skills has a short bounded recovery timeout instead of a multi-minute
   assert.match(content, /const LIST_SKILLS_RECOVERY_TIMEOUT_MS = 20_000;/);
   assert.doesNotMatch(content, /LIST_SKILLS_(?:HARD_)?RECOVERY_.*180_000|recoveryTimeoutMs:\s*180_000/);
 });
+
+test('file operation schemas count UTF-8 bytes and allow multiline edit text', () => {
+  const {
+    editNewTextSchema,
+    editOldTextSchema,
+    fileContentSchema,
+  } = require('../dist/toolSchemas.js');
+
+  assert.equal(editOldTextSchema.safeParse('line one\nline two').success, true);
+  assert.equal(editNewTextSchema.safeParse('line one\nline two\tindented').success, true);
+  assert.equal(fileContentSchema.safeParse('é'.repeat(600_000)).success, false);
+});

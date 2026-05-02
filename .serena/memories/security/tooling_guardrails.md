@@ -14,6 +14,12 @@ Command execution:
 - Read-only mode also blocks shell metacharacters, redirects, pipes, command chaining, variable expansion, and mutating args such as `find -delete`, `find -exec`, `sed -i`.
 - This is policy-level hardening, not a full OS sandbox. For untrusted workloads, use external container/VM/locked-down WSL sandbox with read-only mounts, no network, and resource limits.
 
+Filesystem tools:
+- `read_file` reads UTF-8 text files by absolute or environment-prefixed path, but only when the resolved path is inside a configured skill root.
+- `write_file` and `edit_file` are mutating tools and require `commandExecutionMode: "guarded"`; they still remain restricted to configured skill roots.
+- File operation content/edit text is capped by UTF-8 byte length (`MAX_FILE_WRITE_BYTES`) and normal multiline edit text is allowed.
+- `edit_file.expected_replacements` should be used when broad replacement would be risky.
+
 Tool schemas:
 - Tool input validation is centralized in `src/toolSchemas.ts` using Zod.
 - Schemas reject malformed model inputs before implementation logic runs:
@@ -48,6 +54,7 @@ Timeouts and aborts:
   - `TOOL_READ_SKILL_FILE_TIMEOUT_MS = 30_000`.
   - `TOOL_LIST_SKILL_FILES_TIMEOUT_MS = 45_000`.
   - `TOOL_LIST_SKILLS_TIMEOUT_MS = 60_000`.
+  - `TOOL_FILE_OPERATION_TIMEOUT_MS = 30_000`.
   - `TOOL_COMMAND_SETUP_TIMEOUT_MS = 15_000`.
 - Timeout helper lives in `src/timeout.ts` and creates AbortSignals that cascade from LM Studio/user abort signals.
 - Tool-level timeout wiring lives in `withToolLogging` inside `src/toolsProvider.ts`.
@@ -67,6 +74,6 @@ High-risk areas for future changes:
 - Any bypass around `validateCommandSafety`.
 - Any reintroduction of broad `<available_skills>` injection.
 - Any weakening of explicit `$skill-name` payload rewrite or `$HOME` ignore behavior.
-- Absolute path read/list behavior.
+- Absolute path read/list/write/edit behavior.
 - Schema changes that loosen path traversal or command constraints.
 - Tool timeout values and abort propagation.

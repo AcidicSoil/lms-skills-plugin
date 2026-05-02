@@ -4,14 +4,24 @@ import {
   EXEC_MAX_COMMAND_LENGTH,
   EXEC_MAX_TIMEOUT_MS,
   LIST_SKILLS_DEFAULT_LIMIT,
+  MAX_FILE_WRITE_BYTES,
 } from "./constants";
 
 const CONTROL_OR_NULL = /[\u0000-\u001f\u007f]/;
+const CONTROL_EXCEPT_TEXT_WHITESPACE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 const WINDOWS_ABSOLUTE = /^[A-Za-z]:[\\/]/;
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function noControlChars(value: string): boolean {
   return !CONTROL_OR_NULL.test(value);
+}
+
+function noBinaryControlChars(value: string): boolean {
+  return !CONTROL_EXCEPT_TEXT_WHITESPACE.test(value);
+}
+
+function withinUtf8ByteLimit(limit: number): (value: string) => boolean {
+  return (value) => Buffer.byteLength(value, "utf-8") <= limit;
 }
 
 function noTraversal(value: string): boolean {
@@ -87,6 +97,29 @@ export const timeoutMsSchema = z
   .min(1_000)
   .max(EXEC_MAX_TIMEOUT_MS)
   .optional();
+
+export const sandboxFilePathSchema = z
+  .string()
+  .trim()
+  .min(1, "File path is required.")
+  .max(1_000, "File path is too long.")
+  .refine(noControlChars, "File path cannot contain control characters.");
+
+export const fileContentSchema = z
+  .string()
+  .refine(withinUtf8ByteLimit(MAX_FILE_WRITE_BYTES), `File content cannot exceed ${MAX_FILE_WRITE_BYTES} bytes.`)
+  .refine(noBinaryControlChars, "File content cannot contain control characters except newlines and tabs.");
+
+export const editOldTextSchema = z
+  .string()
+  .min(1, "old_text is required.")
+  .refine(withinUtf8ByteLimit(MAX_FILE_WRITE_BYTES), `old_text cannot exceed ${MAX_FILE_WRITE_BYTES} bytes.`)
+  .refine(noBinaryControlChars, "old_text cannot contain control characters except newlines and tabs.");
+
+export const editNewTextSchema = z
+  .string()
+  .refine(withinUtf8ByteLimit(MAX_FILE_WRITE_BYTES), `new_text cannot exceed ${MAX_FILE_WRITE_BYTES} bytes.`)
+  .refine(noBinaryControlChars, "new_text cannot contain control characters except newlines and tabs.");
 
 export const envSchema = z
   .record(

@@ -6,10 +6,10 @@ Runtime model:
   - `RuntimeTargetName`: `windows`, `wsl`.
 - `deriveRuntimeTargets` converts config mode into runtime targets.
 - `src/runtime/types.ts` defines the `RuntimeAdapter` interface:
-  - `expandPath`, `exists`, `stat`, `readFile`, `readDir`, `exec`.
+  - `expandPath`, `exists`, `stat`, `readFile`, `writeFile`, `readDir`, `exec`.
   - Most methods accept optional `AbortSignal`.
-- `src/runtime/windowsRuntime.ts` implements native Windows path/filesystem/shell behavior.
-- `src/runtime/wslRuntime.ts` implements WSL/Linux behavior. On Linux host it uses Node `fs` directly for filesystem operations; on Windows host it shells through WSL where needed.
+- `src/runtime/windowsRuntime.ts` implements native Windows path/filesystem/shell behavior, including UTF-8 file writes with parent directory creation.
+- `src/runtime/wslRuntime.ts` implements WSL/Linux behavior. On Linux host it uses Node `fs` directly for filesystem operations; on Windows host it shells through WSL where needed, including base64-backed UTF-8 file writes.
 - `src/runtime/index.ts` creates a registry with Windows and WSL adapters based on effective config.
 - `src/pathResolver.ts` resolves configured raw skills paths into environment-aware roots with labels like `WSL:/path` or `Windows:C:\...`.
 
@@ -89,3 +89,10 @@ Important behavior expectations:
 - Logs should let us prove what context was injected and which skill bodies were expanded.
 - Do not reintroduce mandatory system-prompt setup.
 - Do not reintroduce broad `<available_skills>` dumping as the default model context.
+
+Runtime filesystem tools:
+- `read_file` reads UTF-8 text files only inside configured skill roots.
+- `write_file` creates or overwrites UTF-8 text files only inside configured skill roots and requires `commandExecutionMode: "guarded"`.
+- `edit_file` performs exact text replacement only inside configured skill roots and requires `commandExecutionMode: "guarded"`; `expected_replacements` can reject ambiguous edits.
+- Scanner helpers `readFileWithinRoots`, `writeFileWithinRoots`, and `editFileWithinRoots` enforce runtime-target containment even after Zod schema validation.
+- File operation tool timeout is `TOOL_FILE_OPERATION_TIMEOUT_MS = 30_000`.

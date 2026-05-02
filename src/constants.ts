@@ -19,6 +19,7 @@ export const SKILL_MANIFEST_FILE = "skill.json";
 export const RESET_TO_DEFAULT_SENTINEL = "default";
 
 export const MAX_FILE_SIZE_BYTES = 102_400;
+export const MAX_FILE_WRITE_BYTES = 1_048_576;
 export const MAX_DESCRIPTION_CHARS = 1_536;
 export const BODY_EXCERPT_CHARS = 2_000;
 export const MAX_DIRECTORY_DEPTH = 3;
@@ -34,6 +35,7 @@ export const TOOL_DEFAULT_TIMEOUT_MS = 45_000;
 export const TOOL_LIST_SKILLS_TIMEOUT_MS = 60_000;
 export const TOOL_READ_SKILL_FILE_TIMEOUT_MS = 30_000;
 export const TOOL_LIST_SKILL_FILES_TIMEOUT_MS = 45_000;
+export const TOOL_FILE_OPERATION_TIMEOUT_MS = 30_000;
 export const TOOL_COMMAND_SETUP_TIMEOUT_MS = 15_000;
 
 export const EXEC_DEFAULT_TIMEOUT_MS = 30_000;

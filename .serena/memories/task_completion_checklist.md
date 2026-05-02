@@ -2,7 +2,7 @@
 
 Before considering a code task complete:
 1. Review changed files for consistency with existing TypeScript style, runtime-target path handling, deterministic routing rules, explicit expansion behavior, and defensive error handling patterns.
-2. Run `npm run build` or `bun run build` to verify the TypeScript project compiles.
+2. Run `npm test` for behavior changes; it runs `npm run build && node --test tests/*.test.js`. Use `npm run build` or `bun run build` as the minimum compile/typecheck gate for docs-only or very narrow code checks.
 3. Optionally run `npx tsc --noEmit` if build artifacts should be avoided.
 4. For behavior changes, run a focused ad hoc smoke test against compiled `dist/` modules when practical.
 5. Run `git status --short` to see all modified/untracked/deleted files.
@@ -17,6 +17,7 @@ Before considering a code task complete:
    - runtime environment/path handling,
    - tool schemas,
    - command safety,
+   - runtime filesystem tools,
    - tool/preprocessor timeouts,
    - diagnostics/logging.
 8. If README-facing behavior changes, update `README.md` in the same task when feasible.
@@ -50,12 +51,13 @@ Context-injection log checks:
 Security-specific checks:
 - Confirm `run_command` remains disabled by default unless intentionally changed.
 - Confirm `validateCommandSafety` runs before runtime registry creation or shell execution.
-- Confirm schemas reject invalid path traversal/control-character/malformed command inputs.
+- Confirm schemas reject invalid path traversal/control-character/malformed command inputs and enforce UTF-8 byte limits for file operations.
 - Confirm slow tool paths receive `AbortSignal`/timeout wiring.
 - Confirm absolute path access remains restricted to configured skills roots.
+- Confirm `write_file` and `edit_file` are blocked unless command execution safety is `guarded`.
 
 Current limitations:
-- No formal test suite is configured in `package.json`.
+- `npm test` is configured in `package.json` and runs the Node test suite after build.
 - No lint or formatting scripts are configured in `package.json`.
 - Command safety is policy-level hardening, not a full OS sandbox.
 - Windows+WSL behavior should be tested manually in LM Studio when runtime/path behavior changes.
