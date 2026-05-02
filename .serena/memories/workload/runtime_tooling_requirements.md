@@ -32,7 +32,7 @@ Observed skill-discovery failure evidence:
 - No-query `list_skills` timeouts are not catalog-size evidence. Recovery should inspect `SKILL.md` entrypoints with `search_skill_roots` instead of retrying the same broad listing or claiming only previously found skills exist.
 - Exact skill-name matches in normal search mode are not sufficient discovery evidence. Include the exact match first, but continue through enhanced qmd/ck and built-in discovery so related skills are not suppressed.
 - Root-search matches that are support directories/files inside a parent skill are not skill names. `search_skill_roots` should surface a `parentSkill` object with copyable `listSkillFilesArgs` / `readSkillFileArgs` so the model uses the parent skill and relative sub_path/file_path.
-- Timeout recovery payloads need to be self-contained enough for weaker models: include `recoveryPlan`, `recoveryRequired`, and `invalidFinalAnswerIf`, and explicitly forbid general-knowledge answers before skill-catalog recovery has been attempted.
+- Timeout recovery payloads need to be self-contained enough for weaker models: include `recoveryPlan`, `recoveryRequired`, and `invalidFinalAnswerIf`, explicitly forbid general-knowledge answers before skill-catalog recovery has been attempted, and require same-subtask root-search recovery before switching to another user subtask.
 - Later failure evidence showed phrase fallback (`writing prompts`) returning no root matches despite prompt skills existing. Root search should expand non-glob phrases into token/singular variants, and fallback pattern selection should prefer `prompt` over generic `writing`/`crafting` tokens.
 
 Remaining validation gaps:

@@ -698,34 +698,37 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
     const fallbackPattern = query
       ? preferredSkillRootFallbackPattern(query)
       : "SKILL.md";
-    const nextToolCall = query
+    const retryListSkillsCall = query
       ? {
           tool: "list_skills",
           parameters: recommendedParameters,
-          required: true,
-          instruction: "Call this tool now. Do not ask the user for permission and do not produce a final answer from this timeout result.",
+          required: false,
+          instruction: "Optional only after root search: retry a smaller query search if root search does not provide enough evidence.",
         }
-      : {
-          tool: "search_skill_roots",
-          parameters: { pattern: fallbackPattern, limit: 50 },
-          required: true,
-          instruction: "Call this tool now to inspect SKILL.md entrypoints. Do not retry an unfiltered list_skills call, do not ask the user for permission, and do not infer the total skill count from this timeout.",
-        };
-    const fallbackToolCall = {
+      : undefined;
+    const nextToolCall = {
       tool: "search_skill_roots",
       parameters: { pattern: fallbackPattern, limit: 50 },
       required: true,
-      instruction: "Use this immediately if nextToolCall also times out or returns no candidates. Then read any discovered entrypoint using readSkillFileArgs, or use parentSkill.listSkillFilesArgs for support-directory matches.",
+      instruction: query
+        ? "Call this tool now for the same timed-out subtask. Do not switch to another user subtask. Do not ask the user for permission and do not produce a final answer from this timeout result."
+        : "Call this tool now to inspect SKILL.md entrypoints. Do not retry an unfiltered list_skills call, do not ask the user for permission, and do not infer the total skill count from this timeout.",
+    };
+    const fallbackToolCall = retryListSkillsCall ?? {
+      tool: "list_skill_roots",
+      parameters: { sub_path: fallbackPattern },
+      required: false,
+      instruction: "Use this only if root search fails; inspect nearby tree structure before answering.",
     };
     const recoveryPlan = query
       ? [
           nextToolCall,
-          fallbackToolCall,
+          ...(retryListSkillsCall ? [retryListSkillsCall] : []),
           {
             tool: "list_skill_roots",
             parameters: { sub_path: fallbackPattern },
             required: false,
-            instruction: "Use this only if both query retry and root search fail; inspect nearby tree structure before answering.",
+            instruction: "Use this only if root search and optional query retry fail; inspect nearby tree structure before answering.",
           },
         ]
       : [nextToolCall];
@@ -743,13 +746,13 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
       error: `${toolName} did not return within ${recoveryTimeoutMs}ms.`,
       note: "This timeout is not an empty search result. Do not tell the user that no matching skills exist based only on this response, and do not ask whether to continue before trying the provided recoveryPlan.",
       hint: query
-        ? "Immediately execute recoveryPlan in order until one call returns a non-timeout result with candidates or root evidence. A final answer based only on this timeout is invalid."
+        ? "Immediately execute recoveryPlan starting with search_skill_roots for this same timed-out subtask until one call returns candidates or root evidence. Do not switch to another subtask first. A final answer based only on this timeout is invalid."
         : "Immediately call nextToolCall to inspect SKILL.md entrypoints. Do not retry the same unfiltered list_skills call and do not infer that previously found skills are the only available skills.",
       recommendedRecovery: query
         ? {
-            tool: "list_skills",
-            parameters: recommendedParameters,
-            reason: "A small query search can use plugin-controlled qmd/ck enhanced search when available, then fall back to built-in matching.",
+            tool: "search_skill_roots",
+            parameters: { pattern: fallbackPattern, limit: 50 },
+            reason: "The query search timed out. Inspect root paths for the same subtask before retrying list_skills or moving to another user subtask.",
           }
         : {
             tool: "search_skill_roots",
@@ -760,7 +763,7 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
       fallbackToolCall,
       recoveryPlan,
       recoveryRequired: true,
-      invalidFinalAnswerIf: "The answer is based only on this timeout/recovery payload and recoveryPlan was not attempted. Do not answer from general knowledge about prompt engineering, agents, frameworks, or concepts until skill recovery has been attempted.",
+      invalidFinalAnswerIf: "The answer is based only on this timeout/recovery payload and recoveryPlan was not attempted for the same timed-out subtask. Do not answer from general knowledge about prompt engineering, agents, frameworks, or concepts, and do not switch to another user subtask until same-subtask skill recovery has been attempted.",
       fallbackTools: ["search_skill_roots", "list_skill_roots"],
       finalAnswerGuidance: "Do not produce a final user-facing answer from this timeout result. Continue with recoveryPlan first. Never infer total skill count or say previously found skills are the only available skills from a timeout. Never substitute general knowledge recommendations for skill-catalog evidence. Only say no matching skill exists after a non-timeout result returns found=0 and root inspection finds no relevant SKILL.md entrypoint.",
     } as T;
