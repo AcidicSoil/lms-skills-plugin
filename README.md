@@ -295,52 +295,17 @@ Schema validation is not the only safety layer. Runtime path checks, command saf
 
 ## Command execution safety
 
-`run_command` is intentionally **disabled by default**.
-
-This prevents the model from issuing exploratory or destructive shell commands unless the user explicitly enables command execution in plugin settings.
+`run_command` is disabled by default. Enable command execution only for trusted tasks that require shell access.
 
 | Mode | Behavior |
 |---|---|
 | Disabled | Blocks all model-issued shell commands. Recommended default. |
-| Read-only | Allows simple inspection commands only. Blocks shell metacharacters, redirects, pipes, command chaining, variable expansion, and mutating arguments. |
+| Read-only | Allows simple inspection commands only. |
 | Guarded | Allows broader commands but still blocks dangerous patterns. |
 
-Read-only mode allows inspection-style commands such as:
+The plugin also exposes bounded runtime filesystem tools for authorized skill workflows: `read_file`, `write_file`, and `edit_file`. Reads must stay inside configured skill roots. Writes and edits also require Command Execution Safety = Guarded.
 
-```text
-pwd, ls, cat, head, tail, grep, rg, find, stat, file, wc, sort, diff, env, which
-```
-
-The safety policy blocks destructive or high-risk patterns such as:
-
-```text
-rm, rmdir, del, Remove-Item
-format, mkfs, dd, shred
-chmod, chown, chgrp
-mv, cp, mkdir, touch, tee
-redirection such as >, >>, <<
-package managers such as npm install, pip install, apt, brew, choco
-network/download tools such as curl, wget, Invoke-WebRequest
-ssh, scp, rsync
-mutating git commands such as clone, pull, push, reset, clean, checkout
-kill/taskkill
-nested shells such as bash -c, sh -c, powershell -c
-encoded PowerShell
-```
-
-This is policy-level hardening, not a full OS sandbox. For untrusted workloads, use an external sandbox such as a container, VM, or locked-down WSL environment with read-only mounts, no network, and resource limits.
-
-### Runtime filesystem tools
-
-The plugin also exposes bounded text-file tools for workflows that need file IO inside the configured skills sandbox:
-
-| Tool | Capability | Guardrail |
-|---|---|---|
-| `read_file` | Reads a UTF-8 text file by absolute or environment-prefixed path. | Path must resolve inside a configured skills root. Large reads are bounded/truncated by the normal file-size limit. |
-| `write_file` | Creates or overwrites a UTF-8 text file. | Path must resolve inside a configured skills root, content is capped at 1 MiB, and writes require Command Execution Safety = Guarded. Existing files require `overwrite=true`. |
-| `edit_file` | Replaces exact text in a UTF-8 text file. | Path must resolve inside a configured skills root, writes require Guarded mode, and `expected_replacements` can be used to reject ambiguous edits. |
-
-These tools are intended for authorized skill workflows, not arbitrary project-wide filesystem access. They share the same runtime target resolution, abort handling, structured diagnostics, and timeout wrapping as the other plugin tools.
+See [Command execution safety](docs/command-safety.md) for blocked command patterns, runtime filesystem guardrails, and sandbox guidance.
 
 ---
 
@@ -369,51 +334,7 @@ The plugin emits concise structured logs prefixed with `[lms-skills]` to both co
 ~/.lmstudio/plugin-data/lms-skills/diagnostics.log
 ```
 
-When the log exceeds `LMS_SKILLS_DIAGNOSTICS_MAX_BYTES` (default `5000000`), it is rotated to:
-
-```text
-~/.lmstudio/plugin-data/lms-skills/diagnostics.log.1
-```
-
-In LM Studio, the same console lines are also visible in the plugin/developer log stream. Tool calls also emit visible LM Studio tool status updates while they run, including start/completion, request ids, runtime-target/root resolution, slow/recovery warnings, and errors. Use the `id=...` request id to correlate preprocessing, routing, visible tool status, tool results, slow/recovery events, and backend fallback for one user turn.
-
-Default logs are human-readable route, context-injection, enhanced-search, and tool summaries. Every prompt injection logs proof of what was inserted, including injection kind, selected/expanded skills, source paths, byte counts, short SHA-256 hashes, and compact previews:
-
-```text
-[lms-skills] prompt activation tokens=$example-skill resolved=example-skill unresolved=- expanded=1 action=expanded_before_model id=prompt-...
-[lms-skills] route mode=explicit_activation_expanded action=expanded_skill(example-skill) before_model inject=1984ch id=prompt-...
-[lms-skills] context kind=explicit_expanded packet=skill_invocation_packet skills=example-skill inject=1984ch sha=85a3f72de1cd preview="<skill_invocation_packet ..." payload=67ch payloadSha=678f53749760 payload="..." id=prompt-...
-[lms-skills] context kind=routed packet=routed_skills skills=1:docs-writer:score=128:confidence=high:source=WSL:/... inject=1378ch sha=d0abcc393a31 payload="please update the README docs" id=prompt-...
-[lms-skills] enhanced_search requested=auto active=ck available={"qmd":false,"ck":true} fallback=false reason=- raw=8 resolved=3 diagnostics="ck returned 8 path candidate(s), resolved 3 skill(s)" id=list_skills-...
-[lms-skills] read_skill_file start skill=example-skill file=- timeout=30000ms id=read_skill_file-...
-[lms-skills] read_skill_file done 42ms id=read_skill_file-...
-```
-
-The `context` line is the audit trail for model-facing context. Use it to verify whether the model received an explicit expanded skill packet, routed skill candidates, a compact reminder, or fallback context.
-
-Set `LMS_SKILLS_DEBUG=1` to switch back to full JSON event logs.
-
-Enable verbose step/runtime tracing with:
-
-```bash
-LMS_SKILLS_DEBUG=1 npm run dev
-```
-
-Optional thresholds:
-
-```bash
-LMS_SKILLS_SLOW_STEP_MS=250
-LMS_SKILLS_SLOW_RUNTIME_MS=500
-LMS_SKILLS_DIAGNOSTICS_MAX_BYTES=5000000
-```
-
-Trace recipes:
-
-- Explicit `$skill` activation should show `prompt activation`, `route mode=explicit_activation_expanded`, and `context kind=explicit_expanded`. If the model later calls `list_skills` for the same skill, compare the injected context line to confirm whether the preprocessor expanded it.
-- Normal routed prompts should show `route mode=routed`, selected/rejected skill scores, then a `read_skill_file start` for the chosen skill if the model follows the workflow.
-- Skill discovery should show `list_skills start`, optional `enhanced_search`, and then `list_skills result` or `list_skills route`.
-- Slow or stuck discovery should show `tool_slow`; if `list_skills` still does not return, it should show `tool_recovery_timeout` and return a structured recovery result to the model.
-- Command attempts should show `run_command safety` before any runtime execution.
+Use request ids such as `id=list_skills-...` to correlate preprocessing, routing, tool status, slow/recovery events, and backend fallback for one user turn. See [Diagnostics reference](docs/diagnostics.md) for verbose logging options and trace recipes.
 
 ---
 
@@ -445,13 +366,7 @@ In WSL mode, `~` is resolved using the WSL/Linux home directory.
 
 ## Local development
 
-```bash
-cd lms-plugin-skills
-bun install
-bun run dev
-```
-
-Equivalent npm commands usually work too:
+See [Development reference](docs/development.md) for source layout, module boundaries, and maintainability notes.
 
 ```bash
 npm install
@@ -462,10 +377,10 @@ npm run dev
 ## Verification
 
 ```bash
-npm run build
+npm test
 ```
 
-No test suite is currently configured.
+`npm test` runs the TypeScript build and the Node test suite.
 
 ## License
 
