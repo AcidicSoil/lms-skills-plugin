@@ -44,6 +44,26 @@ export const configSchematics = createConfigSchematics()
     DEFAULT_MAX_SKILLS_IN_CONTEXT,
   )
   .field(
+    "qmdExecutable",
+    "string",
+    {
+      displayName: "QMD Binary",
+      subtitle:
+        "Optional qmd executable name or absolute path for enhanced skill search. Leave as qmd when it is on PATH.",
+    },
+    "qmd",
+  )
+  .field(
+    "ckExecutable",
+    "string",
+    {
+      displayName: "CK Binary",
+      subtitle:
+        "Optional ck executable name or absolute path for enhanced skill search. Leave as ck when it is on PATH.",
+    },
+    "ck",
+  )
+  .field(
     "skillSearchBackend",
     "select",
     {

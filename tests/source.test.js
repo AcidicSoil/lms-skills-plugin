@@ -36,10 +36,15 @@ test('list_skills has a short bounded recovery timeout and clear non-empty-resul
   assert.match(content, /normal search mode continues to enhanced\/built-in discovery/);
 });
 
-test('enhanced skill search defaults to auto backend', () => {
+test('enhanced skill search defaults to auto backend and exposes backend binary fields', () => {
+  const config = read('src/config.ts');
   assert.match(read('src/settings.ts'), /skillSearchBackend: "auto"/);
-  assert.match(read('src/config.ts'), /"auto",\n\s*\)/);
-  assert.match(read('src/config.ts'), /Auto - use enhanced local search when available, otherwise built-in \(recommended\)/);
+  assert.match(config, /"auto",\n\s*\)/);
+  assert.match(config, /Auto - use enhanced local search when available, otherwise built-in \(recommended\)/);
+  assert.match(config, /"qmdExecutable"/);
+  assert.match(config, /displayName: "QMD Binary"/);
+  assert.match(config, /"ckExecutable"/);
+  assert.match(config, /displayName: "CK Binary"/);
 });
 
 test('file operation schemas count UTF-8 bytes and allow multiline edit text', () => {
