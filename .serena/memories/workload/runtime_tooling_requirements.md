@@ -30,6 +30,7 @@ Observed skill-discovery failure evidence:
 - Additional failure evidence showed the model asking the user whether to continue after a timeout despite `recommendedRecovery`. Timeout payloads should include an explicit `nextToolCall` with `required: true`, a `fallbackToolCall`, and guidance that a final answer is prohibited until recovery/inspection is attempted.
 - qmd/ck enhanced search should be available through `list_skills`, not raw model-issued shell commands. Default backend is `auto`; non-builtin query search should try plugin-controlled qmd/ck before slow built-in filesystem scans, then fall back safely.
 - No-query `list_skills` timeouts are not catalog-size evidence. Recovery should inspect `SKILL.md` entrypoints with `search_skill_roots` instead of retrying the same broad listing or claiming only previously found skills exist.
+- Exact skill-name matches in normal search mode are not sufficient discovery evidence. Include the exact match first, but continue through enhanced qmd/ck and built-in discovery so related skills are not suppressed.
 - Later failure evidence showed phrase fallback (`writing prompts`) returning no root matches despite prompt skills existing. Root search should expand non-glob phrases into token/singular variants, and fallback pattern selection should prefer `prompt` over generic `writing`/`crafting` tokens.
 
 Remaining validation gaps:

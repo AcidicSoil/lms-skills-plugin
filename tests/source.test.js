@@ -32,6 +32,8 @@ test('list_skills has a short bounded recovery timeout and clear non-empty-resul
   assert.match(content, /enhanced_skill_search_before_scan/);
   assert.match(content, /enhancedSkippedReason/);
   assert.match(content, /Enhanced qmd\/ck search was not run because an exact skill match resolved first/);
+  assert.match(content, /exact_match_plus_broader_search/);
+  assert.match(content, /normal search mode continues to enhanced\/built-in discovery/);
 });
 
 test('enhanced skill search defaults to auto backend', () => {

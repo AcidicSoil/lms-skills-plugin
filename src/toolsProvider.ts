@@ -345,6 +345,39 @@ function skillCandidateResult(candidate: ToolSkillCandidate) {
   };
 }
 
+function skillInfoResult(
+  skill: SkillInfo,
+  score: number,
+  confidence: string,
+  reasons: string[],
+  source: string,
+) {
+  return {
+    name: skill.name,
+    description: skill.description,
+    tags: skill.tags.length > 0 ? skill.tags : undefined,
+    environment: skill.environment,
+    skillMdPath: skill.skillMdPath,
+    displayPath: skill.displayPath,
+    hasExtraFiles: skill.hasExtraFiles,
+    score,
+    confidence,
+    reasons,
+    source,
+    nextStep: skillNextStepHint(skill),
+    frontmatter: skillFrontmatterSummary(skill),
+  };
+}
+
+function prependExactCandidate<T extends SkillInfo>(exactSkill: SkillInfo | undefined, candidates: T[]): SkillInfo[] {
+  if (!exactSkill) return candidates;
+  const exactKey = `${exactSkill.environment}:${exactSkill.resolvedDirectoryPath}`;
+  return [
+    exactSkill,
+    ...candidates.filter((candidate) => `${candidate.environment}:${candidate.resolvedDirectoryPath}` !== exactKey),
+  ];
+}
+
 async function suggestSkillsForQuery(
   roots: ResolvedSkillRoot[],
   registry: RuntimeRegistry,
@@ -953,9 +986,9 @@ export async function toolsProvider(ctl: PluginController) {
             { query: trimmedQuery, rootCount: roots.length },
           );
 
-          if (exact) {
-            const exactSkill = exact.skill;
-            status(`Found exact skill ${exactSkill.name}`);
+          const exactSkill = exact?.skill;
+          if (exactSkill) {
+            status(`Found exact skill ${exactSkill.name}; continuing search for additional candidates`);
             logDiagnostic({
               event: "list_skills_exact_result",
               requestId,
@@ -965,37 +998,16 @@ export async function toolsProvider(ctl: PluginController) {
               skill: exactSkill.name,
               environment: exactSkill.environment,
               resolvedDirectoryPath: exactSkill.resolvedDirectoryPath,
+              continuedSearch: true,
             });
-            return {
-              query: trimmedQuery,
-              total: 1,
-              found: 1,
-              skillsEnvironment: cfg.skillsEnvironment,
-              roots,
-              searchBackend: skillSearchBackendSummary(cfg, undefined, {
-                stage: "exact_match",
-                reason: "Enhanced qmd/ck search was not run because an exact skill match resolved first.",
-              }),
-              note: "Exact skill match resolved directly without scanning all skill files; enhanced qmd/ck search was skipped because it was unnecessary.",
-              skillStructureHint: SKILL_STRUCTURE_HINT,
-              skills: [
-                {
-                  name: exactSkill.name,
-                  description: exactSkill.description,
-                  tags: exactSkill.tags.length > 0 ? exactSkill.tags : undefined,
-                  environment: exactSkill.environment,
-                  skillMdPath: exactSkill.skillMdPath,
-                  displayPath: exactSkill.displayPath,
-                  hasExtraFiles: exactSkill.hasExtraFiles,
-                  score: 10,
-                  nextStep: skillNextStepHint(exactSkill),
-                  frontmatter: skillFrontmatterSummary(exactSkill),
-                },
-              ],
-            };
           }
 
-          let enhancedSearchBackend = searchBackend;
+          let enhancedSearchBackend = exactSkill
+            ? skillSearchBackendSummary(cfg, undefined, {
+                stage: "exact_match_plus_broader_search",
+                reason: "Exact skill match resolved first, but normal search mode continues to enhanced/built-in discovery for additional candidates.",
+              })
+            : searchBackend;
           if (cfg.skillSearchBackend !== "builtin") {
             emitToolDebugStatus({ status }, "list_skills: exact miss; trying configured enhanced backend before filesystem scan", {
               backend: cfg.skillSearchBackend,
@@ -1035,42 +1047,46 @@ export async function toolsProvider(ctl: PluginController) {
             });
 
             if (enhanced.candidates.length > 0) {
+              const mergedCandidates = prependExactCandidate(exactSkill, enhanced.candidates).slice(0, cap);
               logDiagnostic({
                 event: "list_skills_result",
                 requestId,
                 tool: "list_skills",
-                total: enhanced.candidates.length,
-                returned: enhanced.candidates.length,
+                total: mergedCandidates.length,
+                returned: mergedCandidates.length,
                 mode: "enhanced",
                 query: trimmedQuery,
                 backend: enhanced.active,
                 requestedBackend: enhanced.requested,
+                exactIncluded: exactSkill ? true : undefined,
               });
               return {
                 query: trimmedQuery,
                 mode: "enhanced",
-                total: enhanced.candidates.length,
-                found: enhanced.candidates.length,
+                total: mergedCandidates.length,
+                found: mergedCandidates.length,
                 skillsEnvironment: cfg.skillsEnvironment,
                 roots,
                 searchBackend: enhancedSearchBackend,
-                note: `Enhanced ${enhanced.active} search returned resolvable skill candidates before built-in filesystem scanning. Pick the intended skill and call read_skill_file with its exact name.`,
+                note: exactSkill
+                  ? `Exact skill match included first; enhanced ${enhanced.active} search also returned additional resolvable skill candidates. Pick the intended skill and call read_skill_file with its exact name.`
+                  : `Enhanced ${enhanced.active} search returned resolvable skill candidates before built-in filesystem scanning. Pick the intended skill and call read_skill_file with its exact name.`,
                 skillStructureHint: SKILL_STRUCTURE_HINT,
-                skills: enhanced.candidates.map((skill, index) => ({
-                  name: skill.name,
-                  description: skill.description,
-                  tags: skill.tags.length > 0 ? skill.tags : undefined,
-                  environment: skill.environment,
-                  skillMdPath: skill.skillMdPath,
-                  displayPath: skill.displayPath,
-                  hasExtraFiles: skill.hasExtraFiles,
-                  score: Math.max(1, 100 - index),
-                  confidence: index < 3 ? "high" : "medium",
-                  reasons: [`enhanced:${enhanced.active}`],
-                  source: enhanced.active,
-                  nextStep: skillNextStepHint(skill),
-                  frontmatter: skillFrontmatterSummary(skill),
-                })),
+                skills: mergedCandidates.map((skill, index) => skillInfoResult(
+                  skill,
+                  exactSkill && skill.resolvedDirectoryPath === exactSkill.resolvedDirectoryPath && skill.environment === exactSkill.environment
+                    ? 1000
+                    : Math.max(1, 100 - index),
+                  exactSkill && skill.resolvedDirectoryPath === exactSkill.resolvedDirectoryPath && skill.environment === exactSkill.environment
+                    ? "exact"
+                    : index < 3 ? "high" : "medium",
+                  exactSkill && skill.resolvedDirectoryPath === exactSkill.resolvedDirectoryPath && skill.environment === exactSkill.environment
+                    ? ["exact_skill_name_or_directory_match"]
+                    : [`enhanced:${enhanced.active}`],
+                  exactSkill && skill.resolvedDirectoryPath === exactSkill.resolvedDirectoryPath && skill.environment === exactSkill.environment
+                    ? "exact"
+                    : enhanced.active,
+                )),
               };
             }
           }
@@ -1100,26 +1116,41 @@ export async function toolsProvider(ctl: PluginController) {
           );
 
           if (fuzzy.length > 0) {
+            const fuzzyWithExact = exactSkill && !fuzzy.some((candidate) => candidate.skill.environment === exactSkill.environment && candidate.skill.resolvedDirectoryPath === exactSkill.resolvedDirectoryPath)
+              ? [
+                  {
+                    skill: exactSkill,
+                    score: 1000,
+                    confidence: "high" as const,
+                    reasons: ["exact_skill_name_or_directory_match"],
+                    source: "exact" as const,
+                  },
+                  ...fuzzy,
+                ].slice(0, cap)
+              : fuzzy;
             logDiagnostic({
               event: "list_skills_result",
               requestId,
               tool: "list_skills",
-              total: fuzzy.length,
-              returned: fuzzy.length,
+              total: fuzzyWithExact.length,
+              returned: fuzzyWithExact.length,
               mode: "fuzzy",
               query: trimmedQuery,
+              exactIncluded: exactSkill ? true : undefined,
             });
             return {
               query: trimmedQuery,
               mode: "fuzzy",
-              total: fuzzy.length,
-              found: fuzzy.length,
+              total: fuzzyWithExact.length,
+              found: fuzzyWithExact.length,
               skillsEnvironment: cfg.skillsEnvironment,
               roots,
-              searchBackend,
-              note: "Fast fuzzy skill-name candidates matched before enhanced or full-text search. Pick the intended skill and call read_skill_file with its exact name.",
+              searchBackend: enhancedSearchBackend,
+              note: exactSkill
+                ? "Exact skill match included first, and fuzzy/built-in metadata search also ran to consider additional candidates. Pick the intended skill and call read_skill_file with its exact name."
+                : "Fast fuzzy skill-name candidates matched. Pick the intended skill and call read_skill_file with its exact name.",
               skillStructureHint: SKILL_STRUCTURE_HINT,
-              skills: fuzzy.map(skillCandidateResult),
+              skills: fuzzyWithExact.map(skillCandidateResult),
             };
           }
 
@@ -1132,7 +1163,11 @@ export async function toolsProvider(ctl: PluginController) {
             { query: trimmedQuery, skillCount: scannedSkills.length },
           );
 
-          if (results.length === 0) {
+          const scoredWithExact = exactSkill && !results.some(({ skill }) => skill.environment === exactSkill.environment && skill.resolvedDirectoryPath === exactSkill.resolvedDirectoryPath)
+            ? [{ skill: exactSkill, score: 1000 }, ...results]
+            : results;
+
+          if (scoredWithExact.length === 0) {
             return {
               query: trimmedQuery,
               found: 0,
@@ -1144,21 +1179,30 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
-          const page = results.slice(0, cap);
-          status(`Found ${results.length} match${results.length !== 1 ? "es" : ""}`);
-          logDiagnostic({ event: "list_skills_result", requestId, tool: "list_skills", total: results.length, returned: page.length });
+          const page = scoredWithExact.slice(0, cap);
+          status(`Found ${scoredWithExact.length} match${scoredWithExact.length !== 1 ? "es" : ""}`);
+          logDiagnostic({
+            event: "list_skills_result",
+            requestId,
+            tool: "list_skills",
+            total: scoredWithExact.length,
+            returned: page.length,
+            exactIncluded: exactSkill ? true : undefined,
+          });
 
           return {
             query: trimmedQuery,
-            total: results.length,
+            total: scoredWithExact.length,
             found: page.length,
             skillsEnvironment: cfg.skillsEnvironment,
             roots,
             skillStructureHint: SKILL_STRUCTURE_HINT,
             searchBackend: enhancedSearchBackend,
-            ...(results.length > cap
-              ? { note: `Showing top ${cap} of ${results.length} matches.` }
-              : {}),
+            note: exactSkill
+              ? "Exact skill match included first, and broader discovery also ran to consider additional candidates. Pick the intended skill and call read_skill_file with its exact name."
+              : results.length > cap
+                ? `Showing top ${cap} of ${results.length} matches.`
+                : undefined,
             skills: page.map(({ skill, score }) => ({
               name: skill.name,
               description: skill.description,
