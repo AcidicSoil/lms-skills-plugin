@@ -45,6 +45,11 @@ test('enhanced skill search defaults to auto backend and exposes backend binary 
   assert.match(config, /displayName: "QMD Binary"/);
   assert.match(config, /"ckExecutable"/);
   assert.match(config, /displayName: "CK Binary"/);
+  assert.match(config, /"qmdCollections"/);
+  assert.match(config, /displayName: "QMD Collections"/);
+  assert.match(config, /"qmdSearchMode"/);
+  assert.match(config, /displayName: "QMD Search Mode"/);
+  assert.match(read('src/enhancedSearchProvider.ts'), /qmd collection \$\{collection\} returned/);
 });
 
 test('file operation schemas count UTF-8 bytes and allow multiline edit text', () => {

@@ -10,7 +10,7 @@ import {
 } from "./constants";
 import { configSchematics } from "./config";
 import { detectHostPlatform, parseSkillsEnvironment } from "./environment";
-import type { PersistedSettings, EffectiveConfig, SkillSearchBackend } from "./types";
+import type { PersistedSettings, EffectiveConfig, SkillSearchBackend, QmdSearchMode } from "./types";
 import type { CommandExecutionMode } from "./commandSafety";
 import type { PluginController } from "./pluginTypes";
 
@@ -25,7 +25,20 @@ function parseSkillSearchBackend(value: unknown): SkillSearchBackend {
   if (value === "builtin" || value === "auto" || value === "qmd" || value === "ck") {
     return value;
   }
-  return "builtin";
+  return "auto";
+}
+
+function parseQmdSearchMode(value: unknown): QmdSearchMode {
+  if (value === "managed" || value === "configured" || value === "both") return value;
+  return "both";
+}
+
+export function parseQmdCollections(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return [...new Set(raw.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean))];
+  }
+  if (typeof raw !== "string") return [];
+  return [...new Set(raw.split(/[;,\n]/).map((value) => value.trim()).filter(Boolean))];
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -41,6 +54,8 @@ const DEFAULTS: PersistedSettings = {
   skillSearchBackend: "auto",
   qmdExecutable: "qmd",
   ckExecutable: "ck",
+  qmdCollections: [],
+  qmdSearchMode: "both",
 };
 
 let cachedConfig: EffectiveConfig | null = null;
@@ -83,6 +98,8 @@ export function loadSettings(): PersistedSettings {
       skillSearchBackend: parseSkillSearchBackend(parsed.skillSearchBackend),
       qmdExecutable: typeof parsed.qmdExecutable === "string" && parsed.qmdExecutable.trim() ? parsed.qmdExecutable.trim() : DEFAULTS.qmdExecutable,
       ckExecutable: typeof parsed.ckExecutable === "string" && parsed.ckExecutable.trim() ? parsed.ckExecutable.trim() : DEFAULTS.ckExecutable,
+      qmdCollections: parseQmdCollections(parsed.qmdCollections),
+      qmdSearchMode: parseQmdSearchMode(parsed.qmdSearchMode),
     };
   } catch {
     return { ...DEFAULTS };
@@ -129,6 +146,8 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     ((c.get("qmdExecutable") as string | undefined) ?? "").trim() || saved.qmdExecutable || DEFAULTS.qmdExecutable;
   const ckExecutable =
     ((c.get("ckExecutable") as string | undefined) ?? "").trim() || saved.ckExecutable || DEFAULTS.ckExecutable;
+  const qmdCollections = parseQmdCollections(c.get("qmdCollections") || saved.qmdCollections);
+  const qmdSearchMode = parseQmdSearchMode(c.get("qmdSearchMode") || saved.qmdSearchMode);
 
   if (rawPaths === RESET_TO_DEFAULT_SENTINEL) {
     const next: PersistedSettings = {
@@ -144,6 +163,8 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
       skillSearchBackend,
       qmdExecutable,
       ckExecutable,
+      qmdCollections,
+      qmdSearchMode,
     };
     saveSettings(next);
     cachedConfig = next;
@@ -172,6 +193,8 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     skillSearchBackend,
     qmdExecutable,
     ckExecutable,
+    qmdCollections,
+    qmdSearchMode,
   };
 
   if (JSON.stringify(next) !== JSON.stringify(saved)) saveSettings(next);

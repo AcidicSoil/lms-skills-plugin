@@ -149,6 +149,8 @@ function skillSearchBackendSummary(
     options: {
       qmdExecutable: cfg.qmdExecutable,
       ckExecutable: cfg.ckExecutable,
+      qmdCollections: cfg.qmdCollections,
+      qmdSearchMode: cfg.qmdSearchMode,
     },
     workflowHint: SKILL_SEARCH_WORKFLOW_HINT,
   };
@@ -1025,6 +1027,8 @@ export async function toolsProvider(ctl: PluginController) {
                 {
                   qmdExecutable: cfg.qmdExecutable,
                   ckExecutable: cfg.ckExecutable,
+                  qmdCollections: cfg.qmdCollections,
+                  qmdSearchMode: cfg.qmdSearchMode,
                 },
                 toolSignal,
               ),

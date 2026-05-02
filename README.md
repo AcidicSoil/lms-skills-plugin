@@ -223,6 +223,8 @@ Use `list_skills` with `mode: "route"` to inspect the same routing decision outs
 | Skill Search Backend | Auto | Optional backend selector for plugin-controlled skill discovery. `auto` tries enhanced local search first when `qmd` or `ck` is available, then falls back to built-in exact/fuzzy/route/full-text search. `qmd` uses a plugin-managed QMD collection/index when available; `ck` uses CK hybrid search when available. Models should still call `list_skills`, not raw backend commands. |
 | QMD Binary | `qmd` | Optional qmd executable name or absolute path. Use this when qmd is installed outside the plugin process PATH. |
 | CK Binary | `ck` | Optional ck executable name or absolute path. Use this when ck is installed outside the plugin process PATH. |
+| QMD Collections | Empty | Optional semicolon-, comma-, or newline-separated user-managed qmd collections to query, such as `skills;skill-set`. This covers wrapper-style workflows like `qks`/`qkcs` without relying on shell functions. |
+| QMD Search Mode | Managed + configured collections | Controls whether qmd uses configured collections, the plugin-managed collection, or both. |
 | Skills Runtime Environment | Host-dependent | `Windows`, `WSL`, or `Both`. Controls path resolution, skill reads, and command target behavior. |
 | Skills Paths | Last saved/default | Semicolon-separated skill root directories. |
 | Command Execution Safety | Disabled | Controls whether `run_command` can execute shell commands. |
@@ -231,7 +233,7 @@ Runtime details such as the default WSL distro and shell executable are auto-det
 
 ### Managed QMD indexing
 
-When **Skill Search Backend** is `qmd` or `auto`, the plugin manages QMD setup automatically from the configured **Skills Paths**. Users do not need to choose QMD collection names. If LM Studio cannot find your qmd executable, set **QMD Binary** to the executable name or absolute path.
+When **Skill Search Backend** is `qmd` or `auto`, the plugin can query user-managed QMD collections and/or a plugin-managed QMD collection. If LM Studio cannot find your qmd executable, set **QMD Binary** to the executable name or absolute path. To reuse existing qmd wrapper behavior such as `qks` (`qmd query ... -c skills`) or `qkcs` (`qmd query ... -c skill-set`), set **QMD Collections** to `skills;skill-set` and keep **QMD Search Mode** on `Managed + configured collections`, or choose `Configured collections only` to skip the plugin-managed index.
 
 Managed QMD state lives under:
 

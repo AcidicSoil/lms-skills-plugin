@@ -64,6 +64,40 @@ export const configSchematics = createConfigSchematics()
     "ck",
   )
   .field(
+    "qmdCollections",
+    "string",
+    {
+      displayName: "QMD Collections",
+      subtitle:
+        "Optional semicolon-, comma-, or newline-separated qmd collections to query, such as skills;skill-set. Leave empty to use only the plugin-managed collection.",
+    },
+    "",
+  )
+  .field(
+    "qmdSearchMode",
+    "select",
+    {
+      displayName: "QMD Search Mode",
+      subtitle:
+        "Choose whether qmd search uses configured collections, the plugin-managed collection, or both.",
+      options: [
+        {
+          value: "both",
+          displayName: "Managed + configured collections (recommended)",
+        },
+        {
+          value: "configured",
+          displayName: "Configured collections only",
+        },
+        {
+          value: "managed",
+          displayName: "Plugin-managed collection only",
+        },
+      ],
+    },
+    "both",
+  )
+  .field(
     "skillSearchBackend",
     "select",
     {

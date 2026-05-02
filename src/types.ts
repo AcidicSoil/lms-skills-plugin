@@ -2,6 +2,7 @@ import type { RuntimeTargetName, SkillsEnvironment } from "./environment";
 import type { CommandExecutionMode } from "./commandSafety";
 
 export type SkillSearchBackend = "builtin" | "auto" | "qmd" | "ck";
+export type QmdSearchMode = "managed" | "configured" | "both";
 
 export interface SkillInfo {
   name: string;
@@ -64,6 +65,8 @@ export interface PersistedSettings {
   skillSearchBackend: SkillSearchBackend;
   qmdExecutable: string;
   ckExecutable: string;
+  qmdCollections: string[];
+  qmdSearchMode: QmdSearchMode;
 }
 
 export interface EffectiveConfig {
@@ -79,6 +82,8 @@ export interface EffectiveConfig {
   skillSearchBackend: SkillSearchBackend;
   qmdExecutable: string;
   ckExecutable: string;
+  qmdCollections: string[];
+  qmdSearchMode: QmdSearchMode;
 }
 
 export interface DirectoryEntry {
