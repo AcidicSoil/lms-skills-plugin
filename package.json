@@ -6,6 +6,8 @@
   "scripts": {
     "build": "tsc",
     "test": "npm run build && node --test tests/*.test.js",
+    "check:file-size": "node scripts/check-file-size.js",
+    "check:file-size:all": "node scripts/check-file-size.js --all",
     "dev": "tsc && lms dev",
     "push": "lms push"
   },

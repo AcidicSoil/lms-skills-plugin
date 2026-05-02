@@ -51,7 +51,30 @@ Keep root files as compatibility entry points when other modules already import 
 
 ## File-size maintainability
 
-Prefer focused files over large orchestration files. Treat files over 400 lines as extraction candidates. Treat files over 800 lines as failures unless the repository adds a temporary allowlist convention with an owner, expiry date, and reason.
+Prefer focused files over large orchestration files. The repo-local checker treats files over 400 lines as extraction candidates and files over 800 lines as failures unless they have a temporary allowlist entry.
+
+Run the changed-file gate before handoff:
+
+```bash
+npm run check:file-size
+```
+
+Run the full-repo audit when you are intentionally reviewing historical or vendored content:
+
+```bash
+npm run check:file-size:all
+```
+
+The full-repo audit currently reports large files in the tracked `.agents/skills` corpus. Do not use broad excludes to hide newly changed source files.
+
+Temporary allowlist entries live in `config/file-size-allowlist.json` and must include:
+
+| Field | Purpose |
+|---|---|
+| `path` | Repo-relative file path. |
+| `owner` | Person or team responsible for reducing or renewing the entry. |
+| `expires` | Expiry date in `YYYY-MM-DD` format. |
+| `reason` | Specific reason the file cannot be split in the current slice. |
 
 When reducing file size:
 
@@ -71,8 +94,8 @@ npm test
 
 `npm test` already runs `npm run build` before executing `node --test tests/*.test.js`, so it is the default full verification command.
 
-Use line counts when a change touches maintainability boundaries:
+Use the file-size checker when a change touches maintainability boundaries:
 
 ```bash
-wc -l src/toolsProvider.ts src/tools/*.ts src/scanner.ts src/scanner/*.ts
+npm run check:file-size
 ```
