@@ -30,6 +30,8 @@ test('list_skills has a short bounded recovery timeout and clear non-empty-resul
   assert.match(content, /previously found skills are the only available skills/);
   assert.match(content, /preferredSkillRootFallbackPattern/);
   assert.match(content, /enhanced_skill_search_before_scan/);
+  assert.match(content, /enhancedSkippedReason/);
+  assert.match(content, /Enhanced qmd\/ck search was not run because an exact skill match resolved first/);
 });
 
 test('enhanced skill search defaults to auto backend', () => {

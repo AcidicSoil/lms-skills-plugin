@@ -135,6 +135,9 @@ test('toolsProvider registers and exercises every available tool with visible de
       const list = await callTool(tools.get('list_skills'), { query: 'example-skill' });
       assert.equal(list.result.found, 1);
       assert.equal(list.result.skills[0].name, 'example-skill');
+      assert.equal(list.result.searchBackend.enhancedSkipped, true);
+      assert.equal(list.result.searchBackend.resolutionStage, 'exact_match');
+      assert.match(list.result.searchBackend.enhancedSkippedReason, /exact skill match resolved first/);
       assertHasDebugStatus('list_skills', list.statuses);
       assert.ok(list.statuses.some((message) => message.includes('resolving skill roots')));
       assert.ok(list.statuses.some((message) => message.includes('checking exact skill match')));

@@ -121,7 +121,11 @@ const skillRootSearchLimitSchema = z
   .optional()
   .describe(`Maximum number of matching root entries to return. Defaults to ${SKILL_ROOT_SEARCH_DEFAULT_LIMIT}.`);
 
-function skillSearchBackendSummary(cfg: EffectiveConfig, result?: EnhancedSkillSearchResult) {
+function skillSearchBackendSummary(
+  cfg: EffectiveConfig,
+  result?: EnhancedSkillSearchResult,
+  shortCircuit?: { reason: string; stage: string },
+) {
   if (result) {
     return {
       requested: result.requested,
@@ -139,6 +143,9 @@ function skillSearchBackendSummary(cfg: EffectiveConfig, result?: EnhancedSkillS
     requested: cfg.skillSearchBackend,
     active: "builtin",
     fallbackUsed: false,
+    enhancedSkipped: shortCircuit !== undefined,
+    enhancedSkippedReason: shortCircuit?.reason,
+    resolutionStage: shortCircuit?.stage,
     options: {
       qmdExecutable: cfg.qmdExecutable,
       ckExecutable: cfg.ckExecutable,
@@ -860,8 +867,11 @@ export async function toolsProvider(ctl: PluginController) {
                 threshold: 0,
                 queryTokens: trimmedQuery.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
                 exactMatch: true,
-                searchBackend,
-                note: "Exact skill match resolved directly before route scanning.",
+                searchBackend: skillSearchBackendSummary(cfg, undefined, {
+                  stage: "exact_route_match",
+                  reason: "Enhanced qmd/ck search was not run because an exact skill match resolved first.",
+                }),
+                note: "Exact skill match resolved directly before route scanning; enhanced qmd/ck search was skipped because it was unnecessary.",
                 skillStructureHint: SKILL_STRUCTURE_HINT,
                 selected: [
                   {
@@ -962,8 +972,11 @@ export async function toolsProvider(ctl: PluginController) {
               found: 1,
               skillsEnvironment: cfg.skillsEnvironment,
               roots,
-              searchBackend,
-              note: "Exact skill match resolved directly without scanning all skill files.",
+              searchBackend: skillSearchBackendSummary(cfg, undefined, {
+                stage: "exact_match",
+                reason: "Enhanced qmd/ck search was not run because an exact skill match resolved first.",
+              }),
+              note: "Exact skill match resolved directly without scanning all skill files; enhanced qmd/ck search was skipped because it was unnecessary.",
               skillStructureHint: SKILL_STRUCTURE_HINT,
               skills: [
                 {
