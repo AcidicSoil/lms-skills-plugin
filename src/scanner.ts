@@ -13,9 +13,9 @@ import type { RuntimeAdapter } from "./runtime/types";
 import type { SkillInfo, SkillManifestFile, SkillFrontmatter, DirectoryEntry } from "./types";
 import type { RuntimeTargetName } from "./environment";
 import { checkAbort, isAbortError } from "./abort";
-import { parseSkillMarkdown, combineDescription, extractDescription, extractBodyExcerpt } from "./scannerMarkdown";
-import { searchSkillSet, type SkillSearchResult } from "./scannerSearch";
-import { joinForTarget, normalizeForTarget, isInsideTarget, hasPathSeparator, relativeForTarget } from "./scannerPaths";
+import { parseSkillMarkdown, combineDescription, extractDescription, extractBodyExcerpt } from "./scanner/markdown";
+import { searchSkillSet, type SkillSearchResult } from "./scanner/search";
+import { joinForTarget, normalizeForTarget, isInsideTarget, hasPathSeparator, relativeForTarget } from "./scanner/paths";
 export { searchSkillSet };
 export type { SkillSearchResult };
 

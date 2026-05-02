@@ -1,12 +1,12 @@
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
-import { LIST_SKILLS_DEFAULT_LIMIT, TOOL_LIST_SKILLS_TIMEOUT_MS } from "./constants";
-import { scanSkills, searchSkillSet } from "./scanner";
-import { logDiagnostic, timedStep } from "./diagnostics";
-import { routeSkills, summarizeRouteCandidate } from "./skillRouter";
-import { searchSkillsWithEnhancedBackend } from "./enhancedSearchProvider";
-import { listSkillsLimitSchema, listSkillsQuerySchema } from "./toolSchemas";
-import type { PluginController } from "./pluginTypes";
+import { LIST_SKILLS_DEFAULT_LIMIT, TOOL_LIST_SKILLS_TIMEOUT_MS } from "../constants";
+import { scanSkills, searchSkillSet } from "../scanner";
+import { logDiagnostic, timedStep } from "../diagnostics";
+import { routeSkills, summarizeRouteCandidate } from "../skillRouter";
+import { searchSkillsWithEnhancedBackend } from "../enhancedSearchProvider";
+import { listSkillsLimitSchema, listSkillsQuerySchema } from "../toolSchemas";
+import type { PluginController } from "../pluginTypes";
 import { withToolLogging } from "./toolsProviderLogging";
 import {
   getRuntimeContext,

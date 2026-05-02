@@ -1,5 +1,5 @@
-import type { SkillInfo } from "./types";
-import { checkAbort } from "./abort";
+import type { SkillInfo } from "../types";
+import { checkAbort } from "../abort";
 
 export interface SkillSearchResult {
   skill: SkillInfo;

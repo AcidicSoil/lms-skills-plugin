@@ -1,5 +1,5 @@
 import * as path from "path";
-import type { RuntimeTargetName } from "./environment";
+import type { RuntimeTargetName } from "../environment";
 
 export function joinForTarget(target: RuntimeTargetName, base: string, child: string): string {
   return target === "windows"

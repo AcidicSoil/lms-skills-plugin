@@ -1,6 +1,6 @@
-import type { PluginController } from "./pluginTypes";
-import { createRequestId, logDiagnostic, serializeError } from "./diagnostics";
-import { createTimeoutSignal, isTimeoutError } from "./timeout";
+import type { PluginController } from "../pluginTypes";
+import { createRequestId, logDiagnostic, serializeError } from "../diagnostics";
+import { createTimeoutSignal, isTimeoutError } from "../timeout";
 import { compactToolStatusValue, emitToolDebugStatus, emitToolDebugWarning, preferredSkillRootFallbackPattern, type ToolUiReporter } from "./toolsProviderShared";
 
 const TOOL_VISIBLE_STILL_WORKING_MS = 5_000;

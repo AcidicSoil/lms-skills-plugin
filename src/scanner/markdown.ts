@@ -1,5 +1,5 @@
-import { MAX_DESCRIPTION_CHARS, BODY_EXCERPT_CHARS } from "./constants";
-import type { SkillFrontmatter } from "./types";
+import { MAX_DESCRIPTION_CHARS, BODY_EXCERPT_CHARS } from "../constants";
+import type { SkillFrontmatter } from "../types";
 
 export interface ParsedSkillMarkdown {
   frontmatter: SkillFrontmatter | null;

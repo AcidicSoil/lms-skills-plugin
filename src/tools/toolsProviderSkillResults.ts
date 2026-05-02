@@ -1,9 +1,9 @@
 import * as path from "path";
-import { scanSkills, resolveSkillByName } from "./scanner";
-import type { EnhancedSkillSearchResult } from "./enhancedSearchProvider";
-import type { RuntimeRegistry } from "./runtime";
-import type { ResolvedSkillRoot } from "./pathResolver";
-import type { EffectiveConfig, SkillInfo } from "./types";
+import { scanSkills, resolveSkillByName } from "../scanner";
+import type { EnhancedSkillSearchResult } from "../enhancedSearchProvider";
+import type { RuntimeRegistry } from "../runtime";
+import type { ResolvedSkillRoot } from "../pathResolver";
+import type { EffectiveConfig, SkillInfo } from "../types";
 import { SKILL_SEARCH_WORKFLOW_HINT } from "./toolsProviderUi";
 
 export function skillSearchBackendSummary(

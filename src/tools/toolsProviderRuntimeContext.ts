@@ -1,13 +1,13 @@
-import { resolveEffectiveConfig } from "./settings";
-import { deriveRuntimeTargets } from "./environment";
-import { createRuntimeRegistry } from "./runtime";
-import { resolveSkillRoots } from "./pathResolver";
-import { logDiagnostic, timedStep } from "./diagnostics";
-import type { RuntimeRegistry } from "./runtime";
-import type { RuntimeTargetName } from "./environment";
-import type { ResolvedSkillRoot } from "./pathResolver";
-import type { PluginController } from "./pluginTypes";
-import type { EffectiveConfig } from "./types";
+import { resolveEffectiveConfig } from "../settings";
+import { deriveRuntimeTargets } from "../environment";
+import { createRuntimeRegistry } from "../runtime";
+import { resolveSkillRoots } from "../pathResolver";
+import { logDiagnostic, timedStep } from "../diagnostics";
+import type { RuntimeRegistry } from "../runtime";
+import type { RuntimeTargetName } from "../environment";
+import type { ResolvedSkillRoot } from "../pathResolver";
+import type { PluginController } from "../pluginTypes";
+import type { EffectiveConfig } from "../types";
 import { emitToolDebugStatus, type ToolUiReporter } from "./toolsProviderUi";
 
 export async function getRuntimeContext(

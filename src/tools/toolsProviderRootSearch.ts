@@ -1,9 +1,9 @@
 import * as path from "path";
-import { resolveSkillByName } from "./scanner";
-import type { RuntimeRegistry } from "./runtime";
-import type { RuntimeTargetName } from "./environment";
-import type { ResolvedSkillRoot } from "./pathResolver";
-import type { DirectoryEntry } from "./types";
+import { resolveSkillByName } from "../scanner";
+import type { RuntimeRegistry } from "../runtime";
+import type { RuntimeTargetName } from "../environment";
+import type { ResolvedSkillRoot } from "../pathResolver";
+import type { DirectoryEntry } from "../types";
 
 export function joinRootSubPath(root: ResolvedSkillRoot, subPath?: string): string {
   if (!subPath) return root.resolvedPath;
