@@ -522,6 +522,78 @@ function skillEntrypointFollowup(entry: {
   };
 }
 
+function relativeChildPath(environment: RuntimeTargetName, parent: string, child: string): string | undefined {
+  const normalize = (value: string) => value.replace(/\\/g, "/").replace(/^\.\/?/, "").replace(/\/$/, "");
+  const normalizedParent = normalize(parent);
+  const normalizedChild = normalize(child);
+  if (normalizedChild === normalizedParent) return undefined;
+  const prefix = `${normalizedParent}/`;
+  return normalizedChild.startsWith(prefix) ? normalizedChild.slice(prefix.length) : undefined;
+}
+
+function listSubPathForMatchedEntry(
+  environment: RuntimeTargetName,
+  skillDirectoryPath: string,
+  entryPath: string,
+  entryType: "file" | "directory",
+): string | undefined {
+  const child = relativeChildPath(environment, skillDirectoryPath, entryPath);
+  if (!child) return undefined;
+  if (entryType === "directory") return child;
+  const dir = dirnameForTarget(environment, child);
+  return dir === "." ? undefined : dir;
+}
+
+function ancestorSkillSearchPaths(environment: RuntimeTargetName, entryPath: string, entryType: "file" | "directory"): string[] {
+  const ancestors: string[] = [];
+  let current = entryType === "file" ? dirnameForTarget(environment, entryPath) : entryPath;
+  while (current && current !== "." && current !== "/" && current !== "\\") {
+    ancestors.push(current);
+    const next = dirnameForTarget(environment, current);
+    if (!next || next === current || next === ".") break;
+    current = next;
+  }
+  return ancestors;
+}
+
+async function parentSkillReferenceForRootEntry(
+  entry: {
+    environment: RuntimeTargetName;
+    path: string;
+    type: "file" | "directory";
+    displayPath?: string;
+  },
+  roots: ResolvedSkillRoot[],
+  registry: RuntimeRegistry,
+  signal?: AbortSignal,
+) {
+  for (const candidatePath of ancestorSkillSearchPaths(entry.environment, entry.path, entry.type)) {
+    const skill = await resolveSkillByName(roots, registry, candidatePath, signal).catch(() => null);
+    if (!skill) continue;
+    const subPath = listSubPathForMatchedEntry(entry.environment, candidatePath, entry.path, entry.type);
+    const filePath = entry.type === "file" ? relativeChildPath(entry.environment, candidatePath, entry.path) : undefined;
+    return {
+      name: skill.name,
+      environment: skill.environment,
+      skillDirectoryPath: candidatePath,
+      displayPath: skill.displayPath,
+      reason: `Matched path is inside parent skill "${skill.name}". Use the parent skill name, not the matched subdirectory, with list_skill_files or read_skill_file.`,
+      listSkillFilesArgs: subPath
+        ? { skill_name: skill.name, sub_path: subPath }
+        : { skill_name: skill.name },
+      ...(entry.type === "file"
+        ? {
+            readSkillFileArgs: {
+              skill_name: skill.name,
+              file_path: filePath,
+            },
+          }
+        : {}),
+    };
+  }
+  return undefined;
+}
+
 function normalizeReadSkillFileRequest(skillName: string, filePath?: string): { skillName: string; filePath?: string; note?: string } {
   const normalizedSkill = skillName.trim();
   const normalizedFile = filePath?.trim();
@@ -639,6 +711,24 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
           required: true,
           instruction: "Call this tool now to inspect SKILL.md entrypoints. Do not retry an unfiltered list_skills call, do not ask the user for permission, and do not infer the total skill count from this timeout.",
         };
+    const fallbackToolCall = {
+      tool: "search_skill_roots",
+      parameters: { pattern: fallbackPattern, limit: 50 },
+      required: true,
+      instruction: "Use this immediately if nextToolCall also times out or returns no candidates. Then read any discovered entrypoint using readSkillFileArgs, or use parentSkill.listSkillFilesArgs for support-directory matches.",
+    };
+    const recoveryPlan = query
+      ? [
+          nextToolCall,
+          fallbackToolCall,
+          {
+            tool: "list_skill_roots",
+            parameters: { sub_path: fallbackPattern },
+            required: false,
+            instruction: "Use this only if both query retry and root search fail; inspect nearby tree structure before answering.",
+          },
+        ]
+      : [nextToolCall];
     return {
       success: false,
       timedOut: true,
@@ -651,9 +741,9 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
       found: null,
       skills: undefined,
       error: `${toolName} did not return within ${recoveryTimeoutMs}ms.`,
-      note: "This timeout is not an empty search result. Do not tell the user that no matching skills exist based only on this response, and do not ask whether to continue before trying the provided nextToolCall.",
+      note: "This timeout is not an empty search result. Do not tell the user that no matching skills exist based only on this response, and do not ask whether to continue before trying the provided recoveryPlan.",
       hint: query
-        ? "Immediately make nextToolCall. If that also times out, immediately call search_skill_roots with fallbackToolCall.parameters. Only answer the user after a non-timeout result or after both recovery tools fail."
+        ? "Immediately execute recoveryPlan in order until one call returns a non-timeout result with candidates or root evidence. A final answer based only on this timeout is invalid."
         : "Immediately call nextToolCall to inspect SKILL.md entrypoints. Do not retry the same unfiltered list_skills call and do not infer that previously found skills are the only available skills.",
       recommendedRecovery: query
         ? {
@@ -667,13 +757,12 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
             reason: "An unfiltered skill listing timed out. Inspect SKILL.md entrypoints instead of retrying the same broad list or inferring the total catalog size.",
           },
       nextToolCall,
-      fallbackToolCall: {
-        tool: "search_skill_roots",
-        parameters: { pattern: fallbackPattern, limit: 50 },
-        instruction: "Use this immediately if nextToolCall also times out or returns no candidates. Then read any discovered entrypoint using readSkillFileArgs.",
-      },
+      fallbackToolCall,
+      recoveryPlan,
+      recoveryRequired: true,
+      invalidFinalAnswerIf: "The answer is based only on this timeout/recovery payload and recoveryPlan was not attempted. Do not answer from general knowledge about prompt engineering, agents, frameworks, or concepts until skill recovery has been attempted.",
       fallbackTools: ["search_skill_roots", "list_skill_roots"],
-      finalAnswerGuidance: "Do not produce a final user-facing answer from this timeout result. Continue with nextToolCall first. Never infer total skill count or say previously found skills are the only available skills from a timeout. Only say no matching skill exists after a non-timeout result returns found=0 and root inspection finds no relevant SKILL.md entrypoint.",
+      finalAnswerGuidance: "Do not produce a final user-facing answer from this timeout result. Continue with recoveryPlan first. Never infer total skill count or say previously found skills are the only available skills from a timeout. Never substitute general knowledge recommendations for skill-catalog evidence. Only say no matching skill exists after a non-timeout result returns found=0 and root inspection finds no relevant SKILL.md entrypoint.",
     } as T;
   }
 
@@ -1701,6 +1790,12 @@ export async function toolsProvider(ctl: PluginController) {
             displayPath: entry.displayPath,
           }));
 
+        const enrichedMatches = await Promise.all(matches.map(async (entry) => ({
+          ...entry,
+          parentSkill: entry.name === "SKILL.md" ? undefined : await parentSkillReferenceForRootEntry(entry, roots, registry, toolSignal),
+        })));
+        const parentSkillCount = enrichedMatches.filter((entry) => entry.parentSkill).length;
+
         const totalMatchedEntries = rootResults.reduce((total, rootResult) => total + rootResult.matchedEntryCount, 0);
         logDiagnostic({
           event: "search_skill_roots_result",
@@ -1711,6 +1806,7 @@ export async function toolsProvider(ctl: PluginController) {
           returned: matches.length,
           totalMatchedEntries,
           skillEntrypointCount: discoveredSkillEntrypoints.length,
+          parentSkillCount,
           sub_path: sub_path || undefined,
         });
 
@@ -1724,13 +1820,16 @@ export async function toolsProvider(ctl: PluginController) {
           limit: cap,
           truncated: totalMatchedEntries > matches.length,
           roots: rootResults,
-          matches,
+          matches: enrichedMatches,
           skillEntrypointCount: discoveredSkillEntrypoints.length,
+          parentSkillCount,
           discoveredSkillEntrypoints,
           skillStructureHint: SKILL_STRUCTURE_HINT,
           nextStep: discoveredSkillEntrypoints.length > 0
             ? "Use a discovered entrypoint's readSkillFileArgs exactly with read_skill_file. Do not pass the discovered SKILL.md path as file_path; omit file_path to read SKILL.md."
-            : "Try another concise substring or glob-like pattern, or call list_skill_roots to inspect nearby directory structure.",
+            : parentSkillCount > 0
+              ? "Matched entries are inside existing parent skills. Use each match's parentSkill.listSkillFilesArgs or parentSkill.readSkillFileArgs; do not call list_skill_files with the matched subdirectory path as skill_name."
+              : "Try another concise substring or glob-like pattern, or call list_skill_roots to inspect nearby directory structure.",
         };
       }, { ui: { status } }),
   });

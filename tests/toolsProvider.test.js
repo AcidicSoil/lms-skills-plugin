@@ -32,6 +32,12 @@ async function withTempSkills(fn) {
       'Reference says: use fixture details.',
       'utf8',
     );
+    await fs.mkdir(path.join(skillsRoot, 'PROMPTS', 'example-skill', 'agents'), { recursive: true });
+    await fs.writeFile(
+      path.join(skillsRoot, 'PROMPTS', 'example-skill', 'agents', 'openai.yaml'),
+      'model: test\n',
+      'utf8',
+    );
     await fs.mkdir(path.join(skillsRoot, 'PROMPTS', 'prompt-engineering'), { recursive: true });
     await fs.writeFile(
       path.join(skillsRoot, 'PROMPTS', 'prompt-engineering', 'SKILL.md'),
@@ -229,6 +235,21 @@ test('toolsProvider registers and exercises every available tool with visible de
       assert.equal(readPromptFromBadFollowup.result.success, true);
       assert.equal(readPromptFromBadFollowup.result.skill, 'prompt-engineering');
       assert.match(readPromptFromBadFollowup.result.content, /Use this skill to craft prompts/);
+
+      const agentRootSearch = await callTool(tools.get('search_skill_roots'), { pattern: 'agents' });
+      assert.equal(agentRootSearch.result.success, true);
+      assert.equal(agentRootSearch.result.skillEntrypointCount, 0);
+      assert.equal(agentRootSearch.result.parentSkillCount >= 1, true);
+      const agentDirMatch = agentRootSearch.result.matches.find(
+        (entry) => entry.path === 'PROMPTS/example-skill/agents',
+      );
+      assert.ok(agentDirMatch);
+      assert.equal(agentDirMatch.parentSkill.name, 'example-skill');
+      assert.deepEqual(agentDirMatch.parentSkill.listSkillFilesArgs, {
+        skill_name: 'example-skill',
+        sub_path: 'agents',
+      });
+      assert.match(agentRootSearch.result.nextStep, /parentSkill\.listSkillFilesArgs/);
 
       const blockedCommand = await callTool(tools.get('run_command'), { command: 'pwd' });
       assert.equal(blockedCommand.result.success, false);

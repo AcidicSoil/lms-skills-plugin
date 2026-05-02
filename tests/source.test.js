@@ -25,6 +25,10 @@ test('list_skills has a short bounded recovery timeout and clear non-empty-resul
   assert.match(content, /Do not ask the user for permission/);
   assert.match(content, /Do not produce a final user-facing answer from this timeout result/);
   assert.match(content, /fallbackToolCall/);
+  assert.match(content, /recoveryPlan/);
+  assert.match(content, /recoveryRequired/);
+  assert.match(content, /invalidFinalAnswerIf/);
+  assert.match(content, /Never substitute general knowledge recommendations for skill-catalog evidence/);
   assert.match(content, /Do not retry an unfiltered list_skills call/);
   assert.match(content, /Never infer total skill count/);
   assert.match(content, /previously found skills are the only available skills/);
