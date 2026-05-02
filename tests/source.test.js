@@ -25,6 +25,14 @@ test('list_skills has a short bounded recovery timeout and clear non-empty-resul
   assert.match(content, /Do not ask the user for permission/);
   assert.match(content, /Do not produce a final user-facing answer from this timeout result/);
   assert.match(content, /fallbackToolCall/);
+  assert.match(content, /preferredSkillRootFallbackPattern/);
+  assert.match(content, /enhanced_skill_search_before_scan/);
+});
+
+test('enhanced skill search defaults to auto backend', () => {
+  assert.match(read('src/settings.ts'), /skillSearchBackend: "auto"/);
+  assert.match(read('src/config.ts'), /"auto",\n\s*\)/);
+  assert.match(read('src/config.ts'), /Auto - use enhanced local search when available, otherwise built-in \(recommended\)/);
 });
 
 test('file operation schemas count UTF-8 bytes and allow multiline edit text', () => {

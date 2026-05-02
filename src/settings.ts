@@ -38,7 +38,7 @@ const DEFAULTS: PersistedSettings = {
   wslShellPath: "",
   wslDistro: "",
   commandExecutionMode: "disabled",
-  skillSearchBackend: "builtin",
+  skillSearchBackend: "auto",
   qmdExecutable: "qmd",
   ckExecutable: "ck",
 };

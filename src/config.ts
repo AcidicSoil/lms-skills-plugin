@@ -53,11 +53,11 @@ export const configSchematics = createConfigSchematics()
       options: [
         {
           value: "builtin",
-          displayName: "Built-in - exact, fuzzy, route, and full-text search (recommended)",
+          displayName: "Built-in - exact, fuzzy, route, and full-text search",
         },
         {
           value: "auto",
-          displayName: "Auto - use enhanced local search when available, otherwise built-in",
+          displayName: "Auto - use enhanced local search when available, otherwise built-in (recommended)",
         },
         {
           value: "qmd",
@@ -69,7 +69,7 @@ export const configSchematics = createConfigSchematics()
         },
       ],
     },
-    "builtin",
+    "auto",
   )
   .field(
     "skillsEnvironment",

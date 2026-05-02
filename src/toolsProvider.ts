@@ -381,12 +381,38 @@ function globPatternToRegExp(pattern: string): RegExp {
   return new RegExp(source, "i");
 }
 
+function skillRootSearchVariants(pattern: string): string[] {
+  const normalizedPattern = pattern.replace(/\\/g, "/").trim().toLowerCase();
+  const tokens = normalizedPattern
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+  const variants = new Set<string>();
+  if (normalizedPattern) variants.add(normalizedPattern);
+  for (const token of tokens) {
+    variants.add(token);
+    if (token.endsWith("s") && token.length > 3) variants.add(token.slice(0, -1));
+  }
+  return [...variants];
+}
+
+function preferredSkillRootFallbackPattern(query: string): string {
+  const variants = skillRootSearchVariants(query);
+  const promptVariant = variants.find((variant) => variant === "prompt" || variant === "prompts");
+  if (promptVariant) return "prompt";
+  return variants.find((variant) => !["write", "writing", "craft", "crafting", "skill", "skills"].includes(variant))
+    ?? variants[0]
+    ?? query;
+}
+
 function entryMatchesSkillRootSearch(entry: DirectoryEntry, pattern: string): boolean {
-  const normalizedPath = entry.relativePath.replace(/\\/g, "/");
+  const normalizedPath = entry.relativePath.replace(/\\/g, "/").toLowerCase();
+  const normalizedName = entry.name.toLowerCase();
   const normalizedPattern = pattern.replace(/\\/g, "/").trim();
   if (!normalizedPattern.includes("*") && !normalizedPattern.includes("?")) {
-    const needle = normalizedPattern.toLowerCase();
-    return normalizedPath.toLowerCase().includes(needle) || entry.name.toLowerCase().includes(needle);
+    return skillRootSearchVariants(normalizedPattern).some((needle) =>
+      normalizedPath.includes(needle) || normalizedName.includes(needle),
+    );
   }
   return globPatternToRegExp(normalizedPattern).test(normalizedPath);
 }
@@ -553,14 +579,10 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
     const query = typeof args.query === "string" ? args.query.trim() : "";
     const mode = typeof args.mode === "string" ? args.mode : undefined;
     const recommendedParameters = query
-      ? { query, mode: "route" as const, limit: 10 }
+      ? { query, limit: 10 }
       : { limit: 20 };
     const fallbackPattern = query
-      ? query
-          .toLowerCase()
-          .split(/[^a-z0-9]+/)
-          .filter((token) => token.length >= 3)
-          .sort((a, b) => a.length - b.length)[0] ?? query
+      ? preferredSkillRootFallbackPattern(query)
       : "SKILL.md";
     return {
       success: false,
@@ -582,7 +604,7 @@ function toolRecoveryResult<T>(toolName: string, args: Record<string, unknown>, 
         tool: "list_skills",
         parameters: recommendedParameters,
         reason: query
-          ? "Route mode uses deterministic metadata routing and is the preferred recovery path after a broad skill search timeout."
+          ? "A small query search can use plugin-controlled qmd/ck enhanced search when available, then fall back to built-in matching."
           : "A bounded skill listing timed out without a query; narrow the request before retrying.",
       },
       nextToolCall: {
@@ -948,7 +970,87 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
-          emitToolDebugStatus({ status }, "list_skills: exact miss; scanning skills once for fast fuzzy metadata search", {
+          let enhancedSearchBackend = searchBackend;
+          if (cfg.skillSearchBackend !== "builtin") {
+            emitToolDebugStatus({ status }, "list_skills: exact miss; trying configured enhanced backend before filesystem scan", {
+              backend: cfg.skillSearchBackend,
+            });
+            const enhanced = await timedStep(
+              requestId,
+              "list_skills",
+              "enhanced_skill_search_before_scan",
+              async () => searchSkillsWithEnhancedBackend(
+                cfg.skillSearchBackend,
+                roots,
+                registry,
+                trimmedQuery,
+                cap,
+                {
+                  qmdExecutable: cfg.qmdExecutable,
+                  ckExecutable: cfg.ckExecutable,
+                },
+                toolSignal,
+              ),
+              { query: trimmedQuery, backend: cfg.skillSearchBackend, rootCount: roots.length },
+            );
+            enhancedSearchBackend = skillSearchBackendSummary(cfg, enhanced);
+            logDiagnostic({
+              event: "enhanced_search_result",
+              requestId,
+              tool: "list_skills",
+              query: trimmedQuery,
+              requestedBackend: enhanced.requested,
+              activeBackend: enhanced.active,
+              available: JSON.stringify(enhanced.available),
+              fallbackUsed: enhanced.fallbackUsed,
+              fallbackReason: enhanced.fallbackReason,
+              rawResultCount: enhanced.rawResultCount,
+              resolvedCount: enhanced.candidates.length,
+              diagnostics: enhanced.diagnostics.join(" | "),
+            });
+
+            if (enhanced.candidates.length > 0) {
+              logDiagnostic({
+                event: "list_skills_result",
+                requestId,
+                tool: "list_skills",
+                total: enhanced.candidates.length,
+                returned: enhanced.candidates.length,
+                mode: "enhanced",
+                query: trimmedQuery,
+                backend: enhanced.active,
+                requestedBackend: enhanced.requested,
+              });
+              return {
+                query: trimmedQuery,
+                mode: "enhanced",
+                total: enhanced.candidates.length,
+                found: enhanced.candidates.length,
+                skillsEnvironment: cfg.skillsEnvironment,
+                roots,
+                searchBackend: enhancedSearchBackend,
+                note: `Enhanced ${enhanced.active} search returned resolvable skill candidates before built-in filesystem scanning. Pick the intended skill and call read_skill_file with its exact name.`,
+                skillStructureHint: SKILL_STRUCTURE_HINT,
+                skills: enhanced.candidates.map((skill, index) => ({
+                  name: skill.name,
+                  description: skill.description,
+                  tags: skill.tags.length > 0 ? skill.tags : undefined,
+                  environment: skill.environment,
+                  skillMdPath: skill.skillMdPath,
+                  displayPath: skill.displayPath,
+                  hasExtraFiles: skill.hasExtraFiles,
+                  score: Math.max(1, 100 - index),
+                  confidence: index < 3 ? "high" : "medium",
+                  reasons: [`enhanced:${enhanced.active}`],
+                  source: enhanced.active,
+                  nextStep: skillNextStepHint(skill),
+                  frontmatter: skillFrontmatterSummary(skill),
+                })),
+              };
+            }
+          }
+
+          emitToolDebugStatus({ status }, "list_skills: exact/enhanced miss; scanning skills once for fast fuzzy metadata search", {
             query: trimmedQuery,
             roots: roots.length,
           });
@@ -996,84 +1098,7 @@ export async function toolsProvider(ctl: PluginController) {
             };
           }
 
-          emitToolDebugStatus({ status }, "list_skills: fuzzy miss; trying configured enhanced backend", {
-            backend: cfg.skillSearchBackend,
-          });
-          const enhanced = await timedStep(
-            requestId,
-            "list_skills",
-            "enhanced_skill_search",
-            async () => searchSkillsWithEnhancedBackend(
-              cfg.skillSearchBackend,
-              roots,
-              registry,
-              trimmedQuery,
-              cap,
-              {
-                qmdExecutable: cfg.qmdExecutable,
-                ckExecutable: cfg.ckExecutable,
-              },
-              toolSignal,
-            ),
-            { query: trimmedQuery, backend: cfg.skillSearchBackend, rootCount: roots.length },
-          );
-          const enhancedSearchBackend = skillSearchBackendSummary(cfg, enhanced);
-          logDiagnostic({
-            event: "enhanced_search_result",
-            requestId,
-            tool: "list_skills",
-            query: trimmedQuery,
-            requestedBackend: enhanced.requested,
-            activeBackend: enhanced.active,
-            available: JSON.stringify(enhanced.available),
-            fallbackUsed: enhanced.fallbackUsed,
-            fallbackReason: enhanced.fallbackReason,
-            rawResultCount: enhanced.rawResultCount,
-            resolvedCount: enhanced.candidates.length,
-            diagnostics: enhanced.diagnostics.join(" | "),
-          });
-
-          if (enhanced.candidates.length > 0) {
-            logDiagnostic({
-              event: "list_skills_result",
-              requestId,
-              tool: "list_skills",
-              total: enhanced.candidates.length,
-              returned: enhanced.candidates.length,
-              mode: "enhanced",
-              query: trimmedQuery,
-              backend: enhanced.active,
-              requestedBackend: enhanced.requested,
-            });
-            return {
-              query: trimmedQuery,
-              mode: "enhanced",
-              total: enhanced.candidates.length,
-              found: enhanced.candidates.length,
-              skillsEnvironment: cfg.skillsEnvironment,
-              roots,
-              searchBackend: enhancedSearchBackend,
-              note: `Enhanced ${enhanced.active} search returned resolvable skill candidates after fast fuzzy metadata search found no candidates. Pick the intended skill and call read_skill_file with its exact name.`,
-              skillStructureHint: SKILL_STRUCTURE_HINT,
-              skills: enhanced.candidates.map((skill, index) => ({
-                name: skill.name,
-                description: skill.description,
-                tags: skill.tags.length > 0 ? skill.tags : undefined,
-                environment: skill.environment,
-                skillMdPath: skill.skillMdPath,
-                displayPath: skill.displayPath,
-                hasExtraFiles: skill.hasExtraFiles,
-                score: Math.max(1, 100 - index),
-                confidence: index < 3 ? "high" : "medium",
-                reasons: [`enhanced:${enhanced.active}`],
-                source: enhanced.active,
-                nextStep: skillNextStepHint(skill),
-                frontmatter: skillFrontmatterSummary(skill),
-              })),
-            };
-          }
-
-          emitToolDebugStatus({ status }, "list_skills: enhanced miss; scoring scanned skill text", { query: trimmedQuery });
+          emitToolDebugStatus({ status }, "list_skills: enhanced/built-in metadata miss; scoring scanned skill text", { query: trimmedQuery });
           const results = await timedStep(
             requestId,
             "list_skills",

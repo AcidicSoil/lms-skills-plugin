@@ -203,7 +203,7 @@ test('toolsProvider registers and exercises every available tool with visible de
       assert.ok(searchRoots.result.discoveredSkillEntrypoints.some((entry) => entry.path === 'PROMPTS/prompt-engineering/SKILL.md'));
       assertHasDebugStatus('search_skill_roots', searchRoots.statuses);
 
-      const promptRootSearch = await callTool(tools.get('search_skill_roots'), { pattern: 'prompt' });
+      const promptRootSearch = await callTool(tools.get('search_skill_roots'), { pattern: 'writing prompts' });
       assert.equal(promptRootSearch.result.success, true);
       const promptEntrypoint = promptRootSearch.result.discoveredSkillEntrypoints.find(
         (entry) => entry.path === 'PROMPTS/prompt-engineering/SKILL.md',
