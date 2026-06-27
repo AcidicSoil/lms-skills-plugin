@@ -1,0 +1,15 @@
+dist
+node_modules
+.lmstudio
+*.lock
+*-lock.json
+.agents
+.serena
+.ecc-hooks-disable.bak
+.ecc-hooks-disable
+.plans
+.archived
+.planning
+AGENTS.md
+scripts
+.vscode
