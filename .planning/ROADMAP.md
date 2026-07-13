@@ -19,6 +19,7 @@ This milestone delivers safe, backward-compatible Host/WSL execution and determi
 5. Command timeouts and output limits behave consistently in Host and WSL adapters.
 
 ### Phase 2: Per-Chat Workspace and Tool Integration
+**Status:** Complete (2026-07-13)
 **Goal:** As an LM Studio user, I want to be able to easily utilize WSL while using the skills plugin, and I want every project-scoped file and shell tool to use one deterministic per-chat workspace in my selected environment, so that file edits and commands operate on the same predictable project.
 **Mode:** mvp
 **Requirements:** WORK-01, WORK-02, WORK-03, WORK-04, WORK-05, TOOL-01, TOOL-02, TOOL-03, TEST-02

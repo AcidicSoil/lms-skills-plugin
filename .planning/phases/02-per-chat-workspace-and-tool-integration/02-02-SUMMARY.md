@@ -4,7 +4,7 @@ plan: 02
 status: complete
 completed_at: 2026-07-13
 requirements: [TOOL-01]
-commits: [eee69e3]
+commits: [eee69e3, 87e86db, dde97e7]
 ---
 # Plan 02-02 Summary: Workspace Filesystem Backends
 

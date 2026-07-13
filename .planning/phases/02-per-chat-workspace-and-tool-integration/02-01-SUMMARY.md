@@ -4,7 +4,7 @@ plan: 01
 status: complete
 completed_at: 2026-07-13
 requirements: [WORK-01, WORK-02, WORK-03, WORK-04, WORK-05]
-commits: [d491fbf]
+commits: [d491fbf, ad2fdff]
 ---
 # Plan 02-01 Summary: Workspace Context and Lifecycle
 

@@ -4,7 +4,7 @@ plan: 03
 status: complete
 completed_at: 2026-07-13
 requirements: [TOOL-02, TOOL-03, TEST-02]
-commits: [9e5bcef]
+commits: [9e5bcef, fcd7e17]
 ---
 # Plan 02-03 Summary: Workspace-Aware Tool Integration
 
