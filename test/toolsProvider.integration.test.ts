@@ -82,7 +82,7 @@ test("WSL project tools share Linux-native workspace metadata and command cwd", 
   };
   const calls: string[] = [];
   const fakeFs: any = {
-    resolvePath: async (value: string) => `${context.nativeRoot}/${value}`,
+    resolvePath: async (value: string) => value.startsWith("/") ? value : `${context.nativeRoot}/${value}`,
     writeFile: async (value: string) => { calls.push(`write:${value}`); return { path: `${context.nativeRoot}/${value}`, bytes: 1 }; },
     readFile: async (value: string) => ({ path: `${context.nativeRoot}/${value}`, content: "wsl", bytes: 3 }),
   };
@@ -116,7 +116,7 @@ test("all public tools stay aligned to the selected WSL environment", async () =
   const commandCalls: Array<{ cwd?: string; environment?: string; distribution?: string }> = [];
   const skillCalls: string[] = [];
   const fakeFs: any = {
-    resolvePath: async (value: string) => `${context.nativeRoot}/${value}`,
+    resolvePath: async (value: string) => value.startsWith("/") ? value : `${context.nativeRoot}/${value}`,
     readFile: async (value: string) => { fileCalls.push(`read:${value}`); return { path: `${context.nativeRoot}/${value}`, content: "x", bytes: 1 }; },
     writeFile: async (value: string) => { fileCalls.push(`write:${value}`); return { path: `${context.nativeRoot}/${value}`, bytes: 1 }; },
     patchFile: async (value: string) => { fileCalls.push(`patch:${value}`); return { path: `${context.nativeRoot}/${value}`, replacements: 1 }; },
@@ -165,14 +165,16 @@ test("all public tools stay aligned to the selected WSL environment", async () =
   await invoke(tools, "delete_file", { file_path: "a.txt" });
   await invoke(tools, "move_file", { source_path: "a.txt", destination_path: "b.txt" });
   await invoke(tools, "rename_file", { file_path: "b.txt", new_name: "c.txt" });
+  await invoke(tools, "change_directory", { dir_path: "dir" });
   const current = await invoke(tools, "get_current_directory");
   await invoke(tools, "run_command", { command: "pwd" });
 
   assert.deepEqual(skillCalls, ["scan", "resolve", "read", "resolve", "list"]);
-  assert.equal(fileCalls.length, 9);
+  assert.equal(fileCalls.length, 10);
   assert.equal(current.environment, "wsl");
   assert.equal(current.wslDistribution, "Ubuntu");
   assert.equal(current.workspaceRoot, context.nativeRoot);
-  assert.deepEqual(commandCalls, [{ cwd: context.nativeRoot, environment: "wsl", distribution: "Ubuntu" }]);
+  assert.equal(current.cwd, `${context.nativeRoot}/dir`);
+  assert.deepEqual(commandCalls, [{ cwd: `${context.nativeRoot}/dir`, environment: "wsl", distribution: "Ubuntu" }]);
   assert.ok(!JSON.stringify({ fileCalls, skillCalls, commandCalls, current }).includes("C:\\Users"));
 });

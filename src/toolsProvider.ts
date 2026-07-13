@@ -58,6 +58,7 @@ export const PUBLIC_TOOL_NAMES = [
   "delete_file",
   "move_file",
   "rename_file",
+  "change_directory",
   "get_current_directory",
   "run_command",
 ] as const;
@@ -69,6 +70,7 @@ export async function toolsProvider(
   let workspacePromise: Promise<WorkspaceContext> | undefined;
   let workspaceFsPromise: Promise<WorkspaceFileSystem> | undefined;
   let skillStore: SkillStore | undefined;
+  let activeCommandDirectory: string | undefined;
 
   const getSkillStore = (): SkillStore => {
     if (!skillStore) {
@@ -95,6 +97,19 @@ export async function toolsProvider(
         (dependencies.createWorkspaceFs ?? createWorkspaceFileSystem)(context));
     }
     return workspaceFsPromise;
+  };
+
+  const resolveCommandDirectory = async (requested?: string): Promise<string> => {
+    const workspace = await getWorkspace();
+    const fs = await getWorkspaceFs();
+    const current = activeCommandDirectory ?? workspace.nativeRoot;
+    if (!requested || requested.trim() === "") return current;
+    const value = requested.trim();
+    const pathApi = workspace.executionEnvironment === "wsl"
+      ? path.posix
+      : (/^[A-Za-z]:[\\/]/.test(workspace.nativeRoot) ? path.win32 : path.posix);
+    const candidate = pathApi.isAbsolute(value) ? value : pathApi.resolve(current, value);
+    return fs.resolvePath(candidate);
   };
 
   const executeCommand = dependencies.executeCommand ?? execCommand;
@@ -526,6 +541,31 @@ export async function toolsProvider(
     },
   });
 
+  const changeDirectoryTool = tool({
+    name: "change_directory",
+    description: "Change the active command directory inside the current Host/WSL workspace. The directory persists for subsequent run_command calls and cannot escape the workspace.",
+    parameters: {
+      dir_path: z.string().min(1).describe("Contained directory path. Relative paths resolve from the current active command directory."),
+    },
+    implementation: async ({ dir_path }, { status }) => {
+      status(`Changing directory to ${dir_path}..`);
+      try {
+        const fs = await getWorkspaceFs();
+        const resolved = await resolveCommandDirectory(dir_path);
+        await fs.listDirectory(resolved, false);
+        activeCommandDirectory = resolved;
+        const workspace = await getWorkspace();
+        return {
+          success: true,
+          cwd: resolved,
+          workspaceRoot: workspace.nativeRoot,
+          environment: workspace.executionEnvironment,
+          ...(workspace.wslDistribution ? { wslDistribution: workspace.wslDistribution } : {}),
+        };
+      } catch (error) { return failure(error); }
+    },
+  });
+
   const getCurrentDirectoryTool = tool({
     name: "get_current_directory",
     description: "Inspect the deterministic per-chat workspace used by project-scoped file and shell tools.",
@@ -541,8 +581,8 @@ export async function toolsProvider(
           environment: workspace.executionEnvironment,
           ...(workspace.wslDistribution ? { wslDistribution: workspace.wslDistribution } : {}),
           workspaceRoot: workspace.nativeRoot,
-          cwd: workspace.nativeRoot,
-          note: "Project-scoped file tools and run_command use this same workspace root.",
+          cwd: activeCommandDirectory ?? workspace.nativeRoot,
+          note: "Project file tools remain workspace-root scoped; change_directory controls the default run_command directory.",
         };
       } catch (error) { return failure(error); }
     },
@@ -553,7 +593,7 @@ export async function toolsProvider(
     description: "Execute a shell command in the active per-chat workspace and selected Host/WSL environment. An optional cwd must remain inside the same workspace.",
     parameters: {
       command: z.string().min(1).max(EXEC_MAX_COMMAND_LENGTH).describe("Shell command to execute."),
-      cwd: z.string().optional().describe("Optional workspace-relative subdirectory. Defaults to the workspace root."),
+      cwd: z.string().optional().describe("Optional contained directory. Relative paths resolve from the active command directory; defaults to the directory set by change_directory or the workspace root."),
       timeout_ms: z.number().int().min(1_000).max(EXEC_MAX_TIMEOUT_MS).optional().describe(`Timeout in milliseconds. Defaults to ${EXEC_DEFAULT_TIMEOUT_MS}.`),
       env: z.record(z.string()).optional().describe("Optional environment variables merged over the process environment."),
     },
@@ -562,7 +602,7 @@ export async function toolsProvider(
       try {
         const config = resolveEffectiveConfig(ctl);
         const workspace = await getWorkspace();
-        const commandCwd = cwd ? await (await getWorkspaceFs()).resolvePath(cwd) : workspace.nativeRoot;
+        const commandCwd = await resolveCommandDirectory(cwd);
         const timeoutMs = timeout_ms ?? EXEC_DEFAULT_TIMEOUT_MS;
         const result = await executeCommand(command, {
           cwd: commandCwd,
@@ -603,6 +643,7 @@ export async function toolsProvider(
     deleteFileTool,
     moveFileTool,
     renameFileTool,
+    changeDirectoryTool,
     getCurrentDirectoryTool,
     runCommandTool,
   ];

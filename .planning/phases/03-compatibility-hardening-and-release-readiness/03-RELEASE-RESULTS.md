@@ -65,8 +65,14 @@
 
 ## Skill-Boundary Manual Verification
 
-- Status: Blocked — rerun required after tilde-expansion fix
-- Evidence: Previous run returned zero skills because `~/.agents/skills` was treated literally. Commit `d8ab5ed` expands tilde-prefixed skill roots before scanning child directories. The previous report is invalid as skill-boundary proof.
+- Status: Pass — environment-aware skill tools validated in real Ubuntu WSL session
+- Evidence:
+  - `list_skills` discovered 46 skills from `/home/user/.agents/skills`, including `docx`.
+  - `read_skill_file` successfully read `/home/user/.agents/skills/docx/SKILL.md`.
+  - `list_skill_files` returned 65 entries from `/home/user/.agents/skills/docx`, including `SKILL.md`, scripts, references, and schemas.
+  - `get_current_directory` returned the same workspace ID `964b6e505fe80eba1f8e5560` and root before and after skill operations.
+  - Skill paths were Linux-native and separate from the project workspace.
+- Verdict: Pass.
 
 ## Roadmap Criteria
 

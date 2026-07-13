@@ -29,7 +29,8 @@ Project tools share one deterministic workspace for the current LM Studio provid
 | `delete_file` | Delete a contained workspace path |
 | `move_file` | Move a contained workspace path without silent overwrite |
 | `rename_file` | Rename a workspace path in place |
-| `get_current_directory` | Report workspace ID, provider identity, environment, distribution, and native root |
+| `change_directory` | Change the persistent default command directory inside the active workspace |
+| `get_current_directory` | Report workspace ID, provider identity, environment, distribution, native root, and active command directory |
 | `run_command` | Run a shell command in the same workspace and selected Host/WSL environment |
 
 Relative project paths resolve from the active workspace root. Absolute paths must be native to the selected environment and remain canonically contained. Missing or invalid command working directories return errors; they do not fall back to the user's home directory.
@@ -103,7 +104,7 @@ WSL workspaces are created in the selected distribution's Linux filesystem:
 ~/.lmstudio/lms-skills/workspaces/<workspace-id>
 ```
 
-The ID is deterministic for the LM Studio provider working directory, selected environment, and WSL distribution. File tools and `run_command` use the same root.
+The ID is deterministic for the LM Studio provider working directory, selected environment, and WSL distribution. File tools remain workspace-root scoped. `change_directory` changes the persistent default directory for subsequent `run_command` calls without allowing escape from that root.
 
 See [Host and WSL Workspaces](docs/host-wsl-workspaces.md) for setup, security boundaries, performance guidance, limitations, and troubleshooting.
 

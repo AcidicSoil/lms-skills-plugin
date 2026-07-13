@@ -12,7 +12,7 @@ import { createWorkspaceFileSystem } from "../src/workspaceFs";
 const EXPECTED_TOOL_NAMES = [
   "list_skills", "read_skill_file", "list_skill_files", "read_file", "write_file",
   "patch_file", "append_to_file", "create_directory", "list_directory", "delete_file",
-  "move_file", "rename_file", "get_current_directory", "run_command",
+  "move_file", "rename_file", "change_directory", "get_current_directory", "run_command",
 ];
 
 function controller(workingDirectory: string): PluginController {
@@ -67,8 +67,14 @@ test("compatibility: Host file and command lifecycle keeps required response fie
     assert.equal(typeof write.bytesWritten, "number");
     const read = await invoke(tools, "read_file", { file_path: "a.txt" });
     assert.equal(read.content, "hello");
+    await invoke(tools, "create_directory", { dir_path: "sub" });
+    const changed = await invoke(tools, "change_directory", { dir_path: "sub" });
+    assert.equal(changed.cwd, path.join(root, "sub"));
+    const inspected = await invoke(tools, "get_current_directory");
+    assert.equal(inspected.cwd, path.join(root, "sub"));
     const run = await invoke(tools, "run_command", { command: "pwd" });
     assert.equal(run.exitCode, 0);
+    assert.equal(run.stdout, path.join(root, "sub"));
     assert.equal(run.workspaceRoot, root);
     await invoke(tools, "delete_file", { file_path: "a.txt" });
     assert.equal(skillWorkspaceResolutions, 1);
