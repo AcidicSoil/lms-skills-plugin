@@ -1,136 +1,113 @@
 # lms-plugin-skills
 
-A 1:1 clone of Claude's internal skill system, built as an LM Studio plugin.
+A Claude-style skills system for LM Studio with deterministic per-chat project workspaces and optional Windows Subsystem for Linux execution.
 
 ## How It Works
 
-Claude reads a list of available skills at the start of every context, then uses a `view` tool to read the relevant `SKILL.md` file before working on tasks that skill covers. This plugin replicates that system exactly for LM Studio.
+Before each message, the plugin scans configured skill directories and injects an `<available_skills>` block. Models can inspect skill files, explicitly activate skills with `/skill-name`, and use project-scoped file and shell tools inside one predictable workspace.
 
-### The Skill System - Three Components
+## Tools
 
-**1. Prompt Preprocessor**
-Before every message, the plugin scans the skills directory and injects an `<available_skills>` block into the prompt. The model sees this and knows which skills exist, their descriptions, and their file paths - exactly like Claude's system prompt injection.
-
-**2. Tools**
+Skill-library tools stay under configured skill roots:
 
 | Tool | Purpose |
 |---|---|
-| `list_skills` | List all available skills with names and descriptions |
-| `read_skill_file` | Read any file within a skill directory (defaults to `SKILL.md`) |
-| `list_skill_files` | Explore the full file tree of a skill directory |
-| `read_file` | Read the contents of any file in the workspace outside of the skills directory |
-| `write_file` | Create or overwrite a file with exact contents, avoiding shell escaping issues |
-| `patch_file` | Find and replace a specific string inside an existing file for surgical code edits |
-| `delete_file` | Delete files or directories: requires explicit `recursive=true` to delete non-empty directories (prevents accidental folder deletion), with guards to handle non-existent paths gracefully. |
-| `move_file` | Move files/directories: matches shell `mv` behavior (moves source into existing destination directories), and automatically creates missing parent directories for new nested paths. |
-| `rename_file` | Rename files/directories within their current directory only: validates no path separators in the new name, and fails instead of overwriting existing files to prevent accidental data loss. |
-| `append_to_file` | Atomically append content to files (OS-level atomicity safe for logs), and creates missing parent directories (can also create new files with initial content). |
-| `create_directory` | Idempotent `mkdir -p` wrapper that creates nested directories without errors if they already exist. |
-| `list_directory` | List directory contents: walks one level deep by default (`recursive=false`, lean output), or caps at 10 levels when `recursive=true` to avoid overwhelming output. Reuses shared tree formatting to match `list_skill_files` output. |
-| `get_current_directory` | Returns home directory, current working directory, and platform info to eliminate path guessing across operating systems. |
-| `run_command` | Execute shell commands, run scripts, and interact directly with the local system |
+| `list_skills` | List available skills and descriptions |
+| `read_skill_file` | Read a file inside a configured skill directory |
+| `list_skill_files` | List files inside a configured skill directory |
 
-**3. Explicit Skill Activation**
+Project tools share one deterministic workspace for the current LM Studio provider working directory:
 
-You can activate a skill directly from your message using `/skill-name` notation:
+| Tool | Purpose |
+|---|---|
+| `read_file` | Read a UTF-8 file inside the active workspace |
+| `write_file` | Create or overwrite a workspace file |
+| `patch_file` | Replace an exact string inside a workspace file |
+| `append_to_file` | Append text to a workspace file |
+| `create_directory` | Create workspace directories idempotently |
+| `list_directory` | List workspace contents, optionally recursively |
+| `delete_file` | Delete a contained workspace path |
+| `move_file` | Move a contained workspace path without silent overwrite |
+| `rename_file` | Rename a workspace path in place |
+| `get_current_directory` | Report workspace ID, provider identity, environment, distribution, and native root |
+| `run_command` | Run a shell command in the same workspace and selected Host/WSL environment |
 
+Relative project paths resolve from the active workspace root. Absolute paths must be native to the selected environment and remain canonically contained. Missing or invalid command working directories return errors; they do not fall back to the user's home directory.
+
+## Explicit Skill Activation
+
+Use `/skill-name` in a message:
+
+```text
+/bug-fix investigate this null pointer
+use /git-commit to prepare the change
 ```
-/bug-fix there is a null pointer error in this function: …
-use /git-commit to push my changes
-/docx write a report summarising the findings
-```
 
-Any token matching `/[a-z][a-z0-9._-]*` (regex) is treated as an explicit activation. The preprocessor resolves it before the request reaches the model:
-
-- The matching `SKILL.md` body is expanded inline into a `<skill_context>` block - the model does **not** need to call `read_skill_file` for it.
-- The named skill is treated as the highest-priority context; all other message text is secondary task payload.
-- Quoted strings, code snippets, globs, and command-looking text in the message are passed through to the skill untouched.
-- `run_command` must not be used for exploration when a skill is explicitly activated.
-- If the name does not match any installed skill, the model is instructed to call `list_skills` with that name as a query before proceeding.
-
-Multiple activations in one message are supported (`/skill-a` and `/skill-b` are both expanded). Explicit activation takes priority over auto-inject; the `<available_skills>` block is not appended on the same turn.
-
-**4. Persistent Settings**
-LM Studio does not save plugin settings across new chats. This plugin solves that by writing settings to `~/.lmstudio/plugin-data/lms-skills/settings.json` - the skills path and all configuration survive chat resets when only `skillsPath` field set as `default`.
-
----
+Matching skills are expanded into a `<skill_context>` block before the model receives the request. Multiple activations are supported.
 
 ## Skill Directory Structure
 
-A skill is any subdirectory inside your skills folder that contains a `SKILL.md` file.
+A skill is a subdirectory containing `SKILL.md`:
 
-```
-~/.lmstudio/skills/          <- default skills directory
+```text
+~/.lmstudio/skills/
 ├── docx/
-│   ├── SKILL.md             <- entry point (required)
-│   ├── scripts/
-│   │   └── helper.py
-│   └── templates/
-│       └── base.docx
-├── pptx/
 │   ├── SKILL.md
-│   └── editing.md
+│   └── scripts/
 └── my-custom-skill/
     ├── SKILL.md
-    └── skill.json           <- optional: override name/description
+    └── skill.json
 ```
 
-### `skill.json` (optional)
-
-Place a `skill.json` in any skill directory to override its display name and description:
+Optional `skill.json`:
 
 ```json
 {
   "name": "My Custom Skill",
-  "description": "Use this skill when the user asks to do X, Y, or Z.",
-  "tags": [
-    "data analysis",
-    "csv",
-    "statistics",
-    "charts",
-    "visualisation",
-    "pandas",
-    "trends",
-    "dataset"
-  ]
+  "description": "Use this skill for custom document work.",
+  "tags": ["documents", "automation"]
 }
 ```
-
-If absent, the plugin uses the directory name and extracts the description from the first paragraph of `SKILL.md`.
-
----
 
 ## Settings
 
 | Setting | Default | Description |
 |---|---|---|
-| Auto-Inject Skills List | On | Injects skills block into every prompt |
-| Max Skills in Context | 15 | Max skills listed in each injected block |
-| Skills Directory Path | *(empty)* | Custom path to skills directory |
+| Auto-Inject Skills List | On | Inject the available-skills block into prompts |
+| Max Skills in Context | 15 | Maximum skills listed per injected block |
+| Skills Directory Path | `default` | `default`, a path-separated list, or an absolute path |
+| Execution Environment | Host | Run commands and project file operations on the Host or through WSL |
+| WSL Distribution | Empty | Optional installed distribution name; empty uses the default distribution |
+| Shell Path | Empty | Optional Host shell override |
+| Windows Shell | Command Prompt | Host Windows shell when no shell path is provided |
 
-### Skills Directory Path
+Settings persist at:
 
-- **Empty** - uses the last saved path (or `~/.lmstudio/skills` on first run)
-- **`default`** - resets the saved path back to `~/.lmstudio/skills`
-- **Any absolute path** - saves that path and uses it immediately
-
-Settings (including the skills path) are written to disk and survive new chat sessions.
-
----
-
-## Local Development
-
-```bash
-cd lms-plugin-skills
-bun install
-lms dev
+```text
+~/.lmstudio/plugin-data/lms-skills/settings.json
 ```
 
----
+WSL is available only on Windows. The plugin does not install WSL, change the default distribution, silently select another distribution, silently fall back to Host, or translate Windows paths into `/mnt/<drive>`.
 
-## Default Skills Path by Platform
+## Workspaces
 
-The default path `~/.lmstudio/skills` resolves to:
+Host workspaces are created under:
+
+```text
+~/.lmstudio/plugin-data/lms-skills/workspaces/<workspace-id>
+```
+
+WSL workspaces are created in the selected distribution's Linux filesystem:
+
+```text
+~/.lmstudio/lms-skills/workspaces/<workspace-id>
+```
+
+The ID is deterministic for the LM Studio provider working directory, selected environment, and WSL distribution. File tools and `run_command` use the same root.
+
+See [Host and WSL Workspaces](docs/host-wsl-workspaces.md) for setup, security boundaries, performance guidance, limitations, and troubleshooting.
+
+## Default Skills Path
 
 | Platform | Path |
 |---|---|
@@ -138,28 +115,27 @@ The default path `~/.lmstudio/skills` resolves to:
 | macOS | `/Users/<you>/.lmstudio/skills` |
 | Linux | `/home/<you>/.lmstudio/skills` |
 
----
+## Local Development
 
-## Model Workflow
+```bash
+npm install
+npm test
+npm run build
+npm run verify:release
+```
 
-### Auto-inject (default)
+For LM Studio development, use the locally installed LM Studio plugin-development command supported by your environment after dependencies are installed.
 
-1. User sends a message
-2. Preprocessor fires - scans skills dir, injects `<available_skills>` block
-3. Model reads the block and recognises a relevant skill
-4. Model calls `read_skill_file("skill-name")` → receives full `SKILL.md` content
-5. `SKILL.md` may reference other files → model calls `list_skill_files` then `read_skill_file` with specific path
-6. Model follows the skill's instructions to produce high-quality output
-7. Model uses `read_file`, `patch_file`, and `write_file` to execute the actual coding and file management tasks
+## Release Validation
 
-### Explicit activation (`/skill-name`)
+Automated release validation:
 
-1. User includes `/skill-name` anywhere in their message (prompt)
-2. Preprocessor detects the tokens, resolves the skill, and expands its `SKILL.md` into a `<skill_context>` block - no tool call needed
-3. Model receives the expanded skill body as highest-priority context alongside the user's task payload
-4. If the skill name is not found, the model calls `list_skills` to locate it before proceeding
-5. Model follows the skill's instructions to produce high-quality output
+```bash
+npm run verify:release
+```
+
+This command removes stale generated output, runs the complete test suite, rebuilds `dist/`, checks required artifacts, validates whitespace, and rejects tracked build drift. Real Windows Host and WSL release checks are documented in [the release checklist](docs/release-checklist.md).
 
 ## License
 
-- [Apache 2.0](LICENSE)
+[Apache 2.0](LICENSE)
