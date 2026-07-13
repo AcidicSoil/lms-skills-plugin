@@ -44,7 +44,7 @@ test("project tools share one Host workspace while skill tools remain separate",
       resolveWorkspace: async () => { workspaceResolutions += 1; return context; },
       createWorkspaceFs: (value) => createWorkspaceFileSystem(value),
       executeCommand: async (_command, options) => {
-        commandCwd = options.cwd ?? "";
+        commandCwd = options?.cwd ?? "";
         return { stdout: "ok", stderr: "", exitCode: 0, timedOut: false, shell: "/bin/sh", platform: "linux", environment: "host" };
       },
     };
@@ -59,6 +59,11 @@ test("project tools share one Host workspace while skill tools remain separate",
     await invoke(tools, "patch_file", { file_path: "docs/a.txt", search_string: "hello", replace_string: "world" });
     const read = await invoke(tools, "read_file", { file_path: "docs/a.txt" });
     assert.equal(read.content, "world");
+    const listed = await invoke(tools, "list_directory", { dir_path: ".", recursive: true });
+    assert.equal(listed.entries.some((entry: any) => entry.path === "docs/a.txt"), true);
+    await invoke(tools, "move_file", { source_path: "docs/a.txt", destination_path: "docs/b.txt" });
+    await invoke(tools, "rename_file", { file_path: "docs/b.txt", new_name: "c.txt" });
+    await invoke(tools, "delete_file", { file_path: "docs/c.txt" });
     await invoke(tools, "run_command", { command: "pwd" });
     assert.equal(commandCwd, root);
     assert.equal(workspaceResolutions, 1, "one lazy workspace context must be reused");
@@ -86,7 +91,7 @@ test("WSL project tools share Linux-native workspace metadata and command cwd", 
     resolveWorkspace: async () => context,
     createWorkspaceFs: () => fakeFs,
     executeCommand: async (_command, options) => {
-      commandCwd = options.cwd ?? "";
+      commandCwd = options?.cwd ?? "";
       return { stdout: "", stderr: "", exitCode: 0, timedOut: false, shell: "/bin/sh", platform: "windows", environment: "wsl" };
     },
   });

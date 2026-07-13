@@ -50,7 +50,7 @@ export interface WorkspaceFileSystem {
   patchFile(input: string, search: string, replacement: string, replaceAll?: boolean): Promise<FileWriteResult>;
   appendFile(input: string, content: string): Promise<FileWriteResult>;
   createDirectory(input: string): Promise<{ path: string }>;
-  listDirectory(input?: string): Promise<DirectoryListResult>;
+  listDirectory(input?: string, recursive?: boolean): Promise<DirectoryListResult>;
   deleteFile(input: string, recursive?: boolean): Promise<{ path: string }>;
   moveFile(source: string, destination: string, overwrite?: boolean): Promise<{ source: string; destination: string }>;
   renameFile(input: string, newName: string, overwrite?: boolean): Promise<{ source: string; destination: string }>;
@@ -219,36 +219,52 @@ export function createWorkspaceFileSystem(
       return { path: target };
     },
 
-    async listDirectory(input = ".") {
+    async listDirectory(input = ".", recursive = false) {
       const target = await resolvePath(input);
       if (context.executionEnvironment === "wsl") {
-        const result = await runWsl("find", [target, "-mindepth", "1", "-maxdepth", "1", "-printf", "%f\\0%y\\0%s\\0"]);
+        const result = await runWsl("find", [
+          target,
+          "-mindepth",
+          "1",
+          "-maxdepth",
+          recursive ? "10" : "1",
+          "-printf",
+          "%P\\0%y\\0%s\\0",
+        ]);
         const fields = result.stdout.split("\0");
         const entries: DirectoryEntry[] = [];
         for (let index = 0; index + 2 < fields.length; index += 3) {
-          const [name, kind, size] = fields.slice(index, index + 3);
-          if (!name) continue;
+          const [relativeFromTarget, kind, size] = fields.slice(index, index + 3);
+          if (!relativeFromTarget) continue;
+          const full = path.posix.join(target, relativeFromTarget);
           entries.push({
-            name,
-            relativePath: path.posix.relative(context.nativeRoot, path.posix.join(target, name)),
+            name: path.posix.basename(relativeFromTarget),
+            relativePath: path.posix.relative(context.nativeRoot, full),
             type: kind === "d" ? "directory" : "file",
             ...(kind === "d" ? {} : { sizeBytes: Number(size) || 0 }),
           });
         }
         return { path: target, entries };
       }
-      const dirents = await fs.promises.readdir(target, { withFileTypes: true });
+
       const entries: DirectoryEntry[] = [];
-      for (const entry of dirents) {
-        const full = path.join(target, entry.name);
-        const stat = entry.isDirectory() ? undefined : await fs.promises.stat(full);
-        entries.push({
-          name: entry.name,
-          relativePath: path.relative(context.nativeRoot, full),
-          type: entry.isDirectory() ? "directory" : "file",
-          ...(stat ? { sizeBytes: stat.size } : {}),
-        });
-      }
+      const walk = async (directory: string, depth: number): Promise<void> => {
+        const dirents = await fs.promises.readdir(directory, { withFileTypes: true });
+        for (const entry of dirents) {
+          const full = path.join(directory, entry.name);
+          const stat = entry.isDirectory() ? undefined : await fs.promises.stat(full);
+          entries.push({
+            name: entry.name,
+            relativePath: path.relative(context.nativeRoot, full),
+            type: entry.isDirectory() ? "directory" : "file",
+            ...(stat ? { sizeBytes: stat.size } : {}),
+          });
+          if (recursive && entry.isDirectory() && depth < 10) {
+            await walk(full, depth + 1);
+          }
+        }
+      };
+      await walk(target, 1);
       return { path: target, entries };
     },
 
