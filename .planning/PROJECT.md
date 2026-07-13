@@ -1,87 +1,70 @@
-# LMS Skills Plugin — Host/WSL Execution and Project Workspaces
+# LMS Skills Plugin
 
 ## What This Is
 
-A brownfield enhancement to the existing LM Studio skills plugin that adds explicit Host and WSL execution modes plus per-chat project workspaces. The plugin already discovers and injects skills, exposes filesystem tools, and runs shell commands. This milestone makes those tools workspace-aware and allows users on Windows to choose whether execution occurs directly on the host or inside WSL.
+A strict TypeScript LM Studio plugin that discovers and injects reusable skills, provides skill-library tools, exposes contained project filesystem tools, and executes commands in deterministic project workspaces on either the Host or Windows Subsystem for Linux.
 
 ## Core Value
 
-Users can safely run skill-driven file and shell workflows in a predictable per-chat workspace, with consistent path behavior across Windows host and WSL execution.
+Users can safely run skill-driven file and shell workflows in a predictable project workspace with consistent path, shell, and skill behavior across Windows Host and WSL.
 
-## Context
+## Current State
 
-The existing codebase is a strict TypeScript LM Studio plugin. `src/index.ts` composes configuration, tools, preprocessing, setup, and execution. `src/toolsProvider.ts` currently exposes broad filesystem and shell operations; `src/executor.ts` handles platform shell resolution; `src/scanner.ts` manages skill discovery and guarded skill-file access.
+**Shipped version:** v1.0 — Host/WSL Execution and Project Workspaces
+**Shipped:** 2026-07-13
+**Status:** Release-ready and archived
 
-The planned enhancement is described in `todo.md`. It introduces execution-mode selection, WSL distribution selection, path translation, project-root lifecycle, and tool routing through a common workspace context. The design must preserve current host behavior while adding WSL support incrementally.
+The plugin now provides:
 
-## Requirements
+- Backward-compatible Host execution and selectable WSL execution.
+- Deterministic contained project workspaces.
+- Environment-aligned project tools, skill tools, prompt injection, and explicit skill activation.
+- WSL-native Bash execution.
+- Windows Host Command Prompt, PowerShell, Git Bash, and custom shell support.
+- Persistent contained `change_directory` for command cwd.
+- Actionable WSL, path, timeout, and workspace diagnostics.
+- Cross-platform tests, builds, release verification, and complete user documentation.
 
-### Validated
+Verification at shipment:
 
-- ✓ Users can discover skills from configured directories — existing
-- ✓ Users can explicitly activate skills and inject skill bodies into prompts — existing
-- ✓ Users can read and mutate local files through LM Studio tools — existing
-- ✓ Users can execute shell commands with bounded timeout and output — existing
-- ✓ The plugin builds as strict TypeScript and runs through the LM Studio SDK — existing
+- 29 automated tests passed.
+- Strict TypeScript build passed.
+- Clean release artifact verification passed.
+- Real Windows Host workflow passed.
+- Real Ubuntu WSL workflow passed.
+- Environment-aware skill workflow passed.
 
-### Active
+## Architecture Snapshot
 
-- [ ] User can choose Host or WSL execution on supported Windows systems.
-- [ ] User can select or configure a WSL distribution.
-- [ ] Each chat receives a deterministic project workspace root.
-- [ ] Filesystem tools resolve relative paths against the active project workspace.
-- [ ] Shell commands execute in the same active project workspace and selected environment.
-- [ ] Host and WSL paths translate safely and predictably.
-- [ ] Workspace boundaries prevent accidental path escape where project-scoped behavior is required.
-- [ ] Existing host-only behavior remains compatible for current users.
-- [ ] Automated tests cover path translation, workspace resolution, execution routing, and failure cases.
-
-### Out of Scope
-
-- Remote SSH or container execution — this milestone targets local Host and WSL only.
-- Multi-user or network-shared workspace synchronization — LM Studio plugin runs locally.
-- Full sandboxing of arbitrary commands — execution remains subject to host permissions and explicit tool authority.
-- Replacing LM Studio’s plugin runtime or SDK — enhancement stays within the current architecture.
+- `src/index.ts`: plugin lifecycle and setup.
+- `src/settings.ts` / `src/config.ts`: persisted and effective configuration.
+- `src/executor.ts`: Host/WSL shell execution.
+- `src/workspace.ts`: deterministic workspace identity and lifecycle.
+- `src/workspaceFs.ts`: contained Host/WSL project filesystem operations.
+- `src/skillStore.ts`: environment-aware skill discovery, reading, search, and listing.
+- `src/toolsProvider.ts`: public LM Studio tool surface and persistent command cwd.
+- `src/preprocessor.ts`: skill injection and explicit activation.
 
 ## Constraints
 
-- Preserve the current TypeScript/CommonJS build and LM Studio integration.
-- Support Windows-specific WSL behavior without regressing Linux or macOS host execution.
-- Avoid editing generated `dist/` directly; regenerate it from `src/`.
-- Treat path conversion, shell quoting, symlinks, and process termination as security-sensitive.
-- Keep configuration backward compatible where feasible.
+- Preserve strict TypeScript/CommonJS and LM Studio SDK integration.
+- Do not edit generated `dist/` directly.
+- Treat path conversion, canonical containment, shell selection, and process termination as security-sensitive.
+- Do not silently fall back between Host and WSL.
+- Keep skill roots and project workspaces as separate trust boundaries.
 
-## Key Decisions
+## Next Milestone Goals
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Use coarse roadmap granularity | The milestone has several tightly coupled infrastructure concerns that can be grouped into a few broad phases | — Pending |
-| Enable parallel plan execution | Independent test, configuration, and documentation work can proceed concurrently | — Pending |
-| Track planning documents in git | Preserve roadmap and requirement history with implementation | — Pending |
-| Use milestone branching | Keep the complete Host/WSL workspace enhancement isolated as one milestone branch | — Pending |
-| Use inherited model profile | Required for the active Codex runtime | — Pending |
-| Use vertical MVP phase mode | Deliver end-to-end working increments rather than disconnected technical layers | — Pending |
+Not yet defined. Candidate deferred areas include:
 
-## Success Definition
+- Custom workspace-root templates.
+- Historical workspace browsing and resume UI.
+- Optional Host/WSL file mirroring.
+- Skill-declared workspace bootstrap templates.
+- Additional execution backends such as SSH or containers.
 
-The milestone succeeds when a Windows user can select Host or a WSL distribution, start or resume a chat workspace, use file tools and `run_command` against the same workspace, and receive clear errors for unsupported or unsafe path/execution conditions. Existing host workflows continue to work, and automated tests cover the core routing and path invariants.
+Run `$gsd-new-milestone` to define the next goal, fresh requirements, and a roadmap beginning with Phase 4.
 
-## Evolution
+## Milestone History
 
-This document evolves at phase transitions and milestone boundaries.
-
-**After each phase transition** (via `$gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
-
-**After each milestone** (via `$gsd-complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
-
----
-*Last updated: 2026-07-13 after initialization*
+- [v1.0 — Host/WSL Execution and Project Workspaces](milestones/v1.0-ROADMAP.md)
