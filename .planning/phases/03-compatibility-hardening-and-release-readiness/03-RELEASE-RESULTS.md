@@ -32,10 +32,24 @@
 - Plugin commit:
 - Evidence: `get_current_directory` reported `/home/user/.lmstudio/lms-skills/workspaces/d70be93876e3e0cf81b5a95b` and identified the environment as WSL using Ubuntu.
 - Verified checklist items:
-  - W1 partial/pass: WSL environment, Ubuntu distribution, and native workspace root reported.
+  - W1 pass: WSL environment, Ubuntu distribution, provider working directory, workspace ID, and native workspace root reported.
   - W2 pass: root is in the Linux filesystem and not under `/mnt/c`.
-- Remaining: W3–W14, environment metadata, and concrete pass/fail evidence.
-- Notes: Execute the remaining WSL section of `docs/release-checklist.md` against the same real initialized distribution.
+  - W3 pass: `release-check/docs` was created inside the workspace.
+  - W4 partial/pass: file content with spaces, quotes, metacharacters, Unicode, and literal `$HOME` round-tripped unchanged.
+  - W5 pass: patch, append, read, and recursive listing succeeded.
+  - W9 pass: `../outside` file traversal was rejected with `Path escapes outside the workspace root.`
+  - Additional pass: command cwd traversal using `../outside` was rejected with the same containment error.
+  - Cleanup pass: `release-check` was deleted recursively and the workspace remained intact.
+- Not yet proven:
+  - W6 and W7: the report did not include actual `pwd` stdout for root and subdirectory; workspace metadata alone is insufficient.
+  - W8: Windows-path rejection/no `/mnt/c` translation.
+  - W10: existing-destination move collision.
+  - W11: unavailable distribution diagnostic.
+  - W12: restoration of valid distribution and deterministic workspace recovery.
+  - W13: timeout behavior and termination uncertainty.
+  - W14: full move/rename/delete lifecycle plus workspace-root deletion rejection.
+  - Cross-project identity, skill-boundary check, and environment/version metadata.
+- Notes: The submitted run was labeled as a Host checklist but actually exercised WSL. It is recorded only as WSL evidence. Run the remaining WSL prompts and a separate true Host-mode validation.
 
 ## Skill-Boundary Manual Verification
 
