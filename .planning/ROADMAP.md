@@ -31,7 +31,7 @@ This milestone delivers safe, backward-compatible Host/WSL execution and determi
 5. Integration tests demonstrate create/read/edit/run workflows in Host mode and a testable WSL adapter path.
 
 ### Phase 3: Compatibility, Hardening, and Release Readiness
-**Goal:** Existing users can adopt the feature safely with complete tests, diagnostics, and documentation.
+**Goal:** As an existing LMS Skills Plugin user, I want Host and WSL workspace behavior to be thoroughly tested, clearly documented, and safely diagnosed, so that I can adopt the release without breaking my current workflows.
 **Mode:** mvp
 **Requirements:** TEST-03, DOCS-01
 **Success Criteria**:
