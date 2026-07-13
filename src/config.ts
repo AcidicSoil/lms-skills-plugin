@@ -82,7 +82,7 @@ export const configSchematics = createConfigSchematics()
     {
       displayName: "Shell Path (optional)",
       subtitle:
-        "Override the shell used by run_command. Leave empty to auto-detect (bash on Unix, pwsh/powershell/cmd on Windows).",
+        "Override the Host shell used by run_command. Ignored in WSL mode, which always uses /bin/bash.",
     },
     "",
   )
@@ -91,10 +91,11 @@ export const configSchematics = createConfigSchematics()
     "select",
     {
       displayName: "Windows Shell",
-      subtitle: "Which shell run_command uses on Windows. Select PowerShell to prefer pwsh -> powershell.exe.",
+      subtitle: "Which native shell run_command uses on Windows Host. WSL always uses Bash inside the selected distribution.",
       options: [
         { value: "cmd", displayName: "Command Prompt (cmd.exe)" },
-        { value: "powershell", displayName: "PowerShell (powershell.exe)" },
+        { value: "powershell", displayName: "PowerShell (pwsh/powershell.exe)" },
+        { value: "git-bash", displayName: "Git Bash (bash.exe)" },
       ],
     },
     "cmd",

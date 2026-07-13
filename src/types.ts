@@ -21,7 +21,7 @@ export interface PersistedSettings {
   autoInject: boolean;
   maxSkillsInContext: number;
   shellPath: string;
-  windowsShell?: "powershell" | "cmd";
+  windowsShell?: "powershell" | "cmd" | "git-bash";
   executionEnvironment: ExecutionEnvironment;
   wslDistribution?: string;
 }
@@ -31,7 +31,7 @@ export interface EffectiveConfig {
   autoInject: boolean;
   maxSkillsInContext: number;
   shellPath: string;
-  windowsShell?: "powershell" | "cmd";
+  windowsShell?: "powershell" | "cmd" | "git-bash";
   executionEnvironment: ExecutionEnvironment;
   wslDistribution?: string;
 }

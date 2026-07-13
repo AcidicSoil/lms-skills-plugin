@@ -32,7 +32,7 @@ export interface ExecOptions {
   cwd?: string;
   timeoutMs?: number;
   shellPath?: string;
-  windowsShell?: "powershell" | "cmd";
+  windowsShell?: "powershell" | "cmd" | "git-bash";
   env?: Record<string, string>;
   executionEnvironment?: ExecutionEnvironment;
   wslDistribution?: string;
@@ -64,7 +64,7 @@ export function detectPlatform(): Platform {
   return "linux";
 }
 
-export function resolveShell(override?: string, windowsShell?: "powershell" | "cmd"): ShellInfo {
+export function resolveShell(override?: string, windowsShell?: "powershell" | "cmd" | "git-bash"): ShellInfo {
   const platform = detectPlatform();
   if (override?.trim()) {
     const p = override.trim();
@@ -73,11 +73,22 @@ export function resolveShell(override?: string, windowsShell?: "powershell" | "c
     return { path: p, args: isPowerShell ? ["-NoProfile", "-NonInteractive", "-Command"] : ["-c"], platform };
   }
   if (platform === "windows") {
-    if ((windowsShell ?? "cmd") === "cmd") return { path: "cmd.exe", args: ["/c"], platform };
+    const selected = windowsShell ?? "cmd";
+    if (selected === "cmd") return { path: "cmd.exe", args: ["/c"], platform };
+    if (selected === "git-bash") {
+      for (const p of [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+        "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+      ]) {
+        if (fs.existsSync(p)) return { path: p, args: ["-lc"], platform };
+      }
+      throw new Error("Git Bash was selected but bash.exe was not found. Install Git for Windows or set Shell Path explicitly.");
+    }
     for (const p of ["C:\\Program Files\\PowerShell\\7\\pwsh.exe", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"]) {
       if (fs.existsSync(p)) return { path: p, args: ["-NoProfile", "-NonInteractive", "-Command"], platform };
     }
-    return { path: "cmd.exe", args: ["/c"], platform };
+    throw new Error("PowerShell was selected but neither pwsh.exe nor powershell.exe was found.");
   }
   if (process.env.SHELL && fs.existsSync(process.env.SHELL)) return { path: process.env.SHELL, args: ["-c"], platform };
   for (const sh of ["/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh", "/usr/local/bin/bash", "/usr/local/bin/zsh", "/bin/zsh"]) {
@@ -102,8 +113,8 @@ export function buildExecutionSpec(command: string, options: ExecOptions = {}): 
     if (!validation.ok || !validation.resolvedPath) throw new Error(validation.error ?? "Invalid WSL working directory.");
     const args: string[] = [];
     if (options.wslDistribution) args.push("--distribution", options.wslDistribution);
-    args.push("--cd", validation.resolvedPath, "--exec", "/bin/sh", "-lc", command);
-    return { program: "wsl.exe", args, platform: "windows", environment, shell: "/bin/sh" };
+    args.push("--cd", validation.resolvedPath, "--exec", "/bin/bash", "-lc", command);
+    return { program: "wsl.exe", args, platform: "windows", environment, shell: "/bin/bash" };
   }
   const shellInfo = resolveShell(options.shellPath, options.windowsShell);
   const cwd = resolveCwd(options.cwd);

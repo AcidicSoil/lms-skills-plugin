@@ -6,7 +6,7 @@ test("WSL execution preserves command as one shell argument", () => {
   const command = `printf '%s' "a b; $HOME —"`;
   const spec = buildExecutionSpec(command, { executionEnvironment: "wsl", wslDistribution: "Ubuntu 24.04", cwd: "/home/me/work space" });
   assert.equal(spec.program, "wsl.exe");
-  assert.deepEqual(spec.args, ["--distribution", "Ubuntu 24.04", "--cd", "/home/me/work space", "--exec", "/bin/sh", "-lc", command]);
+  assert.deepEqual(spec.args, ["--distribution", "Ubuntu 24.04", "--cd", "/home/me/work space", "--exec", "/bin/bash", "-lc", command]);
 });
 
 test("Host execution rejects missing and invalid cwd", async () => {
@@ -18,4 +18,18 @@ test("WSL rejects Windows cwd instead of translating it", async () => {
   const result = await execCommand("pwd", { executionEnvironment: "wsl", cwd: "C:\\work" });
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr, /not valid for wsl/i);
+});
+
+
+test("WSL ignores Host shell selection and always uses Bash", () => {
+  const spec = buildExecutionSpec("printf ok", {
+    executionEnvironment: "wsl",
+    wslDistribution: "Ubuntu",
+    cwd: "/home/me/work",
+    windowsShell: "powershell",
+    shellPath: "C:\\Program Files\\Git\\bin\\bash.exe",
+  });
+  assert.equal(spec.program, "wsl.exe");
+  assert.equal(spec.shell, "/bin/bash");
+  assert.deepEqual(spec.args.slice(-3), ["/bin/bash", "-lc", "printf ok"]);
 });

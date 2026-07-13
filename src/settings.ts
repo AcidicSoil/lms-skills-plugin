@@ -57,7 +57,7 @@ export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): 
       ? parsed.maxSkillsInContext
       : DEFAULTS.maxSkillsInContext,
     shellPath: typeof parsed.shellPath === "string" ? parsed.shellPath : "",
-    windowsShell: parsed.windowsShell === "powershell" || parsed.windowsShell === "cmd"
+    windowsShell: parsed.windowsShell === "powershell" || parsed.windowsShell === "cmd" || parsed.windowsShell === "git-bash"
       ? parsed.windowsShell
       : DEFAULTS.windowsShell,
     executionEnvironment: parsed.executionEnvironment === "wsl" ? "wsl" : "host",
@@ -93,7 +93,7 @@ function loadSettings(): PersistedSettings {
           ? parsed.maxSkillsInContext
           : DEFAULTS.maxSkillsInContext,
       shellPath: typeof parsed.shellPath === "string" ? parsed.shellPath : "",
-      windowsShell: (parsed.windowsShell === "powershell" || parsed.windowsShell === "cmd")
+      windowsShell: (parsed.windowsShell === "powershell" || parsed.windowsShell === "cmd" || parsed.windowsShell === "git-bash")
         ? parsed.windowsShell
         : DEFAULTS.windowsShell,
       executionEnvironment: parsed.executionEnvironment === "wsl" ? "wsl" : "host",
@@ -123,7 +123,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     (c.get("maxSkillsInContext") as number) ?? DEFAULTS.maxSkillsInContext;
   const rawPaths = ((c.get("skillsPath") as string | undefined) ?? "").trim();
   const shellPath = ((c.get("shellPath") as string | undefined) ?? "").trim();
-  const windowsShell = ((c.get("windowsShell") as "powershell" | "cmd" | undefined) ?? "cmd");
+  const windowsShell = ((c.get("windowsShell") as "powershell" | "cmd" | "git-bash" | undefined) ?? "cmd");
   const executionEnvironment = (c.get("executionEnvironment") as "host" | "wsl" | undefined) === "wsl" ? "wsl" : "host";
   const wslDistribution = ((c.get("wslDistribution") as string | undefined) ?? "").trim() || undefined;
 
