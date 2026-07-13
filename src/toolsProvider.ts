@@ -41,6 +41,7 @@ function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
 export interface ToolsProviderDependencies {
   resolveWorkspace?: (ctl: PluginController, config: EffectiveConfig) => Promise<WorkspaceContext>;
   createWorkspaceFs?: (context: WorkspaceContext) => WorkspaceFileSystem;
+  createSkillStore?: typeof createSkillStore;
   executeCommand?: typeof execCommand;
 }
 
@@ -70,7 +71,10 @@ export async function toolsProvider(
   let skillStore: SkillStore | undefined;
 
   const getSkillStore = (): SkillStore => {
-    if (!skillStore) skillStore = createSkillStore(resolveEffectiveConfig(ctl));
+    if (!skillStore) {
+      const factory = dependencies.createSkillStore ?? createSkillStore;
+      skillStore = factory(resolveEffectiveConfig(ctl));
+    }
     return skillStore;
   };
 
