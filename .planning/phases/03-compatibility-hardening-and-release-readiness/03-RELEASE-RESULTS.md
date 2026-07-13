@@ -14,13 +14,25 @@
 
 ## Windows Host Manual Verification
 
-- Status: Blocked — requires Windows + LM Studio
-- Tester:
-- Windows version/build:
-- LM Studio version:
-- Plugin commit:
+- Status: Pass — real Windows Host workflow completed
+- Tester: User-provided LM Studio session
+- Windows version/build: Not supplied
+- LM Studio version: Not supplied
+- Plugin commit: Not supplied
+- Workspace ID: `f8b47e0a788259afefb26eeb`
+- Provider working directory: `c:/Users/clay/.lmstudio/working-directories/1783960711590`
+- Workspace root: `C:\Users\clay\.lmstudio\plugin-data\lms-skills\workspaces\f8b47e0a788259afefb26eeb`
 - Evidence:
-- Notes: Execute the Windows Host section of `docs/release-checklist.md`.
+  - Host environment and Host-native plugin-data workspace root were reported.
+  - Directory creation, write, exact readback, patch, append, recursive list, move, rename, and delete all passed.
+  - Quotes, metacharacters, literal `$HOME`, Unicode, and multiline content were preserved.
+  - Default command cwd matched the workspace root.
+  - Command and file traversal using `../outside` were rejected with `Path escapes outside the workspace root.`
+  - Repeated workspace inspection returned the same workspace ID and root.
+  - Timeout handling returned `timedOut: true`, `terminationIncomplete: false`, and an actionable timeout hint.
+  - Cleanup removed the test directory and left the workspace intact.
+- Remaining metadata gap: Windows version, LM Studio version, and plugin commit were not supplied.
+- Note: Cross-project identity is a separate release check and remains blocked; it does not invalidate this single-project Host workflow pass. The submitted report mislabeled the contained-subdirectory cwd check as blocked because of that separate instruction, so direct subdirectory `cd` stdout should still be captured if strict H7 evidence is required.
 
 ## Real WSL Manual Verification
 
@@ -64,7 +76,7 @@
 | Unsupported WSL, removed distribution, inaccessible roots, and timeout diagnostics | Pass (automated) | `test/diagnostics.test.ts` |
 | Generated `dist/` matches a clean source build and no tracked API drift is introduced | Pass (automated) | `scripts/verify-release.mjs` |
 | README and configuration documentation are complete | Pass (reviewed) | `README.md`, `docs/host-wsl-workspaces.md` |
-| One real Windows Host and one real WSL workflow pass end to end | Blocked | Requires manual hardware validation |
+| One real Windows Host and one real WSL workflow pass end to end | Partial | Windows Host passed; WSL remains partial and cross-project/skill-boundary checks remain blocked |
 
 ## Final Verdict
 
