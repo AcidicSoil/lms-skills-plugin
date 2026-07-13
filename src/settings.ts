@@ -1,4 +1,6 @@
 import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import {
   PLUGIN_DATA_DIR,
   SETTINGS_FILE,
@@ -24,16 +26,25 @@ const DEFAULTS: PersistedSettings = {
 let cachedConfig: EffectiveConfig | null = null;
 let cacheTime = 0;
 
+export function expandSkillsPath(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed === "~") return os.homedir();
+  if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
+    return path.join(os.homedir(), trimmed.slice(2));
+  }
+  return trimmed;
+}
+
 function parseSkillsPaths(raw: string): string[] {
   return raw
     .split(SKILLS_PATH_SEPARATOR)
-    .map((p) => p.trim())
+    .map(expandSkillsPath)
     .filter(Boolean);
 }
 
 export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): PersistedSettings {
   const skillsPaths = Array.isArray(parsed.skillsPaths) && parsed.skillsPaths.length > 0
-    ? parsed.skillsPaths
+    ? parsed.skillsPaths.map(expandSkillsPath).filter(Boolean)
     : DEFAULTS.skillsPaths;
   return {
     skillsPaths,
