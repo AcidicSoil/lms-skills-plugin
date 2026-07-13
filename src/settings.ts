@@ -18,6 +18,7 @@ const DEFAULTS: PersistedSettings = {
   maxSkillsInContext: DEFAULT_MAX_SKILLS_IN_CONTEXT,
   shellPath: "",
   windowsShell: "cmd",
+  executionEnvironment: "host",
 };
 
 let cachedConfig: EffectiveConfig | null = null;
@@ -28,6 +29,27 @@ function parseSkillsPaths(raw: string): string[] {
     .split(SKILLS_PATH_SEPARATOR)
     .map((p) => p.trim())
     .filter(Boolean);
+}
+
+export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): PersistedSettings {
+  const skillsPaths = Array.isArray(parsed.skillsPaths) && parsed.skillsPaths.length > 0
+    ? parsed.skillsPaths
+    : DEFAULTS.skillsPaths;
+  return {
+    skillsPaths,
+    autoInject: typeof parsed.autoInject === "boolean" ? parsed.autoInject : DEFAULTS.autoInject,
+    maxSkillsInContext: typeof parsed.maxSkillsInContext === "number" && parsed.maxSkillsInContext >= 1
+      ? parsed.maxSkillsInContext
+      : DEFAULTS.maxSkillsInContext,
+    shellPath: typeof parsed.shellPath === "string" ? parsed.shellPath : "",
+    windowsShell: parsed.windowsShell === "powershell" || parsed.windowsShell === "cmd"
+      ? parsed.windowsShell
+      : DEFAULTS.windowsShell,
+    executionEnvironment: parsed.executionEnvironment === "wsl" ? "wsl" : "host",
+    wslDistribution: typeof parsed.wslDistribution === "string" && parsed.wslDistribution.trim()
+      ? parsed.wslDistribution.trim()
+      : undefined,
+  };
 }
 
 function loadSettings(): PersistedSettings {
@@ -56,9 +78,11 @@ function loadSettings(): PersistedSettings {
           ? parsed.maxSkillsInContext
           : DEFAULTS.maxSkillsInContext,
       shellPath: typeof parsed.shellPath === "string" ? parsed.shellPath : "",
-      windowsShell: (parsed.windowsShell === "powershell" || parsed.windowsShell === "cmd") 
-        ? parsed.windowsShell 
+      windowsShell: (parsed.windowsShell === "powershell" || parsed.windowsShell === "cmd")
+        ? parsed.windowsShell
         : DEFAULTS.windowsShell,
+      executionEnvironment: parsed.executionEnvironment === "wsl" ? "wsl" : "host",
+      wslDistribution: typeof parsed.wslDistribution === "string" && parsed.wslDistribution.trim() ? parsed.wslDistribution.trim() : undefined,
     };
   } catch {
     return { ...DEFAULTS };
@@ -85,6 +109,8 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
   const rawPaths = ((c.get("skillsPath") as string | undefined) ?? "").trim();
   const shellPath = ((c.get("shellPath") as string | undefined) ?? "").trim();
   const windowsShell = ((c.get("windowsShell") as "powershell" | "cmd" | undefined) ?? "cmd");
+  const executionEnvironment = (c.get("executionEnvironment") as "host" | "wsl" | undefined) === "wsl" ? "wsl" : "host";
+  const wslDistribution = ((c.get("wslDistribution") as string | undefined) ?? "").trim() || undefined;
 
   const saved = loadSettings();
 
@@ -95,6 +121,8 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
       skillsPaths: DEFAULTS.skillsPaths,
       shellPath,
       windowsShell,
+      executionEnvironment,
+      wslDistribution,
     };
     saveSettings(next);
     cachedConfig = next;
@@ -116,9 +144,11 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     maxSkillsInContext !== saved.maxSkillsInContext ||
     skillsPaths.join(";") !== saved.skillsPaths.join(";") ||
     shellPath !== saved.shellPath ||
-    windowsShell !== saved.windowsShell
+    windowsShell !== saved.windowsShell ||
+    executionEnvironment !== saved.executionEnvironment ||
+    wslDistribution !== saved.wslDistribution
   ) {
-    saveSettings({ skillsPaths, autoInject, maxSkillsInContext, shellPath, windowsShell });
+    saveSettings({ skillsPaths, autoInject, maxSkillsInContext, shellPath, windowsShell, executionEnvironment, wslDistribution });
   }
 
   const result: EffectiveConfig = {
@@ -127,6 +157,8 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     maxSkillsInContext,
     shellPath,
     windowsShell,
+    executionEnvironment,
+    wslDistribution,
   };
   cachedConfig = result;
   cacheTime = now;

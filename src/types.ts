@@ -14,12 +14,16 @@ export interface SkillManifestFile {
   tags?: string[];
 }
 
+export type ExecutionEnvironment = "host" | "wsl";
+
 export interface PersistedSettings {
   skillsPaths: string[];
   autoInject: boolean;
   maxSkillsInContext: number;
   shellPath: string;
   windowsShell?: "powershell" | "cmd";
+  executionEnvironment: ExecutionEnvironment;
+  wslDistribution?: string;
 }
 
 export interface EffectiveConfig {
@@ -28,6 +32,8 @@ export interface EffectiveConfig {
   maxSkillsInContext: number;
   shellPath: string;
   windowsShell?: "powershell" | "cmd";
+  executionEnvironment: ExecutionEnvironment;
+  wslDistribution?: string;
 }
 
 export interface DirectoryEntry {

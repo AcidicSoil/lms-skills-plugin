@@ -55,6 +55,28 @@ export const configSchematics = createConfigSchematics()
     DEFAULT_SKILLS_DIR,
   )
   .field(
+    "executionEnvironment",
+    "select",
+    {
+      displayName: "Execution Environment",
+      subtitle: "Run commands on the host or through Windows Subsystem for Linux.",
+      options: [
+        { value: "host", displayName: "Host" },
+        { value: "wsl", displayName: "WSL (Windows only)" },
+      ],
+    },
+    "host",
+  )
+  .field(
+    "wslDistribution",
+    "string",
+    {
+      displayName: "WSL Distribution",
+      subtitle: "Optional installed distribution name. Leave empty to use the default distribution.",
+    },
+    "",
+  )
+  .field(
     "shellPath",
     "string",
     {
