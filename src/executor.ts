@@ -39,6 +39,16 @@ export interface ExecOptions {
   spawn?: typeof childProcess.spawn;
 }
 
+export interface ExecProgramOptions {
+  cwd: string;
+  timeoutMs?: number;
+  env?: Record<string, string>;
+  executionEnvironment?: ExecutionEnvironment;
+  wslDistribution?: string;
+  stdin?: string | Buffer;
+  spawn?: typeof childProcess.spawn;
+}
+
 export interface ExecutionSpec {
   program: string;
   args: string[];
@@ -151,6 +161,127 @@ export function execCommand(command: string, options: ExecOptions = {}): Promise
       settled = true;
       clearTimeout(timer);
       resolve({ stdout: truncate(stdout), stderr: truncate(error ?? stderr), exitCode, timedOut, shell: spec.shell, platform: spec.platform, environment: spec.environment, ...(timedOut ? { terminationIncomplete } : {}) });
+    };
+    proc.on("close", (code) => finish(code ?? 1));
+    proc.on("error", (error) => finish(1, error.message));
+  });
+}
+
+export function execProgram(
+  program: string,
+  args: string[],
+  options: ExecProgramOptions,
+): Promise<ExecResult> {
+  const environment = options.executionEnvironment ?? "host";
+  let spawnProgram = program;
+  let spawnArgs = args;
+  let cwd: string | undefined;
+  let platform = detectPlatform();
+
+  try {
+    if (environment === "wsl") {
+      const validation = resolveEnvironmentPath(options.cwd, "wsl");
+      if (!validation.ok || !validation.resolvedPath) {
+        throw new Error(validation.error ?? "Invalid WSL working directory.");
+      }
+      spawnProgram = "wsl.exe";
+      spawnArgs = [];
+      if (options.wslDistribution) {
+        spawnArgs.push("--distribution", options.wslDistribution);
+      }
+      spawnArgs.push("--cd", validation.resolvedPath, "--exec", program, ...args);
+      platform = "windows";
+    } else {
+      cwd = resolveCwd(options.cwd);
+    }
+  } catch (error) {
+    return Promise.resolve({
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+      exitCode: 1,
+      timedOut: false,
+      shell: program,
+      platform,
+      environment,
+    });
+  }
+
+  return new Promise((resolve) => {
+    const timeoutMs = Math.min(
+      Math.max(options.timeoutMs ?? EXEC_DEFAULT_TIMEOUT_MS, 1),
+      EXEC_MAX_TIMEOUT_MS,
+    );
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PYTHONUTF8: "1",
+      PYTHONIOENCODING: "utf-8",
+      ...(options.env ?? {}),
+    };
+    let proc: childProcess.ChildProcess;
+    try {
+      proc = (options.spawn ?? childProcess.spawn)(spawnProgram, spawnArgs, {
+        cwd,
+        env,
+        windowsHide: true,
+        detached: platform !== "windows",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (error) {
+      resolve({
+        stdout: "",
+        stderr: error instanceof Error ? error.message : String(error),
+        exitCode: 1,
+        timedOut: false,
+        shell: program,
+        platform,
+        environment,
+      });
+      return;
+    }
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let terminationIncomplete = false;
+    proc.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
+    proc.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
+    if (options.stdin !== undefined) {
+      proc.stdin?.end(options.stdin);
+    } else {
+      proc.stdin?.end();
+    }
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        if (platform === "windows" && proc.pid) {
+          childProcess.spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true });
+        } else if (proc.pid) {
+          process.kill(-proc.pid, "SIGKILL");
+        } else {
+          proc.kill("SIGKILL");
+        }
+      } catch {
+        terminationIncomplete = true;
+        try { proc.kill("SIGKILL"); } catch { terminationIncomplete = true; }
+      }
+    }, timeoutMs);
+
+    let settled = false;
+    const finish = (exitCode: number, error?: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        stdout: truncate(stdout),
+        stderr: truncate(error ?? stderr),
+        exitCode,
+        timedOut,
+        shell: program,
+        platform,
+        environment,
+        ...(timedOut ? { terminationIncomplete } : {}),
+      });
     };
     proc.on("close", (code) => finish(code ?? 1));
     proc.on("error", (error) => finish(1, error.message));

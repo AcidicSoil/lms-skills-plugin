@@ -69,7 +69,8 @@ test("WSL workspace filesystem uses argv and stdin without content interpolation
   const content = "quotes ' \" ; $HOME\nUnicode —";
   await workspaceFs.writeFile("space dir/a.txt", content);
   await workspaceFs.readFile("space dir/a.txt");
-  assert.deepEqual(calls[0], {
+  const teeCall = calls.find((call) => call.program === "tee");
+  assert.deepEqual(teeCall, {
     environment: "wsl",
     distribution: "Ubuntu 24.04",
     cwd: context.nativeRoot,
@@ -77,6 +78,6 @@ test("WSL workspace filesystem uses argv and stdin without content interpolation
     args: ["--", "/home/me/.lmstudio/lms-skills/workspaces/abc/space dir/a.txt"],
     stdin: content,
   });
-  assert.equal(JSON.stringify(calls[0]).includes("$HOME"), true);
-  assert.equal(calls[0]?.args.join(" ").includes("$HOME"), false);
+  assert.equal(JSON.stringify(teeCall).includes("$HOME"), true);
+  assert.equal(teeCall?.args.join(" ").includes("$HOME"), false);
 });
