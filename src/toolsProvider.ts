@@ -438,7 +438,7 @@ export async function toolsProvider(ctl: PluginController) {
         .string()
         .optional()
         .describe(
-          "Working directory for the command. Supports ~ for home directory. Defaults to the user's home directory if omitted or invalid.",
+          "Required working directory for the command. Supports ~ in Host mode. Missing or invalid paths return an error; there is no home-directory fallback.",
         ),
       timeout_ms: z
         .number()
@@ -470,6 +470,8 @@ export async function toolsProvider(ctl: PluginController) {
         shellPath: cfg.shellPath || undefined,
         windowsShell: cfg.windowsShell,
         env,
+        executionEnvironment: cfg.executionEnvironment,
+        wslDistribution: cfg.wslDistribution,
       });
 
       status(result.timedOut ? "Timed out" : `Exit ${result.exitCode}`);
@@ -481,6 +483,8 @@ export async function toolsProvider(ctl: PluginController) {
         timedOut: result.timedOut,
         platform: result.platform,
         shell: result.shell,
+        environment: result.environment,
+        ...(result.terminationIncomplete !== undefined ? { terminationIncomplete: result.terminationIncomplete } : {}),
         ...(result.timedOut
           ? {
             hint: `Command exceeded the ${timeoutMs}ms timeout. Try increasing timeout_ms or splitting the work into smaller steps.`,

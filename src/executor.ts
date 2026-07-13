@@ -1,4 +1,4 @@
-import * as child_process from "child_process";
+import * as childProcess from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import {
@@ -6,6 +6,8 @@ import {
   EXEC_MAX_TIMEOUT_MS,
   EXEC_MAX_OUTPUT_BYTES,
 } from "./constants";
+import type { ExecutionEnvironment } from "./types";
+import { resolveEnvironmentPath } from "./pathPolicy";
 
 export type Platform = "windows" | "macos" | "linux";
 
@@ -22,6 +24,8 @@ export interface ExecResult {
   timedOut: boolean;
   shell: string;
   platform: Platform;
+  environment: ExecutionEnvironment;
+  terminationIncomplete?: boolean;
 }
 
 export interface ExecOptions {
@@ -30,6 +34,18 @@ export interface ExecOptions {
   shellPath?: string;
   windowsShell?: "powershell" | "cmd";
   env?: Record<string, string>;
+  executionEnvironment?: ExecutionEnvironment;
+  wslDistribution?: string;
+  spawn?: typeof childProcess.spawn;
+}
+
+export interface ExecutionSpec {
+  program: string;
+  args: string[];
+  cwd?: string;
+  platform: Platform;
+  environment: ExecutionEnvironment;
+  shell: string;
 }
 
 export function detectPlatform(): Platform {
@@ -38,199 +54,105 @@ export function detectPlatform(): Platform {
   return "linux";
 }
 
-export function resolveShell(
-  override?: string,
-  windowsShell?: "powershell" | "cmd",
-): ShellInfo {
+export function resolveShell(override?: string, windowsShell?: "powershell" | "cmd"): ShellInfo {
   const platform = detectPlatform();
-
-  if (override && override.trim()) {
+  if (override?.trim()) {
     const p = override.trim();
     const lower = p.toLowerCase();
-    const isPowerShell =
-      lower.endsWith("powershell.exe") ||
-      lower.endsWith("pwsh.exe") ||
-      lower.endsWith("pwsh");
-    return {
-      path: p,
-      args: isPowerShell ? ["-NoProfile", "-NonInteractive", "-Command"] : ["-c"],
-      platform,
-    };
+    const isPowerShell = lower.endsWith("powershell.exe") || lower.endsWith("pwsh.exe") || lower.endsWith("pwsh");
+    return { path: p, args: isPowerShell ? ["-NoProfile", "-NonInteractive", "-Command"] : ["-c"], platform };
   }
-
   if (platform === "windows") {
-    const pref = windowsShell ?? "cmd";
-
-    if (pref === "cmd") {
-      return { path: "cmd.exe", args: ["/c"], platform };
+    if ((windowsShell ?? "cmd") === "cmd") return { path: "cmd.exe", args: ["/c"], platform };
+    for (const p of ["C:\\Program Files\\PowerShell\\7\\pwsh.exe", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"]) {
+      if (fs.existsSync(p)) return { path: p, args: ["-NoProfile", "-NonInteractive", "-Command"], platform };
     }
-
-    const pwshCandidates = [
-      "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-      "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-    ];
-
-    for (const p of pwshCandidates) {
-      if (fs.existsSync(p)) {
-        return { path: p, args: ["-NoProfile", "-NonInteractive", "-Command"], platform };
-      }
-    }
-
     return { path: "cmd.exe", args: ["/c"], platform };
   }
-
-  if (process.env.SHELL) {
-    try {
-      if (fs.existsSync(process.env.SHELL)) {
-        return { path: process.env.SHELL, args: ["-c"], platform };
-      }
-    } catch { }
-  }
-
+  if (process.env.SHELL && fs.existsSync(process.env.SHELL)) return { path: process.env.SHELL, args: ["-c"], platform };
   for (const sh of ["/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh", "/usr/local/bin/bash", "/usr/local/bin/zsh", "/bin/zsh"]) {
-    try {
-      if (fs.existsSync(sh)) return { path: sh, args: ["-c"], platform };
-    } catch { }
+    if (fs.existsSync(sh)) return { path: sh, args: ["-c"], platform };
   }
-
   return { path: "/bin/sh", args: ["-c"], platform };
 }
 
 export function resolveCwd(cwd?: string): string {
-  if (!cwd) return os.homedir();
+  if (!cwd?.trim()) throw new Error("A valid working directory is required.");
   const expanded = cwd.replace(/^~(?=[/\\]|$)/, os.homedir());
+  if (!fs.existsSync(expanded) || !fs.statSync(expanded).isDirectory()) {
+    throw new Error(`Working directory does not exist or is not a directory: ${cwd}`);
+  }
+  return expanded;
+}
+
+export function buildExecutionSpec(command: string, options: ExecOptions = {}): ExecutionSpec {
+  const environment = options.executionEnvironment ?? "host";
+  if (environment === "wsl") {
+    const validation = resolveEnvironmentPath(options.cwd ?? "", "wsl");
+    if (!validation.ok || !validation.resolvedPath) throw new Error(validation.error ?? "Invalid WSL working directory.");
+    const args: string[] = [];
+    if (options.wslDistribution) args.push("--distribution", options.wslDistribution);
+    args.push("--cd", validation.resolvedPath, "--exec", "/bin/sh", "-lc", command);
+    return { program: "wsl.exe", args, platform: "windows", environment, shell: "/bin/sh" };
+  }
+  const shellInfo = resolveShell(options.shellPath, options.windowsShell);
+  const cwd = resolveCwd(options.cwd);
+  const isPowerShell = /(?:powershell|pwsh)(?:\.exe)?$/i.test(shellInfo.path);
+  const finalCommand = isPowerShell ? `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${command}` : command;
+  return { program: shellInfo.path, args: [...shellInfo.args, finalCommand], cwd, platform: shellInfo.platform, environment, shell: shellInfo.path };
+}
+
+function truncate(text: string): string {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const buf = Buffer.from(normalized, "utf8");
+  return buf.length <= EXEC_MAX_OUTPUT_BYTES
+    ? normalized
+    : `${buf.subarray(0, EXEC_MAX_OUTPUT_BYTES).toString("utf8")}\n[truncated - output exceeded ${EXEC_MAX_OUTPUT_BYTES} bytes]`;
+}
+
+export function execCommand(command: string, options: ExecOptions = {}): Promise<ExecResult> {
+  let spec: ExecutionSpec;
   try {
-    if (fs.existsSync(expanded) && fs.statSync(expanded).isDirectory())
-      return expanded;
-  } catch { }
-  return os.homedir();
-}
-
-function truncate(text: string, maxBytes: number): string {
-  const buf = Buffer.from(text, "utf-8");
-  if (buf.length <= maxBytes) return text;
-  return (
-    buf.slice(0, maxBytes).toString("utf-8") +
-    `\n[truncated - output exceeded ${maxBytes} bytes]`
-  );
-}
-
-function normalizeLineEndings(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
-
-function expandWindowsPath(current: string): string {
-  const query = (hive: string) => {
-    try {
-      const out = child_process.execSync(
-        `reg query "${hive}" /v PATH`,
-        { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"], timeout: 3_000 },
-      );
-      const m = out.match(/PATH\s+REG(?:_EXPAND)?_SZ\s+(.+)/i);
-      return m ? m[1].trim() : "";
-    } catch {
-      return "";
-    }
-  };
-
-  const machine = query("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");
-  const user = query("HKCU\\Environment");
-
-  const parts = [machine, user, current].filter(Boolean);
-  return [...new Set(parts.join(";").split(";").map(p => p.trim()).filter(Boolean))].join(";");
-}
-
-export function execCommand(
-  command: string,
-  options: ExecOptions = {},
-): Promise<ExecResult> {
+    spec = buildExecutionSpec(command, options);
+  } catch (error) {
+    const platform = detectPlatform();
+    return Promise.resolve({ stdout: "", stderr: error instanceof Error ? error.message : String(error), exitCode: 1, timedOut: false, shell: "", platform, environment: options.executionEnvironment ?? "host" });
+  }
   return new Promise((resolve) => {
-    const shellInfo = resolveShell(options.shellPath, options.windowsShell);
-    const cwd = resolveCwd(options.cwd);
-    const timeoutMs = Math.min(
-      options.timeoutMs ?? EXEC_DEFAULT_TIMEOUT_MS,
-      EXEC_MAX_TIMEOUT_MS,
-    );
-
-    const baseEnv: NodeJS.ProcessEnv = { ...process.env };
-
-    if (shellInfo.platform === "windows" && baseEnv.PATH) {
-      baseEnv.PATH = expandWindowsPath(baseEnv.PATH);
-    }
-
-    const env: NodeJS.ProcessEnv = {
-      ...baseEnv,
-      PYTHONUTF8: "1",
-      PYTHONIOENCODING: "utf-8",
-      ...(options.env ?? {}),
-    };
-
-    const isPowerShell =
-      shellInfo.path.toLowerCase().endsWith("powershell.exe") ||
-      shellInfo.path.toLowerCase().endsWith("pwsh.exe");
-
-    let finalCommand: string;
-
-    if (isPowerShell) {
-      finalCommand =
-        `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${command}`;
-    } else {
-      finalCommand = command;
-    }
-
-    let proc: child_process.ChildProcess;
+    const timeoutMs = Math.min(Math.max(options.timeoutMs ?? EXEC_DEFAULT_TIMEOUT_MS, 1), EXEC_MAX_TIMEOUT_MS);
+    const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8", ...(options.env ?? {}) };
+    let proc: childProcess.ChildProcess;
     try {
-      proc = child_process.spawn(
-        shellInfo.path,
-        [...shellInfo.args, finalCommand],
-        { cwd, env, windowsHide: true },
-      );
-    } catch (spawnErr) {
-      resolve({
-        stdout: "",
-        stderr: spawnErr instanceof Error ? spawnErr.message : String(spawnErr),
-        exitCode: 1,
-        timedOut: false,
-        shell: shellInfo.path,
-        platform: shellInfo.platform,
-      });
+      proc = (options.spawn ?? childProcess.spawn)(spec.program, spec.args, { cwd: spec.cwd, env, windowsHide: true, detached: spec.platform !== "windows" });
+    } catch (error) {
+      resolve({ stdout: "", stderr: error instanceof Error ? error.message : String(error), exitCode: 1, timedOut: false, shell: spec.shell, platform: spec.platform, environment: spec.environment });
       return;
     }
-
     let stdout = "";
     let stderr = "";
     let timedOut = false;
-
-    proc.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf-8"); });
-    proc.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf-8"); });
-
+    let terminationIncomplete = false;
+    proc.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
+    proc.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
     const timer = setTimeout(() => {
       timedOut = true;
-      try { proc.kill("SIGKILL"); } catch { }
+      try {
+        if (spec.platform === "windows" && proc.pid) childProcess.spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true });
+        else if (proc.pid) process.kill(-proc.pid, "SIGKILL");
+        else proc.kill("SIGKILL");
+      } catch {
+        terminationIncomplete = true;
+        try { proc.kill("SIGKILL"); } catch { terminationIncomplete = true; }
+      }
     }, timeoutMs);
-
-    proc.on("close", (code) => {
+    let settled = false;
+    const finish = (exitCode: number, error?: string) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      resolve({
-        stdout: truncate(normalizeLineEndings(stdout), EXEC_MAX_OUTPUT_BYTES),
-        stderr: truncate(normalizeLineEndings(stderr), EXEC_MAX_OUTPUT_BYTES),
-        exitCode: code ?? 1,
-        timedOut,
-        shell: shellInfo.path,
-        platform: shellInfo.platform,
-      });
-    });
-
-    proc.on("error", (err) => {
-      clearTimeout(timer);
-      resolve({
-        stdout: "",
-        stderr: err.message,
-        exitCode: 1,
-        timedOut: false,
-        shell: shellInfo.path,
-        platform: shellInfo.platform,
-      });
-    });
+      resolve({ stdout: truncate(stdout), stderr: truncate(error ?? stderr), exitCode, timedOut, shell: spec.shell, platform: spec.platform, environment: spec.environment, ...(timedOut ? { terminationIncomplete } : {}) });
+    };
+    proc.on("close", (code) => finish(code ?? 1));
+    proc.on("error", (error) => finish(1, error.message));
   });
 }
