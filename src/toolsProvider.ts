@@ -9,15 +9,8 @@ import {
   EXEC_MAX_COMMAND_LENGTH,
   LIST_SKILLS_DEFAULT_LIMIT,
 } from "./constants";
-import {
-  scanSkills,
-  searchSkills,
-  resolveSkillByName,
-  readSkillFile,
-  readAbsolutePath,
-  listSkillDirectory,
-  listAbsoluteDirectory,
-} from "./scanner";
+import { readAbsolutePath, listAbsoluteDirectory } from "./scanner";
+import { createSkillStore, type SkillStore } from "./skillStore";
 import type { PluginController } from "./pluginTypes";
 import type { DirectoryEntry, EffectiveConfig, WorkspaceContext } from "./types";
 import { resolveWorkspaceContext } from "./workspace";
@@ -74,6 +67,12 @@ export async function toolsProvider(
 ) {
   let workspacePromise: Promise<WorkspaceContext> | undefined;
   let workspaceFsPromise: Promise<WorkspaceFileSystem> | undefined;
+  let skillStore: SkillStore | undefined;
+
+  const getSkillStore = (): SkillStore => {
+    if (!skillStore) skillStore = createSkillStore(resolveEffectiveConfig(ctl));
+    return skillStore;
+  };
 
   const getWorkspace = (): Promise<WorkspaceContext> => {
     if (!workspacePromise) {
@@ -131,7 +130,7 @@ export async function toolsProvider(
 
       if (query && query.trim()) {
         status(`Searching skills for "${query.trim()}"..`);
-        const results = searchSkills(cfg.skillsPaths, query.trim());
+        const results = await getSkillStore().search(query.trim());
 
         if (results.length === 0) {
           return {
@@ -168,13 +167,14 @@ export async function toolsProvider(
       }
 
       status("Scanning skills directory..");
-      const skills = scanSkills(cfg.skillsPaths);
+      const store = getSkillStore();
+      const skills = await store.scan();
 
       if (skills.length === 0) {
         return {
           total: 0,
           found: 0,
-          skillsPaths: cfg.skillsPaths,
+          skillsPaths: store.roots,
           skills: [],
           note: "No skills found. Create skill directories with a SKILL.md file inside the configured skills paths.",
         };
@@ -186,7 +186,7 @@ export async function toolsProvider(
       return {
         total: skills.length,
         found: page.length,
-        skillsPaths: cfg.skillsPaths,
+        skillsPaths: store.roots,
         ...(skills.length > cap
           ? {
             note: `Showing ${cap} of ${skills.length} skills. Increase the limit or use a query to find specific skills.`,
@@ -228,9 +228,9 @@ export async function toolsProvider(
     },
     implementation: async ({ skill_name, file_path }, { status }) => {
       status(`Reading ${skill_name}${file_path ? ` / ${file_path}` : ""}..`);
+      const cfg = resolveEffectiveConfig(ctl);
 
-      if (path.isAbsolute(skill_name)) {
-        const cfg = resolveEffectiveConfig(ctl);
+      if (path.isAbsolute(skill_name) && cfg.executionEnvironment === "host") {
         const resolvedTarget = path.resolve(skill_name);
         const isAllowed = cfg.skillsPaths.some((p) =>
           resolvedTarget.startsWith(path.resolve(p) + path.sep),
@@ -251,8 +251,7 @@ export async function toolsProvider(
         };
       }
 
-      const cfg = resolveEffectiveConfig(ctl);
-      const skill = resolveSkillByName(cfg.skillsPaths, skill_name);
+      const skill = await getSkillStore().resolve(skill_name);
 
       if (!skill) {
         return {
@@ -261,7 +260,7 @@ export async function toolsProvider(
         };
       }
 
-      const result = readSkillFile(skill, file_path);
+      const result = await getSkillStore().read(skill, file_path);
       if ("error" in result)
         return { success: false, skill: skill_name, error: result.error };
 
@@ -308,9 +307,9 @@ export async function toolsProvider(
     },
     implementation: async ({ skill_name, sub_path }, { status }) => {
       status(`Listing files in ${skill_name}..`);
+      const cfg = resolveEffectiveConfig(ctl);
 
-      if (path.isAbsolute(skill_name)) {
-        const cfg = resolveEffectiveConfig(ctl);
+      if (path.isAbsolute(skill_name) && cfg.executionEnvironment === "host") {
         const resolvedTarget = path.resolve(skill_name);
         const isAllowed = cfg.skillsPaths.some((p) =>
           resolvedTarget.startsWith(path.resolve(p) + path.sep),
@@ -338,8 +337,7 @@ export async function toolsProvider(
         };
       }
 
-      const cfg = resolveEffectiveConfig(ctl);
-      const skill = resolveSkillByName(cfg.skillsPaths, skill_name);
+      const skill = await getSkillStore().resolve(skill_name);
 
       if (!skill) {
         return {
@@ -348,7 +346,7 @@ export async function toolsProvider(
         };
       }
 
-      const entries = listSkillDirectory(skill, sub_path);
+      const entries = await getSkillStore().list(skill, sub_path);
       const formatted = formatDirEntries(entries, skill.name);
 
       status(`Found ${entries.length} entries in ${skill_name}`);

@@ -1,5 +1,5 @@
 import { resolveEffectiveConfig } from "./settings";
-import { scanSkills, resolveSkillByName, readSkillFile } from "./scanner";
+import { createSkillStore, type SkillStore } from "./skillStore";
 import {
   MIN_PROMPT_LENGTH,
   REINJECT_INTERVAL_MS,
@@ -205,11 +205,11 @@ function buildSkillContextBlock(
  * Attempt to handle explicit /skill-name activations.
  * Returns the modified message if any valid refs were found, otherwise null.
  */
-function applyExplicitActivation(
+async function applyExplicitActivation(
   message: MessageInput,
   text: string,
-  skillsDirs: string[],
-): MessageInput | null {
+  store: SkillStore,
+): Promise<MessageInput | null> {
   const refs = parseExplicitSkillRefs(text);
   if (refs.length === 0) return null;
 
@@ -217,12 +217,12 @@ function applyExplicitActivation(
   const unresolvedNames: string[] = [];
 
   for (const ref of refs) {
-    const skill: SkillInfo | null = resolveSkillByName(skillsDirs, ref);
+    const skill: SkillInfo | null = await store.resolve(ref);
     if (!skill) {
       unresolvedNames.push(ref);
       continue;
     }
-    const result = readSkillFile(skill);
+    const result = await store.read(skill);
     if ("error" in result) {
       unresolvedNames.push(ref);
       continue;
@@ -254,8 +254,9 @@ export async function promptPreprocessor(
     if (text.trim().length < MIN_PROMPT_LENGTH) return userMessage;
 
     const cfg = resolveEffectiveConfig(ctl);
-    const skills = scanSkills(cfg.skillsPaths);
-    const explicit = applyExplicitActivation(userMessage, text, cfg.skillsPaths);
+    const store = createSkillStore(cfg);
+    const skills = await store.scan();
+    const explicit = await applyExplicitActivation(userMessage, text, store);
     if (explicit !== null) return explicit;
 
     if (!cfg.autoInject) return userMessage;

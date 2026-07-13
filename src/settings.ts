@@ -26,7 +26,11 @@ const DEFAULTS: PersistedSettings = {
 let cachedConfig: EffectiveConfig | null = null;
 let cacheTime = 0;
 
-export function expandSkillsPath(input: string): string {
+function defaultSkillsPaths(environment: "host" | "wsl"): string[] {
+  return environment === "wsl" ? ["~/.lmstudio/skills"] : [DEFAULT_SKILLS_DIR];
+}
+
+export function expandHostSkillsPath(input: string): string {
   const trimmed = input.trim();
   if (trimmed === "~") return os.homedir();
   if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
@@ -35,17 +39,17 @@ export function expandSkillsPath(input: string): string {
   return trimmed;
 }
 
-function parseSkillsPaths(raw: string): string[] {
+function parseSkillsPaths(raw: string, environment: "host" | "wsl"): string[] {
   return raw
     .split(SKILLS_PATH_SEPARATOR)
-    .map(expandSkillsPath)
+    .map((value) => environment === "host" ? expandHostSkillsPath(value) : value.trim())
     .filter(Boolean);
 }
 
 export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): PersistedSettings {
   const skillsPaths = Array.isArray(parsed.skillsPaths) && parsed.skillsPaths.length > 0
-    ? parsed.skillsPaths.map(expandSkillsPath).filter(Boolean)
-    : DEFAULTS.skillsPaths;
+    ? parsed.skillsPaths.map((value) => parsed.executionEnvironment === "wsl" ? value.trim() : expandHostSkillsPath(value)).filter(Boolean)
+    : defaultSkillsPaths(parsed.executionEnvironment === "wsl" ? "wsl" : "host");
   return {
     skillsPaths,
     autoInject: typeof parsed.autoInject === "boolean" ? parsed.autoInject : DEFAULTS.autoInject,
@@ -129,7 +133,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     const next: PersistedSettings = {
       autoInject,
       maxSkillsInContext,
-      skillsPaths: DEFAULTS.skillsPaths,
+      skillsPaths: defaultSkillsPaths(executionEnvironment),
       shellPath,
       windowsShell,
       executionEnvironment,
@@ -141,14 +145,14 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     return next;
   }
 
-  const incomingPaths = parseSkillsPaths(rawPaths);
+  const incomingPaths = parseSkillsPaths(rawPaths, executionEnvironment);
   const skillsPaths =
     incomingPaths.length > 0 &&
     incomingPaths.join(";") !== saved.skillsPaths.join(";")
       ? incomingPaths
       : saved.skillsPaths.length > 0
         ? saved.skillsPaths
-        : DEFAULTS.skillsPaths;
+        : defaultSkillsPaths(executionEnvironment);
 
   if (
     autoInject !== saved.autoInject ||

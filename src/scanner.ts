@@ -42,7 +42,7 @@ function readFileSafe(filePath: string): string | null {
   }
 }
 
-function extractDescription(content: string): string {
+export function extractDescription(content: string): string {
   const lines = content.split("\n");
   const collected: string[] = [];
   let passedH1 = false;
@@ -75,7 +75,7 @@ function extractDescription(content: string): string {
   );
 }
 
-function extractBodyExcerpt(content: string): string {
+export function extractBodyExcerpt(content: string): string {
   const lines = content.split("\n");
   const collected: string[] = [];
   let passedH1 = false;
