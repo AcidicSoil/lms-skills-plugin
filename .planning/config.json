@@ -6,10 +6,6 @@
   "brave_search": true,
   "firecrawl": false,
   "exa_search": true,
-  "tavily_search": false,
-  "ref_search": false,
-  "perplexity": false,
-  "jina": false,
   "git": {
     "branching_strategy": "milestone",
     "create_tag": true,
@@ -41,7 +37,7 @@
     "plan_bounce": false,
     "plan_bounce_script": null,
     "plan_bounce_passes": 2,
-    "auto_prune_state": false,
+    "auto_prune_state": true,
     "post_planning_gaps": true,
     "security_enforcement": true,
     "security_asvs_level": 1,
@@ -90,7 +86,7 @@
     "source_grounding": true,
     "source_grounding_authority": "grep"
   },
-  "mode": "yolo",
+  "mode": "interactive",
   "granularity": "coarse",
   "quick_branch_template": null,
   "intel": {
@@ -102,20 +98,19 @@
   },
   "resolve_model_ids": "omit",
   "review": {
-    "lm_studio_host": "http://127.0.0.1:1234",
-    "models": {
-      "lm_studio": "deepreinforce-ai_ornith-1.0-9b",
-      "claude": "claude",
-      "opencode": "deepreinforce-ai_ornith-1.0-9b",
-      "codex": "gpt-5.5"
+    "reviewer_instances": {
+      "opencode-ollama": {
+        "cli": "opencode",
+        "model": "ollama/qwen3.5:4b",
+        "agent": "review"
+      }
     },
     "default_reviewers": [
-      "lm_studio",
-      "claude",
-      "codex"
-    ],
-    "max_prompt_tokens_per_reviewer": {
-      "lm_studio": 48000
-    }
+      "opencode-ollama"
+    ]
+  },
+  "model_policy": {
+    "provider": ["opencode"],
+    "budget": "low"
   }
 }
