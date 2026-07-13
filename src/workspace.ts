@@ -90,7 +90,11 @@ export async function resolveWorkspaceContext(
     const mkdirHost = dependencies.mkdirHost ?? (async (value: string) => {
       await fs.promises.mkdir(value, { recursive: true });
     });
-    await mkdirHost(nativeRoot);
+    try {
+      await mkdirHost(nativeRoot);
+    } catch (error) {
+      throw new Error(`Unable to create Host workspace '${nativeRoot}': ${error instanceof Error ? error.message : String(error)}`);
+    }
     return {
       workspaceId,
       providerWorkingDirectory: identity,
@@ -106,10 +110,19 @@ export async function resolveWorkspaceContext(
   const distribution = capability.distribution;
   const resolveHome = dependencies.resolveWslHome ?? defaultResolveWslHome;
   const mkdirWsl = dependencies.mkdirWsl ?? defaultMkdirWsl;
-  const home = (await resolveHome(distribution)).replace(/\/+$/, "");
+  let home: string;
+  try {
+    home = (await resolveHome(distribution)).replace(/\/+$/, "");
+  } catch (error) {
+    throw new Error(`Unable to resolve WSL workspace home for '${distribution}': ${error instanceof Error ? error.message : String(error)}`);
+  }
   if (!home.startsWith("/")) throw new Error("WSL home directory must be a Linux-native absolute path.");
   const nativeRoot = path.posix.join(home, WSL_WORKSPACES_RELATIVE_DIR, workspaceId);
-  await mkdirWsl(distribution, nativeRoot);
+  try {
+    await mkdirWsl(distribution, nativeRoot);
+  } catch (error) {
+    throw new Error(`Unable to create WSL workspace '${nativeRoot}' in '${distribution}': ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   return {
     workspaceId,

@@ -51,6 +51,23 @@ export interface ToolsProviderDependencies {
   executeCommand?: typeof execCommand;
 }
 
+export const PUBLIC_TOOL_NAMES = [
+  "list_skills",
+  "read_skill_file",
+  "list_skill_files",
+  "read_file",
+  "write_file",
+  "patch_file",
+  "append_to_file",
+  "create_directory",
+  "list_directory",
+  "delete_file",
+  "move_file",
+  "rename_file",
+  "get_current_directory",
+  "run_command",
+] as const;
+
 export async function toolsProvider(
   ctl: PluginController,
   dependencies: ToolsProviderDependencies = {},

@@ -29,7 +29,7 @@ test("diagnostic: WSL capability failures are actionable", async () => {
     [{ status: "unsupported-platform" } as const, /only available on Windows/i],
     [{ status: "wsl-unavailable", error: "wsl.exe not found" } as const, /wsl\.exe not found/i],
     [{ status: "no-distribution" } as const, /No WSL distribution/i],
-    [{ status: "distribution-unavailable", requested: "Ubuntu", available: ["Debian"] } as const, /Ubuntu.*Debian/i],
+    [{ status: "distribution-unavailable", requested: "Ubuntu", available: ["Debian"] as string[] }, /Ubuntu.*Debian/i],
   ] as const;
   for (const [capability, expected] of cases) {
     await assert.rejects(resolveWorkspaceContext("C:/project", wslConfig, {
