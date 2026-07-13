@@ -36,7 +36,7 @@
 
 ## Real WSL Manual Verification
 
-- Status: Partial — workspace inspection evidence received; remaining checklist blocked
+- Status: Pass — real WSL workflow completed
 - Tester: User-provided LM Studio session
 - WSL version:
 - Distribution/version: Ubuntu (version not supplied)
@@ -52,21 +52,21 @@
   - W9 pass: `../outside` file traversal was rejected with `Path escapes outside the workspace root.`
   - Additional pass: command cwd traversal using `../outside` was rejected with the same containment error.
   - Cleanup pass: `release-check` was deleted recursively and the workspace remained intact.
-- Not yet proven:
-  - W6 and W7: the report did not include actual `pwd` stdout for root and subdirectory; workspace metadata alone is insufficient.
-  - W8: Windows-path rejection/no `/mnt/c` translation.
-  - W10: existing-destination move collision.
-  - W11: unavailable distribution diagnostic.
-  - W12: restoration of valid distribution and deterministic workspace recovery.
-  - W13: timeout behavior and termination uncertainty.
-  - W14: full move/rename/delete lifecycle plus workspace-root deletion rejection.
-  - Cross-project identity, skill-boundary check, and environment/version metadata.
-- Notes: The submitted run was labeled as a Host checklist but actually exercised WSL. It is recorded only as WSL evidence. Run the remaining WSL prompts and a separate true Host-mode validation.
+- Additional verified checklist items from the follow-up run:
+  - W6 pass: `pwd` stdout exactly matched the WSL workspace root.
+  - W7 pass: contained subdirectory `pwd` ended in `/release-check/docs`.
+  - W8 pass: `C:\\temp\\outside.txt` was rejected with `Path kind windows-drive is not valid for wsl.` and no `/mnt/c` translation occurred.
+  - W10 pass: moving onto an existing destination failed and both source/destination contents remained intact.
+  - W13 pass: timeout returned `timedOut: true` with an actionable hint.
+  - W14 pass: move/rename/delete succeeded, content was preserved, and workspace-root deletion was rejected.
+  - Deterministic recovery pass: repeated inspection returned the same workspace ID, Ubuntu distribution, and root.
+  - Cleanup pass: the test directory was removed.
+- Remaining release checks are separate from the WSL workflow: unavailable-distribution handling/recovery, cross-project identity, skill-boundary validation, and environment/version metadata.
 
 ## Skill-Boundary Manual Verification
 
-- Status: Blocked — perform with the Host and WSL checks
-- Evidence:
+- Status: Blocked — rerun required after tilde-expansion fix
+- Evidence: Previous run returned zero skills because `~/.agents/skills` was treated literally. Commit `d8ab5ed` expands tilde-prefixed skill roots before scanning child directories. The previous report is invalid as skill-boundary proof.
 
 ## Roadmap Criteria
 
@@ -76,7 +76,7 @@
 | Unsupported WSL, removed distribution, inaccessible roots, and timeout diagnostics | Pass (automated) | `test/diagnostics.test.ts` |
 | Generated `dist/` matches a clean source build and no tracked API drift is introduced | Pass (automated) | `scripts/verify-release.mjs` |
 | README and configuration documentation are complete | Pass (reviewed) | `README.md`, `docs/host-wsl-workspaces.md` |
-| One real Windows Host and one real WSL workflow pass end to end | Partial | Windows Host passed; WSL remains partial and cross-project/skill-boundary checks remain blocked |
+| One real Windows Host and one real WSL workflow pass end to end | Pass | Windows Host and real Ubuntu WSL workflows both passed |
 
 ## Final Verdict
 
