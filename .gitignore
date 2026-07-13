@@ -12,3 +12,4 @@ node_modules
 .vscode
 .omo
 .oracle
+.test-dist/
