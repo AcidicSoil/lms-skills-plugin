@@ -36,6 +36,14 @@ export interface EffectiveConfig {
   wslDistribution?: string;
 }
 
+export interface WorkspaceContext {
+  workspaceId: string;
+  providerWorkingDirectory: string;
+  executionEnvironment: ExecutionEnvironment;
+  wslDistribution?: string;
+  nativeRoot: string;
+}
+
 export interface DirectoryEntry {
   name: string;
   relativePath: string;

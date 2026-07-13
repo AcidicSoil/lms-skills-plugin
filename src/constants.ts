@@ -13,6 +13,8 @@ export const PLUGIN_DATA_DIR = path.join(
   "lms-skills",
 );
 export const SETTINGS_FILE = path.join(PLUGIN_DATA_DIR, "settings.json");
+export const HOST_WORKSPACES_DIR = path.join(PLUGIN_DATA_DIR, "workspaces");
+export const WSL_WORKSPACES_RELATIVE_DIR = ".lmstudio/lms-skills/workspaces";
 
 export const SKILL_ENTRY_POINT = "SKILL.md";
 export const SKILL_MANIFEST_FILE = "skill.json";

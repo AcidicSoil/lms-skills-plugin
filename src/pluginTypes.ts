@@ -4,6 +4,7 @@ export interface PluginController {
   getPluginConfig(schematics: typeof configSchematics): {
     get(key: string): unknown;
   };
+  getWorkingDirectory(): string;
 }
 
 export interface PluginContext {
