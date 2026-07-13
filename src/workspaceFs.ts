@@ -284,7 +284,18 @@ export function createWorkspaceFileSystem(
       const resolvedDestination = await resolvePath(destination);
       if (context.executionEnvironment === "wsl") {
         await ensureParentWsl(resolvedDestination);
-        await runWsl("mv", [overwrite ? "-f" : "-n", "--", resolvedSource, resolvedDestination]);
+        if (!overwrite) {
+          const exists = await runDirect({
+            environment: "wsl",
+            distribution: context.wslDistribution,
+            cwd: context.nativeRoot,
+            program: "test",
+            args: ["-e", resolvedDestination],
+          });
+          if (exists.exitCode === 0) throw new Error("Destination already exists.");
+          if (exists.exitCode !== 1) fail(exists, "test");
+        }
+        await runWsl("mv", [overwrite ? "-f" : "--", ...(overwrite ? ["--"] : []), resolvedSource, resolvedDestination]);
       } else {
         await fs.promises.mkdir(path.dirname(resolvedDestination), { recursive: true });
         if (!overwrite && fs.existsSync(resolvedDestination)) throw new Error("Destination already exists.");
