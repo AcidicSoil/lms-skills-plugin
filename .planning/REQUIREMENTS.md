@@ -38,8 +38,8 @@
 - [x] **SAFE-03**: Timeout handling attempts to terminate command descendants and reports incomplete termination.
 - [x] **TEST-01**: Automated tests cover execution settings, capability detection, path translation, and containment.
 - [x] **TEST-02**: Automated integration tests prove file and shell tools use one workspace in Host and WSL modes.
-- [ ] **TEST-03**: Existing Host workflows and plugin build remain passing.
-- [ ] **DOCS-01**: User documentation explains setup, mode selection, workspace locations, limitations, and troubleshooting.
+- [x] **TEST-03**: Existing Host workflows and plugin build remain passing.
+- [x] **DOCS-01**: User documentation explains setup, mode selection, workspace locations, limitations, and troubleshooting.
 
 ## v2 Requirements
 
@@ -75,8 +75,8 @@
 | TOOL-01..03 | Phase 2 | Complete |
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 2 | Complete |
-| TEST-03 | Phase 3 | Pending |
-| DOCS-01 | Phase 3 | Pending |
+| TEST-03 | Phase 3 | Complete |
+| DOCS-01 | Phase 3 | Complete |
 
 ---
-*Last updated: 2026-07-13 after initialization*
+*Last updated: 2026-07-13 after Phase 3 verification*

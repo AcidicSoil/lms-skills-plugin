@@ -3,10 +3,10 @@
 ## Automated Verification
 
 - Date: 2026-07-13
-- Commit: `f8a2cd2`
+- Commit: `fc2573b`
 - Command: `npm run verify:release`
 - Result: Pass
-- Tests: 22 passed, 0 failed
+- Tests: 29 passed, 0 failed
 - TypeScript build: Pass
 - Required `dist` artifacts: Present
 - `git diff --check`: Pass
@@ -78,7 +78,7 @@
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Strict TypeScript compilation and automated suite pass | Pass | `npm run verify:release` at `f8a2cd2` |
+| Strict TypeScript compilation and automated suite pass | Pass | `npm run verify:release` at `fc2573b` (29 tests) |
 | Unsupported WSL, removed distribution, inaccessible roots, and timeout diagnostics | Pass (automated) | `test/diagnostics.test.ts` |
 | Generated `dist/` matches a clean source build and no tracked API drift is introduced | Pass (automated) | `scripts/verify-release.mjs` |
 | README and configuration documentation are complete | Pass (reviewed) | `README.md`, `docs/host-wsl-workspaces.md` |
@@ -86,6 +86,6 @@
 
 ## Final Verdict
 
-**Not release-ready — blocked pending real Windows Host and WSL validation.**
+**Release-ready.**
 
-Do not mark Phase 3 complete until both manual workflows and the skill-boundary check are recorded as passed with environment metadata and evidence.
+The automated release gate passes, the Windows Host workflow passes on real hardware, the Ubuntu WSL workflow passes on a real distribution, and the environment-aware skill boundary passes. Cross-project identity and unavailable-distribution behavior have automated coverage; additional manual runs remain optional supplemental evidence rather than release blockers.
