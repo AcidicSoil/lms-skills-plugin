@@ -24,14 +24,18 @@
 
 ## Real WSL Manual Verification
 
-- Status: Blocked — requires Windows + WSL
-- Tester:
+- Status: Partial — workspace inspection evidence received; remaining checklist blocked
+- Tester: User-provided LM Studio session
 - WSL version:
-- Distribution/version:
+- Distribution/version: Ubuntu (version not supplied)
 - LM Studio version:
 - Plugin commit:
-- Evidence:
-- Notes: Execute the WSL section of `docs/release-checklist.md` against a real initialized distribution.
+- Evidence: `get_current_directory` reported `/home/user/.lmstudio/lms-skills/workspaces/d70be93876e3e0cf81b5a95b` and identified the environment as WSL using Ubuntu.
+- Verified checklist items:
+  - W1 partial/pass: WSL environment, Ubuntu distribution, and native workspace root reported.
+  - W2 pass: root is in the Linux filesystem and not under `/mnt/c`.
+- Remaining: W3–W14, environment metadata, and concrete pass/fail evidence.
+- Notes: Execute the remaining WSL section of `docs/release-checklist.md` against the same real initialized distribution.
 
 ## Skill-Boundary Manual Verification
 
