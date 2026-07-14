@@ -7,7 +7,7 @@ Make the active workspace and execution environment visible, understandable, and
 ## Decisions
 
 - Workspace validity is explicit; invalid or unavailable paths never fall back to the home directory.
-- Host-only and WSL-only settings are shown only in their relevant environment context.
+- Host-only and WSL-only controls are shown only in their relevant environment context through environment-specific runtime configuration tools; static schematics remain limited to stable bootstrap defaults.
 - The system default WSL distribution is the default behavior; overrides are advanced and validated.
 - Chat-scoped selection, persistent profiles, and global defaults remain distinct concepts.
 
