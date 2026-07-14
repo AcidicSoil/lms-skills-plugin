@@ -1,0 +1,3 @@
+import test from "node:test"; import assert from "node:assert/strict"; import { TOOL_METADATA,grantAllows } from "../src/toolMetadata";
+test("tool metadata covers workspace-facing public tools",()=>{for(const n of ["read_file","write_file","delete_file","run_command"])assert.ok(TOOL_METADATA[n]);assert.equal(TOOL_METADATA.delete_file.destructive,true);});
+test("workspace approval grants are path and scope specific",()=>{assert.equal(grantAllows({path:"/tmp/x",scope:"read"},"/tmp/x","read"),true);assert.equal(grantAllows({path:"/tmp/x",scope:"read"},"/tmp/x","write"),false);assert.equal(grantAllows({path:"/tmp/x",scope:"write"},"/tmp/y","read"),false);});
