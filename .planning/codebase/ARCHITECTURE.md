@@ -1,60 +1,139 @@
----
-last_mapped_commit: 32a3fb880d150ca331d2a6cebd48a74902b71187
-mapped_at: 2026-07-13
-focus: arch
----
+<!-- refreshed: 2026-07-14 -->
 # Architecture
 
-## Style
+**Analysis Date:** 2026-07-14
 
-The project is a modular host-adapter plugin with one composition root and focused service modules for configuration, persistence, discovery, preprocessing, tools, execution, and bootstrap.
+## System Overview
 
-## Composition Root
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ LM Studio Plugin Host                                       │
+│ `.lmstudio/entry.ts` → `src/index.ts`                       │
+├──────────────────┬──────────────────┬───────────────────────┤
+│ Config           │ Prompt pipeline  │ Public tools          │
+│ `src/config.ts`  │ `src/preprocessor.ts`                    │
+│ `src/settings.ts`│                  │ `src/toolsProvider.ts` │
+└────────┬─────────┴────────┬─────────┴──────────┬────────────┘
+         │                  │                     │
+         ▼                  ▼                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Environment-aware services                                  │
+│ `src/skillStore.ts` · `src/workspace.ts`                    │
+│ `src/workspaceFs.ts` · `src/executor.ts`                    │
+└────────┬───────────────────────────┬────────────────────────┘
+         │                           │
+         ▼                           ▼
+┌──────────────────────┐   ┌──────────────────────────────────┐
+│ Host filesystem/shell│   │ WSL via `wsl.exe` + `/bin/bash` │
+└──────────────────────┘   └──────────────────────────────────┘
+```
 
-`src/index.ts` exports `main(context)` and:
+## Entry and Registration
 
-1. bootstraps the default skill directory through `src/setup.ts`;
-2. registers `src/config.ts` schematics;
-3. registers `src/toolsProvider.ts`;
-4. registers `src/preprocessor.ts`.
-
-`src/pluginTypes.ts` narrows the LM Studio host surface consumed internally.
+- `.lmstudio/entry.ts` creates the LM Studio client and registration host.
+- `src/index.ts` is the application entry point.
+- Register exactly one configuration schema, tools provider, and prompt preprocessor.
+- Keep startup orchestration thin; place behavior in dedicated modules.
 
 ## Configuration Layer
 
-`src/config.ts` defines UI fields. `src/settings.ts` merges host configuration with persisted JSON. `src/constants.ts` centralizes defaults, paths, limits, regular expressions, cache timings, and search weights.
+- `src/config.ts` defines LM Studio-visible fields and defaults.
+- `src/settings.ts` merges live plugin settings with persisted settings and normalizes environment-specific paths.
+- `src/constants.ts` centralizes limits, paths, regexes, and timeouts.
+- `src/types.ts` owns cross-module domain types.
 
-## Discovery and Search
+Use `resolveEffectiveConfig()` as the single configuration read boundary. Do not read LM Studio config directly from feature modules.
 
-`src/scanner.ts` scans roots, reads manifests, extracts descriptions and body excerpts, caches results, installs watchers, builds a weighted BM25-style search index, resolves names, and reads or lists files within skill roots.
+## Skill Pipeline
 
-## Prompt Transformation
+- `src/scanner.ts` implements Host skill scanning, manifests, metadata extraction, search indexing, and Host directory reads.
+- `src/skillStore.ts` abstracts Host and WSL skill access behind one async contract.
+- `src/preprocessor.ts` uses the same `SkillStore` contract for automatic skill injection and explicit `/skill-name` activation.
+- `src/toolsProvider.ts` uses the same store for `list_skills`, `read_skill_file`, and `list_skill_files`.
 
-`src/preprocessor.ts` has two flows:
+Environment selection must apply equally to tools and prompt preprocessing. New skill features should be added to `SkillStore`, not directly to Host scanner APIs.
 
-- Explicit activation parses `/skill-name`, resolves skills, and inlines bodies in `<skill_context>`.
-- Automatic injection prepends a bounded `<available_skills>` list when skills change or the reinjection interval expires.
+## Workspace Pipeline
 
-Failures are fail-open: the original message is returned.
+- `src/workspace.ts` derives deterministic workspace identity and creates Host or WSL-native roots.
+- `src/pathPolicy.ts` classifies paths and applies environment/path containment rules.
+- `src/workspaceFs.ts` exposes one filesystem contract for Host and WSL implementations.
+- `src/toolsProvider.ts` lazily resolves one workspace and one filesystem instance per provider.
 
-## Tool Surface
+Project file tools remain rooted at `workspace.nativeRoot`. `change_directory` mutates only the default command cwd, not file-tool resolution.
 
-`src/toolsProvider.ts` constructs all host tools. Skill tools delegate to `src/scanner.ts`; general file tools use Node filesystem APIs; commands delegate to `src/executor.ts`.
+## Execution Pipeline
 
-## Data Flow
+- `src/executor.ts` builds execution specs and runs Host or WSL commands.
+- Host Windows supports `cmd`, PowerShell, Git Bash, or explicit shell paths.
+- WSL always runs `/bin/bash -lc` inside the selected distribution.
+- `execProgram()` is the structured argv/stdin boundary for non-shell operations.
+- `execCommand()` is the raw command-string boundary for `run_command`.
 
-User message → preprocessor → effective config → skill scan/cache → explicit or automatic injection → transformed message.
+Preserve this split: use `execProgram()` for filesystem/capability operations and `execCommand()` only for model-requested shell commands.
 
-Model tool call → Zod validation → scanner/filesystem/executor → structured LM Studio result.
+## Public Tool Layer
 
-Host config → settings merge → optional JSON persistence → five-second cache.
+`src/toolsProvider.ts` defines 15 public tools and their Zod schemas. It also owns:
 
-## State
+- lazy dependency creation;
+- shared workspace state;
+- persistent command cwd;
+- tool-level response shaping;
+- dependency injection seams for tests.
 
-- `src/settings.ts`: process-wide effective-config cache.
-- `src/scanner.ts`: process-wide skill/search caches and watchers.
-- `src/preprocessor.ts`: per-controller injection state in a `Map`.
+The exported `PUBLIC_TOOL_NAMES` array is the compatibility contract. Add or rename tools deliberately and update compatibility tests.
 
-## Error Strategy
+## Dependency Direction
 
-The architecture favors continuity: filesystem failures become empty/null results, preprocessing preserves messages, execution returns structured errors, and settings writes may fail silently.
+Preferred dependency flow:
+
+```text
+index/config/tools/preprocessor
+        ↓
+settings + domain services
+        ↓
+path/executor/scanner primitives
+        ↓
+Node APIs and WSL
+```
+
+Avoid importing `toolsProvider.ts` from lower-level modules. Keep primitives independent from LM Studio SDK types where possible.
+
+## State and Caching
+
+- Global config cache: `src/settings.ts`.
+- Host scanner/search caches: `src/scanner.ts`.
+- Prompt injection state: `WeakMap`-style provider state in `src/preprocessor.ts`.
+- Per-provider workspace and cwd state: closures in `src/toolsProvider.ts`.
+
+Any new cache must document invalidation. Environment changes must never reuse stale Host/WSL state.
+
+## Error Model
+
+- Lower-level services throw contextual `Error` objects for failed operations.
+- Tools catch errors and return `{ success: false, error }`.
+- WSL readiness uses typed capability results before workspace mutation.
+- Timeout results distinguish `timedOut` and `terminationIncomplete`.
+
+Prefer contextual errors naming the environment, distribution, path, and operation.
+
+## Security Boundaries
+
+- Canonical containment is enforced by `src/pathPolicy.ts` and `src/workspaceFs.ts`.
+- Skill roots and project workspaces are separate trust boundaries.
+- WSL wrong-environment paths are rejected rather than translated.
+- Structured argv/stdin is required for WSL file operations.
+- The workspace is containment policy, not an OS sandbox; shell commands retain user permissions.
+
+## Where to Add New Code
+
+- New plugin setting: `src/config.ts`, `src/settings.ts`, `src/types.ts`, and settings tests.
+- New project file operation: extend `WorkspaceFileSystem` in `src/workspaceFs.ts`, then add a tool in `src/toolsProvider.ts`.
+- New skill operation: extend `SkillStore` in `src/skillStore.ts`, with Host primitives in `src/scanner.ts` if needed.
+- New execution backend behavior: `src/executor.ts` and `src/pathPolicy.ts`.
+- New WSL capability: `src/wslCapability.ts` and workspace diagnostics tests.
+
+---
+
+*Architecture analysis: 2026-07-14*

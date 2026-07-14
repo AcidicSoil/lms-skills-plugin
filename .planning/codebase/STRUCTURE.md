@@ -1,54 +1,127 @@
----
-last_mapped_commit: 32a3fb880d150ca331d2a6cebd48a74902b71187
-mapped_at: 2026-07-13
-focus: arch
----
-# Repository Structure
+# Codebase Structure
+
+**Analysis Date:** 2026-07-14
 
 ## Top-Level Layout
 
 ```text
 .
-├── src/          TypeScript source
-├── dist/         Generated runtime and declarations
-├── samples/      Starter skills
-├── docs/         Supplemental documentation
-├── .lmstudio/    Local development integration
-├── package.json
-├── manifest.json
-├── tsconfig.json
-├── README.md
-└── todo.md       Future host/WSL workspace design
+├── src/                 TypeScript implementation
+├── test/                Node test suites
+├── scripts/             Cross-platform test/release runners
+├── docs/                User and developer documentation
+├── samples/             Example skill directories
+├── skills/              Project-local GSD support skills
+├── .lmstudio/           LM Studio runtime entry/dev artifacts
+├── .planning/           GSD project state, phases, archives, codebase map
+├── dist/                Generated TypeScript output (ignored)
+├── package.json         npm scripts and dependencies
+├── tsconfig.json        production build configuration
+├── tsconfig.test.json   test build configuration
+└── manifest.json        LM Studio plugin manifest
 ```
-
-Operational directories `.serena`, `.codex`, `.agents`, and `skills` are excluded from this product map under `AGENTS.md`.
 
 ## Source Modules
 
-- `src/index.ts`: composition root.
-- `src/config.ts`: configuration schema.
-- `src/constants.ts`: shared policies and limits.
-- `src/pluginTypes.ts`: host interfaces.
-- `src/types.ts`: domain and settings interfaces.
-- `src/settings.ts`: persistent/effective configuration.
-- `src/scanner.ts`: discovery, metadata, search, safe skill access.
-- `src/preprocessor.ts`: prompt injection and explicit activation.
-- `src/toolsProvider.ts`: all tool definitions.
-- `src/executor.ts`: cross-platform shell execution.
-- `src/setup.ts`: initial skill-directory bootstrap.
+### Plugin shell
 
-## Generated Output
+- `src/index.ts` - plugin registration entry point; keep minimal.
+- `src/config.ts` - LM Studio configuration fields.
+- `src/pluginTypes.ts` - narrow local interfaces for plugin context/controller.
+- `src/types.ts` - shared domain types.
+- `src/constants.ts` - paths, limits, timeouts, regexes, and defaults.
 
-Every `src/*.ts` module has corresponding `.js`, `.d.ts`, `.js.map`, and `.d.ts.map` files under `dist/`. Edit source, then regenerate with `npm run build`; do not hand-edit `dist/`.
+### Configuration and setup
 
-## Samples
+- `src/settings.ts` - persisted/live config merge, validation, environment-aware path defaults, short-lived cache.
+- `src/setup.ts` - default Host skill-directory bootstrap and sample copying.
 
-`samples/` contains `code-review`, `data-analysis`, `git-commit`, and `markdown-report`. Each has `SKILL.md` and `skill.json`; some include supporting files.
+### Skills
 
-## Naming
+- `src/scanner.ts` - Host filesystem scanning, search, manifests, metadata extraction, and Host skill file listing.
+- `src/skillStore.ts` - Host/WSL async abstraction for scan/search/resolve/read/list.
+- `src/preprocessor.ts` - available-skill injection and explicit `/skill-name` expansion.
 
-Source files use lower camel case. Interfaces use PascalCase. Constants use upper snake case. Host tool names use lower snake case such as `read_skill_file` and `run_command`.
+### Execution and paths
 
-## Dependency Direction
+- `src/pathPolicy.ts` - path classification, environment compatibility, containment helper.
+- `src/executor.ts` - Host shell selection, WSL Bash specs, process execution, timeouts, output limits.
+- `src/wslCapability.ts` - WSL availability/distribution detection.
 
-`src/index.ts` depends on setup/config/tools/preprocessor. Lower-level modules depend on constants, types, scanner, settings, and executor; observed source has no circular dependency back to the composition root.
+### Workspaces and tools
+
+- `src/workspace.ts` - deterministic ID and root creation.
+- `src/workspaceFs.ts` - contained Host/WSL file operations.
+- `src/toolsProvider.ts` - all public tool definitions, lazy services, response shaping, active command cwd.
+
+## Tests
+
+Tests mirror concerns rather than source filenames one-to-one:
+
+- `test/settings.test.ts` - legacy/default/config path behavior.
+- `test/wslCapability.test.ts` - capability states.
+- `test/pathPolicy.test.ts` - classification and escape prevention.
+- `test/executor.test.ts` - shell specs, cwd, WSL Bash behavior.
+- `test/workspace.test.ts` - identity and root lifecycle.
+- `test/workspaceFs.test.ts` - Host/WSL file operations and containment.
+- `test/scanner.test.ts` - child-directory skill discovery.
+- `test/skillStore.test.ts` - WSL-native skill roots/read/list.
+- `test/toolsProvider.integration.test.ts` - public tool environment alignment.
+- `test/compatibility.test.ts` - public names, Host regression, cwd compatibility.
+- `test/diagnostics.test.ts` - actionable surface errors.
+
+Place a new test in the closest behavioral suite. Add a new suite when the module introduces a distinct boundary or contract.
+
+## Scripts
+
+- `scripts/test.mjs` - clean compile/run/cleanup lifecycle for `.test-dist/`.
+- `scripts/verify-release.mjs` - clean test/build/artifact/Git drift gate.
+
+Keep scripts cross-platform: use Node filesystem/process APIs rather than Bash-only commands.
+
+## Documentation
+
+- `README.md` - primary product overview and settings summary.
+- `docs/host-wsl-workspaces.md` - environment/path/security/troubleshooting guide.
+- `docs/release-checklist.md` - real Host/WSL release validation.
+- `docs/ARCHITECTURE.md`, `docs/CONFIGURATION.md`, `docs/DEVELOPMENT.md`, `docs/GETTING-STARTED.md`, `docs/TESTING.md` - supporting documentation.
+
+Update user-facing docs whenever settings, tool names, path semantics, shell behavior, or platform requirements change.
+
+## Generated and Ignored Content
+
+- `dist/` is generated by `npm run build` and ignored.
+- `.test-dist/` is generated and removed by `scripts/test.mjs`; it is ignored as a safety net.
+- `node_modules/` is local dependency output.
+- `.lmstudio/` is ignored in Git even though local runtime artifacts may exist.
+
+Do not hand-edit `dist/`. Validate it through `npm run verify:release`.
+
+## Planning Structure
+
+- `.planning/PROJECT.md` and `.planning/STATE.md` describe shipped/current project state.
+- `.planning/milestones/` archives completed milestone roadmap and requirements.
+- `.planning/phases/<phase>/` contains plans, summaries, verification, release results, and learnings.
+- `.planning/codebase/` contains this refreshed seven-document map.
+
+## Placement Rules
+
+- Put pure policy helpers in a focused source module, not inside tool implementations.
+- Put environment-specific effects behind an injected interface.
+- Keep LM Studio SDK usage at `src/config.ts`, `src/index.ts`, and `src/toolsProvider.ts` boundaries.
+- Keep public response formatting in `src/toolsProvider.ts`.
+- Keep shared constants in `src/constants.ts`, not repeated literals.
+- Keep security-sensitive path logic centralized in `src/pathPolicy.ts` and `src/workspaceFs.ts`.
+- Add release automation to `scripts/`, not package-script shell chains.
+
+## High-Change Files
+
+- `src/toolsProvider.ts` (650 lines) - public surface and orchestration; refactor by extracting tool factories if it grows materially.
+- `src/scanner.ts` (534 lines) - Host scanner/search/watch behavior; keep WSL concerns in `src/skillStore.ts`.
+- `src/workspaceFs.ts` (320 lines) - security-sensitive backend; require focused tests for every operation.
+- `src/executor.ts` (300 lines) - platform process boundary; avoid mixing file-operation behavior into it.
+- `src/preprocessor.ts` (283 lines) - prompt mutation and activation behavior; preserve deterministic injection state.
+
+---
+
+*Structure analysis: 2026-07-14*

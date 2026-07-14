@@ -1,68 +1,170 @@
----
-last_mapped_commit: 32a3fb880d150ca331d2a6cebd48a74902b71187
-mapped_at: 2026-07-13
-focus: concerns
----
 # Codebase Concerns
 
-## High-Priority Risks
+**Analysis Date:** 2026-07-14
 
-### Broad Local Authority
+## Priority 1 — Security and Correctness
 
-`src/toolsProvider.ts` exposes general filesystem mutation and arbitrary shell commands. Safety depends on path validation, host permissions, user intent, and model behavior.
+### Host absolute skill-path checks are lexical only
 
-### Path Boundaries
+`src/toolsProvider.ts` permits Host absolute paths for `read_skill_file` and `list_skill_files` by checking `resolvedTarget.startsWith(path.resolve(root) + path.sep)`.
 
-Resolved-path prefix checks must account for separators, equality, Windows case behavior, symlinks, junctions, and time-of-check/time-of-use races. Absolute skill read/list paths deserve focused tests.
+**Risk:** This check does not canonicalize symlinks or junctions before access, unlike project workspace containment in `src/workspaceFs.ts`. A configured skill root containing a symlink could expose files outside the intended root.
 
-### Process Termination
+**Recommended fix:** Route Host absolute skill access through the same canonical containment policy used by `WorkspaceFileSystem`, or add a dedicated canonical skill-root resolver in `src/skillStore.ts`. Add symlink/junction escape tests.
 
-`src/executor.ts` kills the spawned shell on timeout, but descendants may survive, especially on Windows or when commands create process trees.
+### Workspace creation still uses shell command construction
 
-## Reliability
+`src/workspace.ts` creates WSL directories through `execCommand()` and quoted `mkdir -p` text.
 
-### Silent Failures
+**Risk:** The path is generated internally and quoted, so immediate exploitability is low, but it violates the codebase's structured argv rule and creates a second execution style for filesystem operations.
 
-Scanner helpers often return empty results after exceptions, and `src/settings.ts` ignores save failures. Permission errors, malformed files, watcher limits, and persistence problems can be hard to diagnose.
+**Recommended fix:** Replace WSL home/root setup with `execProgram("mkdir", ["-p", "--", root])` and direct `printenv HOME` or `pwd` calls. Remove `quotePosix()` if no longer needed.
 
-### Global Mutable Caches
+### Command execution is intentionally not sandboxed
 
-`src/scanner.ts` and `src/settings.ts` use module-level caches. Multiple controllers or configurations in one process may share stale state.
+`run_command` executes arbitrary shell strings with the LM Studio process or WSL user's permissions.
 
-### Watcher Lifecycle
+**Risk:** Workspace cwd containment does not prevent shell commands from accessing paths or network resources available to the user account.
 
-Watchers are replaced when paths change but have no explicit shutdown hook. Non-recursive fallback may miss nested modifications, while recursive watches may be expensive or unsupported.
+**Recommended action:** Keep documentation explicit that workspace containment applies to file tools and cwd selection, not OS-level command sandboxing. Avoid language implying full isolation.
 
-### Bootstrap Behavior
+## Priority 2 — Architecture and Maintainability
 
-`src/setup.ts` copies samples only when the entire default directory is absent. Existing empty or partially initialized roots receive no samples.
+### `src/toolsProvider.ts` is oversized
 
-## Security
+At roughly 650 lines, `src/toolsProvider.ts` defines 15 tools, shared state, path/cwd resolution, service factories, and response formatting.
 
-### Untrusted Skill Instructions
+**Impact:** Tool additions increase merge conflicts and make it harder to review environment alignment and compatibility.
 
-Skill bodies are intentionally promoted into prompt context and can combine with file or shell tools. Installing untrusted skills creates a strong prompt-injection boundary.
+**Recommended refactor:** Extract tool factories by domain:
 
-### Markup Escaping
+- `src/tools/skills.ts`
+- `src/tools/files.ts`
+- `src/tools/commands.ts`
+- shared `src/tools/context.ts`
 
-Names, descriptions, and bodies are inserted into XML-like tags without escaping in `src/preprocessor.ts`; crafted content can break or spoof structure.
+Keep `PUBLIC_TOOL_NAMES` and final registration order centralized.
 
-### Environment Exposure
+### `src/scanner.ts` mixes several responsibilities
 
-`src/executor.ts` inherits the host environment, so commands can access credentials and variables available to the plugin process.
+At roughly 534 lines, `src/scanner.ts` handles Host scanning, manifest parsing, metadata extraction, search indexing, watchers/caches, reads, and directory traversal.
 
-## Maintainability
+**Impact:** Search, filesystem, and cache changes are coupled. WSL behavior already lives separately in `src/skillStore.ts`, increasing conceptual asymmetry.
 
-`src/toolsProvider.ts` is a large mixed-responsibility module. `dist/` duplicates source and can drift. Documentation defaults should be checked against `src/config.ts` and `src/constants.ts`.
+**Recommended refactor:** Separate Host repository access, skill metadata parsing, and search ranking into distinct modules. Preserve `SkillStore` as the public abstraction.
 
-## Quality Gaps
+### Configuration cache is global across controllers
 
-- No automated tests or coverage.
-- No lint or format configuration.
-- No visible CI.
-- No Node engine declaration.
-- No structured debug logging.
+`src/settings.ts` stores one module-level `cachedConfig` and timestamp.
 
-## Planned Evolution
+**Risk:** Multiple simultaneous plugin/controller contexts with different live settings could reuse the wrong cached configuration within the five-second TTL.
 
-`todo.md` proposes host/WSL execution and per-chat workspaces. That increases path translation, isolation, lifecycle, and security complexity, so executor/filesystem regression tests should precede it.
+**Recommended fix:** Cache by controller or provider identity using a `WeakMap`, or move config caching into provider/preprocessor closures. Add a multi-controller regression test.
+
+### Tool-provider environment state is immutable after first resolution
+
+`toolsProvider()` lazily creates and caches workspace and skill services. If settings change while the provider instance remains alive, the old environment, distribution, roots, and shell context persist.
+
+**Risk:** Users may change Host/WSL settings and expect immediate behavior changes without recreating the provider/chat.
+
+**Recommended action:** Confirm LM Studio lifecycle guarantees. If providers survive config changes, add a configuration fingerprint and rebuild cached services when it changes.
+
+## Priority 3 — Cross-Platform Assumptions
+
+### WSL depends on GNU/coreutils behavior
+
+`src/skillStore.ts` and `src/workspaceFs.ts` use `find -printf` and common GNU utilities.
+
+**Risk:** Minimal or non-GNU distributions may fail even though WSL itself is available.
+
+**Recommended fix:** Detect required commands during capability validation or implement directory listing through a small portable Node/Python helper inside WSL. Keep current troubleshooting documentation meanwhile.
+
+### Windows shell discovery uses fixed install paths
+
+`src/executor.ts` checks specific PowerShell and Git Bash locations.
+
+**Risk:** Portable Git, custom installations, Microsoft Store paths, or PATH-only executables may be missed.
+
+**Recommended fix:** Prefer explicit `shellPath`, then probe PATH safely, then known locations. Preserve actionable errors and deterministic shell selection.
+
+### WSL distribution default relies on command output ordering
+
+`src/wslCapability.ts` treats the first listed distribution as the default when no distribution is configured.
+
+**Risk:** `wsl --list --quiet` ordering may not be a stable default-selection contract across Windows/WSL versions.
+
+**Recommended fix:** Use an explicit default-distribution query if supported by the targeted WSL versions, with tests for fallback behavior.
+
+## Priority 4 — Testing and Delivery
+
+### No repository CI workflow is present
+
+The test and release gates are strong but run locally.
+
+**Risk:** A contributor can push code without running `npm run verify:release`, especially if local hooks are bypassed.
+
+**Recommended fix:** Add CI for supported Node versions and operating systems. At minimum run tests/build on Linux and Windows; retain real WSL validation as a release checkpoint.
+
+### No coverage measurement
+
+The suite contains 29 focused behavioral tests, but there is no line/branch coverage report or threshold.
+
+**Impact:** Untested branches can grow unnoticed, especially in large files such as `src/toolsProvider.ts`, `src/scanner.ts`, and `src/workspaceFs.ts`.
+
+**Recommended action:** Add Node coverage reporting (`node --test --experimental-test-coverage` where supported) and use it diagnostically before imposing thresholds.
+
+### Real platform evidence is manual and not machine-verifiable
+
+`docs/release-checklist.md` and planning release results capture real Host/WSL evidence manually.
+
+**Risk:** Evidence can be mislabeled or omit exact output, as occurred during v1.0 validation.
+
+**Recommended fix:** Add an optional diagnostic tool or script that executes a non-destructive validation bundle and emits structured JSON for attachment to release results.
+
+## Priority 5 — Consistency and Documentation
+
+### Default-path wording may drift
+
+`src/config.ts`, `src/settings.ts`, README, and documentation all describe default skill roots. Environment-specific defaults make this easy to desynchronize.
+
+**Recommended fix:** Add tests for configuration display/default values where the SDK permits, and centralize user-facing default labels near constants.
+
+### Bootstrap is Host-only
+
+`src/index.ts` always calls `bootstrapSkillsDir(DEFAULT_SKILLS_DIR)`, which creates/copies samples only in the Host default skill directory.
+
+**Impact:** WSL users receive environment-aware scanning but no equivalent WSL-native bootstrap.
+
+**Recommended decision:** Either document Host-only bootstrap explicitly or implement WSL bootstrap after effective configuration and capability resolution. Do not silently copy between Host and WSL filesystems.
+
+### Silent persistence failures hide configuration problems
+
+`saveSettings()` and setup helpers suppress filesystem errors.
+
+**Risk:** Settings may appear applied in the UI but fail to persist, with no diagnostic.
+
+**Recommended fix:** Surface best-effort warnings through plugin logging/status while retaining startup resilience.
+
+## Files Requiring Extra Review
+
+- `src/toolsProvider.ts` - largest orchestration/public API file.
+- `src/scanner.ts` - caches, watchers, search, and Host filesystem behavior.
+- `src/workspaceFs.ts` - canonical containment and destructive operations.
+- `src/executor.ts` - arbitrary shell execution and process termination.
+- `src/settings.ts` - global caching, persistence, and environment path interpretation.
+- `src/skillStore.ts` - WSL command assumptions and skill-root containment.
+
+## Positive Controls Already Present
+
+- Strict TypeScript compilation.
+- Cross-platform test runner cleanup.
+- Deterministic public tool-name manifest.
+- Environment-alignment integration test across all public tools.
+- Canonical workspace containment tests.
+- WSL argv/stdin tests.
+- Clean release verifier with artifact and Git drift checks.
+- Real Host and Ubuntu WSL release checklist.
+
+---
+
+*Concern analysis: 2026-07-14*
