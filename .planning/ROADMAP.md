@@ -37,7 +37,7 @@
 
 **Goal:** Add durable workspace lifecycle management and enforce safety around permissions, destructive actions, and active processes.
 
-**Requirements:** PROF-01 through PROF-08; TEST-05
+**Requirements:** PROF-01 through PROF-11; TEST-05, TEST-09
 
 **Deliverables:**
 - Durable workspace profile model and lifecycle actions.
@@ -45,6 +45,9 @@
 - Scoped outside-workspace approvals and destructive confirmations.
 - Active-invocation locking and process-tree state tracking.
 - Advisory repository identity checks.
+- Searchable, incrementally loaded workspace picker with inline add-workspace input.
+- Explicit workspace enable/disable state plus persisted trusted and preferred workspace flags.
+- Safe per-chat workspace switching guarded by validation and active-process state.
 
 ### Phase 7 — Compatibility and Advanced Management
 
@@ -65,5 +68,5 @@
 |---|---|---|
 | 4 — Contextual Workspace UI | Complete (2026-07-14) | 8 |
 | 5 — Backend Guarantees and Validation | Complete (2026-07-14) | 13 |
-| 6 — Workspace Profiles and Safety | Not started | 9 |
+| 6 — Workspace Profiles and Safety | Not started | 13 |
 | 7 — Compatibility and Advanced Management | Not started | 8 |

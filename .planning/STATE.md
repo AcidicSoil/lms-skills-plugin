@@ -33,7 +33,7 @@ The milestone turns the shipped Host/WSL workspace foundation into a visible, en
 - 4 milestone phases planned.
 - 2 milestone phases completed.
 - 6 plans completed across Phases 4–5.
-- 39 milestone requirements defined.
+- 43 milestone requirements defined.
 - Phase 6 is ready for planning.
 
 ## Phase 5 Result

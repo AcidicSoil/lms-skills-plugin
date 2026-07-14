@@ -35,6 +35,9 @@
 - [ ] **PROF-06** — Track workspace ownership and process-tree termination state for active invocations.
 - [ ] **PROF-07** — Support rename, locate, path management, soft delete, restore, permanent delete, and deleted-workspace recovery.
 - [ ] **PROF-08** — Add advisory repository identity checks that fail closed on mismatch without requiring Git.
+- [ ] **PROF-09** — Provide a workspace picker with a dropdown/button list that supports incremental or infinite scrolling, searchable filtering, and an inline input for adding a workspace path or profile.
+- [ ] **PROF-10** — Let users enable or disable workspace functionality and explicitly mark workspace profiles as trusted and/or preferred; trust and preference must be visible, editable, and persisted independently.
+- [ ] **PROF-11** — Allow seamless per-chat workspace switching from the picker while preserving the active environment and enforcing active-invocation, validation, trust, and termination guards before the switch becomes effective.
 
 ## Compatibility and Management
 
@@ -55,10 +58,11 @@
 - [x] **TEST-06** — Cover WSL distribution validation, deletion, misspelling, and default-distribution changes.
 - [ ] **TEST-07** — Cover settings migration, malformed persisted data, downgrade behavior, and non-Windows startup.
 - [x] **TEST-08** — Cover structured recovery errors and user-visible capability states.
+- [ ] **TEST-09** — Cover large workspace lists, incremental loading/filtering, add-workspace input, enable/disable behavior, trusted/preferred persistence, and safe per-chat switching.
 
 ## Traceability
 
 - Phase 4: UI-01 through UI-08
 - Phase 5: BACK-01 through BACK-08, TEST-01, TEST-03, TEST-04, TEST-06, TEST-08
-- Phase 6: PROF-01 through PROF-08, TEST-05
+- Phase 6: PROF-01 through PROF-11, TEST-05, TEST-09
 - Phase 7: COMP-01 through COMP-06, TEST-02, TEST-07
