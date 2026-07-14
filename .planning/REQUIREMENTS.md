@@ -6,24 +6,24 @@
 ## Contextual Workspace UI
 
 - [x] **UI-01** — Provide a contextual Workspace selector showing the active profile name and active environment path.
-- [ ] **UI-02** — Show explicit workspace states for unset, valid, unavailable, moved, and configuration-required conditions.
-- [ ] **UI-03** — Never fall back to the home directory when a configured workspace path is invalid or unavailable.
-- [ ] **UI-04** — Hide or disable Host-only shell controls in WSL mode and WSL-only controls in Host mode, with scope-aware descriptions.
-- [ ] **UI-05** — Use the system default WSL distribution by default and expose a validated distribution override only as an advanced opt-in.
-- [ ] **UI-06** — Surface WSL capability states for ready, executable missing, no distributions, no default distribution, selected distribution unavailable, and pending detection.
-- [ ] **UI-07** — Provide a refresh action for WSL capability and distribution detection.
+- [x] **UI-02** — Show explicit workspace states for unset, valid, unavailable, moved, and configuration-required conditions.
+- [x] **UI-03** — Never fall back to the home directory when a configured workspace path is invalid or unavailable.
+- [x] **UI-04** — Hide or disable Host-only shell controls in WSL mode and WSL-only controls in Host mode, with scope-aware descriptions.
+- [x] **UI-05** — Use the system default WSL distribution by default and expose a validated distribution override only as an advanced opt-in.
+- [x] **UI-06** — Surface WSL capability states for ready, executable missing, no distributions, no default distribution, selected distribution unavailable, and pending detection.
+- [x] **UI-07** — Provide a refresh action for WSL capability and distribution detection.
 - [x] **UI-08** — Clearly distinguish chat-scoped active selection, persistent workspace profiles, and global plugin defaults in UI copy and storage behavior.
 
 ## Backend Guarantees and Validation
 
-- [ ] **BACK-01** — Route every workspace-facing command and filesystem operation through the selected Host or WSL backend.
-- [ ] **BACK-02** — Prevent WSL paths from reaching Host filesystem APIs.
-- [ ] **BACK-03** — Run repository and tool discovery through the same selected backend as command and filesystem operations.
-- [ ] **BACK-04** — Separate structured program/argument execution from raw shell-string execution.
-- [ ] **BACK-05** — Execute WSL raw commands through the WSL shell without applying Host shell settings.
-- [ ] **BACK-06** — Do not tokenize arbitrary raw command strings as structured arguments.
-- [ ] **BACK-07** — Add strict preflight validation for environment, distribution, workspace path, and backend availability before invocation.
-- [ ] **BACK-08** — Return structured, actionable errors for invalid workspace, unavailable environment, missing distribution, incompatible tool, denied approval, identity mismatch, and unresolved process termination.
+- [x] **BACK-01** — Route every workspace-facing command and filesystem operation through the selected Host or WSL backend.
+- [x] **BACK-02** — Prevent WSL paths from reaching Host filesystem APIs.
+- [x] **BACK-03** — Run repository and tool discovery through the same selected backend as command and filesystem operations.
+- [x] **BACK-04** — Separate structured program/argument execution from raw shell-string execution.
+- [x] **BACK-05** — Execute WSL raw commands through the WSL shell without applying Host shell settings.
+- [x] **BACK-06** — Do not tokenize arbitrary raw command strings as structured arguments.
+- [x] **BACK-07** — Add strict preflight validation for environment, distribution, workspace path, and backend availability before invocation.
+- [x] **BACK-08** — Return structured, actionable errors for invalid workspace, unavailable environment, missing distribution, incompatible tool, denied approval, identity mismatch, and unresolved process termination.
 
 ## Workspace Profiles and Safety
 
@@ -47,18 +47,18 @@
 
 ## Verification
 
-- [ ] **TEST-01** — Cover isolated Host and WSL settings behavior in integration tests.
+- [x] **TEST-01** — Cover isolated Host and WSL settings behavior in integration tests.
 - [ ] **TEST-02** — Cover per-chat environment and workspace selection persistence and restoration.
-- [ ] **TEST-03** — Cover backend consistency across command execution, filesystem tools, repository discovery, and skill workflows.
-- [ ] **TEST-04** — Cover strict invalid-path behavior and prove there is no home-directory fallback.
+- [x] **TEST-03** — Cover backend consistency across command execution, filesystem tools, repository discovery, and skill workflows.
+- [x] **TEST-04** — Cover strict invalid-path behavior and prove there is no home-directory fallback.
 - [ ] **TEST-05** — Cover active-invocation workspace-switch and deletion safety.
-- [ ] **TEST-06** — Cover WSL distribution validation, deletion, misspelling, and default-distribution changes.
+- [x] **TEST-06** — Cover WSL distribution validation, deletion, misspelling, and default-distribution changes.
 - [ ] **TEST-07** — Cover settings migration, malformed persisted data, downgrade behavior, and non-Windows startup.
-- [ ] **TEST-08** — Cover structured recovery errors and user-visible capability states.
+- [x] **TEST-08** — Cover structured recovery errors and user-visible capability states.
 
 ## Traceability
 
 - Phase 4: UI-01 through UI-08
-- Phase 5: BACK-01 through BACK-08, TEST-01 through TEST-04, TEST-06, TEST-08
+- Phase 5: BACK-01 through BACK-08, TEST-01, TEST-03, TEST-04, TEST-06, TEST-08
 - Phase 6: PROF-01 through PROF-08, TEST-05
 - Phase 7: COMP-01 through COMP-06, TEST-02, TEST-07

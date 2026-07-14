@@ -20,11 +20,11 @@
 - WSL capability detection and refresh.
 - Clear distinction between chat scope, profile persistence, and global defaults.
 
-### Phase 5 — Backend Guarantees and Validation
+### Phase 5 — Backend Guarantees and Validation ✓ (completed 2026-07-14)
 
 **Goal:** Make every invocation use one coherent backend with strict preflight checks, correct shell semantics, and observable failures.
 
-**Requirements:** BACK-01 through BACK-08; TEST-01 through TEST-04, TEST-06, TEST-08
+**Requirements:** BACK-01 through BACK-08; TEST-01, TEST-03, TEST-04, TEST-06, TEST-08
 
 **Deliverables:**
 - Unified Host/WSL routing across command, filesystem, repository, and skill workflows.
@@ -64,6 +64,6 @@
 | Phase | Status | Requirements |
 |---|---|---|
 | 4 — Contextual Workspace UI | Complete (2026-07-14) | 8 |
-| 5 — Backend Guarantees and Validation | Not started | 14 |
+| 5 — Backend Guarantees and Validation | Complete (2026-07-14) | 13 |
 | 6 — Workspace Profiles and Safety | Not started | 9 |
 | 7 — Compatibility and Advanced Management | Not started | 8 |
