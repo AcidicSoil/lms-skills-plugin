@@ -164,7 +164,7 @@ Keep this as project-local configuration. Do not add browser workflow rules to t
 
 ## Safe CLI update library references
 
-The companion document `docs/CLI-Tools-Safely-Update-Projects.md` lists common packages and patterns for non-destructive project updates. Use it when designing or reviewing setup helpers and project-update CLIs.
+Use the package and pattern references below when designing or reviewing non-destructive setup helpers and project-update CLIs.
 
 JavaScript and TypeScript packages mentioned:
 
