@@ -49,7 +49,7 @@
 - Explicit workspace enable/disable state plus persisted trusted and preferred workspace flags.
 - Safe per-chat workspace switching guarded by validation and active-process state.
 
-### Phase 7 — Compatibility and Advanced Management
+### Phase 7 — Compatibility and Advanced Management ✓ (completed 2026-07-14)
 
 **Goal:** Preserve compatibility while adding migration, bounded audit controls, and capability-gated restoration behavior.
 
@@ -69,4 +69,4 @@
 | 4 — Contextual Workspace UI | Complete (2026-07-14) | 8 |
 | 5 — Backend Guarantees and Validation | Complete (2026-07-14) | 13 |
 | 6 — Workspace Profiles and Safety | Complete (2026-07-14) | 13 |
-| 7 — Compatibility and Advanced Management | Not started | 8 |
+| 7 — Compatibility and Advanced Management | Complete (2026-07-14) | 8 |

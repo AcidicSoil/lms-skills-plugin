@@ -41,22 +41,22 @@
 
 ## Compatibility and Management
 
-- [ ] **COMP-01** — Provide schema migration for existing settings and malformed-data handling without silently discarding recoverable configuration.
-- [ ] **COMP-02** — Define downgrade behavior and safe non-Windows behavior for WSL-specific settings.
-- [ ] **COMP-03** — Provide workspace-specific approval-history controls with bounded retention.
-- [ ] **COMP-04** — Exclude command outputs, file contents, and full command strings from approval-history records.
-- [ ] **COMP-05** — Keep workspace persistence independent of host session APIs.
-- [ ] **COMP-06** — Expose resume behavior only when stable supported APIs exist; never duplicate transcripts as a workaround.
+- [x] **COMP-01** — Provide schema migration for existing settings and malformed-data handling without silently discarding recoverable configuration.
+- [x] **COMP-02** — Define downgrade behavior and safe non-Windows behavior for WSL-specific settings.
+- [x] **COMP-03** — Provide workspace-specific approval-history controls with bounded retention.
+- [x] **COMP-04** — Exclude command outputs, file contents, and full command strings from approval-history records.
+- [x] **COMP-05** — Keep workspace persistence independent of host session APIs.
+- [x] **COMP-06** — Expose resume behavior only when stable supported APIs exist; never duplicate transcripts as a workaround.
 
 ## Verification
 
 - [x] **TEST-01** — Cover isolated Host and WSL settings behavior in integration tests.
-- [ ] **TEST-02** — Cover per-chat environment and workspace selection persistence and restoration.
+- [x] **TEST-02** — Cover per-chat environment and workspace selection persistence and restoration.
 - [x] **TEST-03** — Cover backend consistency across command execution, filesystem tools, repository discovery, and skill workflows.
 - [x] **TEST-04** — Cover strict invalid-path behavior and prove there is no home-directory fallback.
 - [x] **TEST-05** — Cover active-invocation workspace-switch and deletion safety.
 - [x] **TEST-06** — Cover WSL distribution validation, deletion, misspelling, and default-distribution changes.
-- [ ] **TEST-07** — Cover settings migration, malformed persisted data, downgrade behavior, and non-Windows startup.
+- [x] **TEST-07** — Cover settings migration, malformed persisted data, downgrade behavior, and non-Windows startup.
 - [x] **TEST-08** — Cover structured recovery errors and user-visible capability states.
 - [x] **TEST-09** — Cover large workspace lists, incremental loading/filtering, add-workspace input, enable/disable behavior, trusted/preferred persistence, and safe per-chat switching.
 
