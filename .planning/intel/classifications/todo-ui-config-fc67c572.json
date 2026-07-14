@@ -1,0 +1,26 @@
+{
+  "source_path": "/home/user/projects/lms-skills-plugin/todo-ui-config.md",
+  "type": "PRD",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "UI and workspace configuration gaps",
+  "summary": "Defines product requirements and acceptance gaps for contextual workspace selection, Host/WSL routing, validation, persistence, lifecycle, permissions, errors, and tests.",
+  "scope": [
+    "sidebar configuration",
+    "workspace profiles",
+    "Host execution",
+    "WSL execution",
+    "chat-scoped selection",
+    "workspace validation",
+    "capability detection",
+    "permissions and audit",
+    "session restoration",
+    "migration",
+    "error contracts",
+    "integration tests"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": "Classified as PRD because the document is dominated by user-visible requirements, expected behavior, priorities, and observable acceptance criteria despite lacking formal user-story headings."
+}

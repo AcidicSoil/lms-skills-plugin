@@ -1,39 +1,45 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: host-wsl-execution-and-project-workspaces
-current_phase: null
-current_phase_name: null
-status: milestone_complete
+milestone: v1.1
+milestone_name: additional-polish
+current_phase: 4
+current_phase_name: contextual-workspace-ui
+status: ready_to_plan
 last_updated: "2026-07-14T00:00:00.000Z"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Current Position
 
-**Milestone:** v1.0 — Host/WSL Execution and Project Workspaces
-**Status:** Complete, archived, and ready to tag
-**Next command:** `$gsd-new-milestone`
+**Milestone:** v1.1 — Additional Polish  
+**Current phase:** 4 — Contextual Workspace UI  
+**Status:** Ready to plan  
+**Next command:** `$gsd-plan-phase 4`
 
-## Completion Summary
+## Milestone Scope
 
-- 3 phases completed.
-- 9 plans completed.
-- 24 v1 requirements completed.
-- 29 automated tests passed.
-- Real Windows Host and Ubuntu WSL release workflows passed.
-- Skill-boundary validation passed.
+The milestone turns the shipped Host/WSL workspace foundation into a visible, environment-aware, strongly validated, lifecycle-safe user experience. Scope was ingested from `todo-ui-config.md` and merged without reopening completed v1.0 requirements.
 
-## Closeout Override
+## Progress
 
-Completion was explicitly approved without a standalone milestone-audit artifact and with stale Phase 2 verification metadata. Final Phase 3 integrated verification and the current release gate were accepted as the closeout basis.
+- 4 phases planned.
+- 0 phases completed.
+- 39 milestone requirements defined.
+- First phase ready for planning.
+
+## Conflict Status
+
+- Blockers: 0
+- Warnings: 0
+- Informational overlaps: 1
+- Report: `.planning/INGEST-CONFLICTS.md`
 
 ## Archives
 
@@ -42,7 +48,4 @@ Completion was explicitly approved without a standalone milestone-audit artifact
 
 ## Last Activity
 
-2026-07-14 — Extracted source-attributed learnings for Phases 1–3 into per-phase `LEARNINGS.md` files.
-
----
-*Last updated: 2026-07-13 after v1.0 milestone archival*
+2026-07-14 — Ingested `todo-ui-config.md` and created the v1.1 Additional Polish requirements and roadmap.
