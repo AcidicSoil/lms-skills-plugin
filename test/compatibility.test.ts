@@ -13,7 +13,9 @@ const EXPECTED_TOOL_NAMES = [
   "list_skills", "read_skill_file", "list_skill_files", "read_file", "write_file",
   "patch_file", "append_to_file", "create_directory", "list_directory", "delete_file",
   "move_file", "rename_file", "change_directory", "get_current_directory", "run_command",
-  "get_workspace_status", "configure_host_workspace",
+  "get_workspace_status", "list_workspaces", "add_workspace", "update_workspace",
+  "set_workspaces_enabled", "switch_workspace", "delete_workspace", "restore_workspace",
+  "configure_host_workspace",
 ];
 
 function controller(workingDirectory: string): PluginController {

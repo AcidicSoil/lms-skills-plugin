@@ -13,13 +13,16 @@ import { readAbsolutePath, listAbsoluteDirectory } from "./scanner";
 import { createSkillStore, type SkillStore } from "./skillStore";
 import type { PluginController } from "./pluginTypes";
 import type { DirectoryEntry, EffectiveConfig, WorkspaceContext } from "./types";
-import { resolveWorkspaceContext } from "./workspace";
+import { deriveWorkspaceId, resolveWorkspaceContext } from "./workspace";
 import { createWorkspaceFileSystem, type WorkspaceFileSystem } from "./workspaceFs";
 import { deriveWorkspaceStatus } from "./workspaceSelection";
 import { detectWslCapability, type WslCapability } from "./wslCapability";
 import { createWorkspaceBackend, type WorkspaceBackend } from "./backend";
 import { runPreflight } from "./preflight";
 import { RecoveryFailure, mapUnknownToRecovery, recoveryError, toRecoveryResponse } from "./recoveryError";
+import { WorkspaceInvocationRegistry } from "./invocationRegistry";
+import { addWorkspace, listWorkspaces, permanentlyDeleteWorkspace, restoreWorkspace, softDeleteWorkspace, updateWorkspace } from "./workspaceCatalog";
+import { validateRepositoryIdentity } from "./repositoryIdentity";
 
 function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
   if (entries.length === 0) return "Directory is empty.";
@@ -52,6 +55,7 @@ export interface ToolsProviderDependencies {
   getSettings?: typeof getPersistedSettings;
   updateSettings?: typeof updatePersistedSettings;
   createBackend?: typeof createWorkspaceBackend;
+  invocationRegistry?: WorkspaceInvocationRegistry;
 }
 
 export const PUBLIC_TOOL_NAMES = [
@@ -71,6 +75,13 @@ export const PUBLIC_TOOL_NAMES = [
   "get_current_directory",
   "run_command",
   "get_workspace_status",
+  "list_workspaces",
+  "add_workspace",
+  "update_workspace",
+  "set_workspaces_enabled",
+  "switch_workspace",
+  "delete_workspace",
+  "restore_workspace",
   "configure_host_workspace",
 ] as const;
 
@@ -83,6 +94,8 @@ export async function toolsProvider(
   let workspaceFsPromise: Promise<WorkspaceFileSystem> | undefined;
   let skillStore: SkillStore | undefined;
   let activeCommandDirectory: string | undefined;
+  let activeWorkspaceProfileId = (dependencies.getSettings ?? getPersistedSettings)().activeWorkspaceProfileId;
+  const invocationRegistry = dependencies.invocationRegistry ?? new WorkspaceInvocationRegistry();
 
   const getSkillStore = (): SkillStore => {
     if (!skillStore) {
@@ -98,11 +111,27 @@ export async function toolsProvider(
 
   const getWorkspace = (): Promise<WorkspaceContext> => {
     if (!workspacePromise) {
-      const config = resolveEffectiveConfig(ctl);
-      const resolver = dependencies.resolveWorkspace
-        ?? ((controller: PluginController, cfg: EffectiveConfig) =>
-          resolveWorkspaceContext(controller.getWorkingDirectory(), cfg));
-      workspacePromise = resolver(ctl, config);
+      const currentConfig = resolveEffectiveConfig(ctl);
+      if (dependencies.resolveWorkspace) {
+        workspacePromise = dependencies.resolveWorkspace(ctl, currentConfig);
+      } else {
+        const persisted = (dependencies.getSettings ?? getPersistedSettings)();
+        const selected = activeWorkspaceProfileId
+          ? (persisted.workspaceProfiles ?? []).find((profile) => profile.id === activeWorkspaceProfileId)
+          : undefined;
+        const selectedPath = currentConfig.executionEnvironment === "wsl" ? selected?.wslPath : selected?.hostPath;
+        if (selected && selectedPath && !selected.deleted && selected.enabled !== false) {
+          workspacePromise = Promise.resolve({
+            workspaceId: deriveWorkspaceId(selectedPath, currentConfig.executionEnvironment, currentConfig.wslDistribution),
+            providerWorkingDirectory: selectedPath,
+            executionEnvironment: currentConfig.executionEnvironment,
+            ...(currentConfig.wslDistribution ? { wslDistribution: currentConfig.wslDistribution } : {}),
+            nativeRoot: selectedPath,
+          });
+        } else {
+          workspacePromise = resolveWorkspaceContext(ctl.getWorkingDirectory(), currentConfig);
+        }
+      }
     }
     return workspacePromise;
   };
@@ -728,13 +757,20 @@ export async function toolsProvider(
         const commandCwd = await resolveCommandDirectory(cwd);
         const timeoutMs = timeout_ms ?? EXEC_DEFAULT_TIMEOUT_MS;
         const backend = await getBackend();
-        const result = await backend.runCommand(command, {
-          cwd: commandCwd,
-          timeoutMs,
-          shellPath: config.shellPath || undefined,
-          windowsShell: config.windowsShell,
-          env,
-        });
+        const releaseInvocation = invocationRegistry.acquire({ chatId: "current-chat", profileId: activeWorkspaceProfileId, workspaceId: workspace.workspaceId });
+        let result;
+        try {
+          result = await backend.runCommand(command, {
+            cwd: commandCwd,
+            timeoutMs,
+            shellPath: config.shellPath || undefined,
+            windowsShell: config.windowsShell,
+            env,
+          });
+          if (result.terminationIncomplete) invocationRegistry.markTerminationUnresolved(workspace.workspaceId);
+        } finally {
+          releaseInvocation();
+        }
         return {
           stdout: result.stdout,
           stderr: result.stderr,
@@ -749,6 +785,109 @@ export async function toolsProvider(
           ...(result.timedOut ? { hint: `Command exceeded the ${timeoutMs}ms timeout.` } : {}),
         };
       } catch (error) { return failure(error); }
+    },
+  });
+
+  const listWorkspacesTool = tool({
+    name: "list_workspaces",
+    description: "Search and incrementally load workspace profiles for a picker UI.",
+    parameters: { query: z.string().optional(), cursor: z.string().optional(), limit: z.number().int().min(1).max(100).optional(), include_deleted: z.boolean().optional() },
+    implementation: async ({ query, cursor, limit, include_deleted }) => {
+      const persisted = readSettings();
+      const page = listWorkspaces(persisted.workspaceProfiles ?? [], { query, cursor, limit, includeDeleted: include_deleted });
+      return { success: true, workspacesEnabled: persisted.workspacesEnabled !== false, activeWorkspaceProfileId, ...page };
+    },
+  });
+
+  const addWorkspaceTool = tool({
+    name: "add_workspace",
+    description: "Add a trusted or untrusted workspace profile to the picker.",
+    parameters: { name: z.string().min(1), host_path: z.string().optional(), wsl_path: z.string().optional(), trusted: z.boolean().optional(), preferred: z.boolean().optional(), enabled: z.boolean().optional() },
+    implementation: async ({ name, host_path, wsl_path, trusted, preferred, enabled }) => {
+      const persisted = readSettings();
+      const profiles = addWorkspace(persisted.workspaceProfiles ?? [], { name, hostPath: host_path, wslPath: wsl_path, trusted, preferred, enabled });
+      const next = updateSettings({ workspaceProfiles: profiles });
+      return { success: true, profile: next.workspaceProfiles?.at(-1) };
+    },
+  });
+
+  const updateWorkspaceTool = tool({
+    name: "update_workspace",
+    description: "Rename, locate, enable, trust, or prefer a workspace profile.",
+    parameters: { profile_id: z.string().min(1), name: z.string().optional(), host_path: z.string().optional(), wsl_path: z.string().optional(), trusted: z.boolean().optional(), preferred: z.boolean().optional(), enabled: z.boolean().optional(), repository_identity: z.string().optional() },
+    implementation: async ({ profile_id, name, host_path, wsl_path, trusted, preferred, enabled, repository_identity }) => {
+      const persisted = readSettings();
+      const profiles = updateWorkspace(persisted.workspaceProfiles ?? [], profile_id, { ...(name !== undefined ? { name } : {}), ...(host_path !== undefined ? { hostPath: host_path } : {}), ...(wsl_path !== undefined ? { wslPath: wsl_path } : {}), ...(trusted !== undefined ? { trusted } : {}), ...(preferred !== undefined ? { preferred } : {}), ...(enabled !== undefined ? { enabled } : {}), ...(repository_identity !== undefined ? { repositoryIdentity: repository_identity } : {}) });
+      updateSettings({ workspaceProfiles: profiles });
+      return { success: true, profile: profiles.find((profile) => profile.id === profile_id) };
+    },
+  });
+
+  const setWorkspacesEnabledTool = tool({
+    name: "set_workspaces_enabled",
+    description: "Enable or disable workspace profile functionality.",
+    parameters: { enabled: z.boolean() },
+    implementation: async ({ enabled }) => ({ success: true, workspacesEnabled: updateSettings({ workspacesEnabled: enabled }).workspacesEnabled }),
+  });
+
+  const switchWorkspaceTool = tool({
+    name: "switch_workspace",
+    description: "Safely switch the active workspace for this chat after trust, identity, lifecycle, and invocation checks.",
+    parameters: { profile_id: z.string().min(1), actual_repository_identity: z.string().optional() },
+    implementation: async ({ profile_id, actual_repository_identity }) => {
+      const persisted = readSettings();
+      if (persisted.workspacesEnabled === false) return toRecoveryResponse(recoveryError("workspace-disabled", "Workspace functionality is disabled."));
+      const profile = (persisted.workspaceProfiles ?? []).find((item) => item.id === profile_id);
+      if (!profile) return toRecoveryResponse(recoveryError("workspace-invalid", "Workspace profile was not found."));
+      if (profile.deleted) return toRecoveryResponse(recoveryError("profile-deleted", "Workspace profile is deleted."));
+      if (profile.enabled === false) return toRecoveryResponse(recoveryError("workspace-disabled", "Workspace profile is disabled."));
+      if (!profile.trusted) return toRecoveryResponse(recoveryError("trust-required", "Workspace profile is not trusted."));
+      const candidatePath = config.executionEnvironment === "wsl" ? profile.wslPath : profile.hostPath;
+      if (!candidatePath) return toRecoveryResponse(recoveryError("workspace-invalid", `No ${config.executionEnvironment} path is configured.`));
+      const identity = validateRepositoryIdentity(profile.repositoryIdentity, actual_repository_identity);
+      if (identity.status === "mismatch") return toRecoveryResponse(recoveryError("identity-mismatch", "Workspace repository identity does not match."));
+      if (activeWorkspaceProfileId) {
+        const current = (persisted.workspaceProfiles ?? []).find((item) => item.id === activeWorkspaceProfileId);
+        const currentPath = config.executionEnvironment === "wsl" ? current?.wslPath : current?.hostPath;
+        if (currentPath) {
+          const currentId = deriveWorkspaceId(currentPath, config.executionEnvironment, config.wslDistribution);
+          const guard = invocationRegistry.canMutate(currentId);
+          if (!guard.ok) return toRecoveryResponse(recoveryError(guard.reason === "active" ? "workspace-busy" : "termination-unresolved", "The current workspace cannot be switched yet."));
+        }
+      }
+      const previousProfileId = activeWorkspaceProfileId;
+      activeWorkspaceProfileId = profile_id;
+      updateSettings({ activeWorkspaceProfileId: profile_id });
+      workspacePromise = undefined; backendPromise = undefined; workspaceFsPromise = undefined; activeCommandDirectory = undefined;
+      return { success: true, previousProfileId, activeWorkspaceProfileId: profile_id, environment: config.executionEnvironment, path: candidatePath };
+    },
+  });
+
+  const deleteWorkspaceTool = tool({
+    name: "delete_workspace",
+    description: "Soft-delete or permanently delete a workspace profile when it is not active or busy.",
+    parameters: { profile_id: z.string().min(1), permanent: z.boolean().optional() },
+    implementation: async ({ profile_id, permanent }) => {
+      const persisted = readSettings();
+      const profile = (persisted.workspaceProfiles ?? []).find((item) => item.id === profile_id);
+      if (!profile) return toRecoveryResponse(recoveryError("workspace-invalid", "Workspace profile was not found."));
+      const profilePath = config.executionEnvironment === "wsl" ? profile.wslPath : profile.hostPath;
+      if (profilePath) {
+        const guard = invocationRegistry.canMutate(deriveWorkspaceId(profilePath, config.executionEnvironment, config.wslDistribution));
+        if (!guard.ok) return toRecoveryResponse(recoveryError(guard.reason === "active" ? "workspace-busy" : "termination-unresolved", "Workspace is busy."));
+      }
+      const profiles = permanent ? permanentlyDeleteWorkspace(persisted.workspaceProfiles ?? [], profile_id, activeWorkspaceProfileId) : softDeleteWorkspace(persisted.workspaceProfiles ?? [], profile_id);
+      updateSettings({ workspaceProfiles: profiles });
+      return { success: true, permanent: permanent === true, profileId: profile_id };
+    },
+  });
+
+  const restoreWorkspaceTool = tool({
+    name: "restore_workspace",
+    description: "Restore a soft-deleted workspace profile.",
+    parameters: { profile_id: z.string().min(1) },
+    implementation: async ({ profile_id }) => {
+      const persisted = readSettings(); const profiles = restoreWorkspace(persisted.workspaceProfiles ?? [], profile_id); updateSettings({ workspaceProfiles: profiles }); return { success: true, profile: profiles.find((item) => item.id === profile_id) };
     },
   });
 
@@ -769,6 +908,13 @@ export async function toolsProvider(
     getCurrentDirectoryTool,
     runCommandTool,
     getWorkspaceStatusTool,
+    listWorkspacesTool,
+    addWorkspaceTool,
+    updateWorkspaceTool,
+    setWorkspacesEnabledTool,
+    switchWorkspaceTool,
+    deleteWorkspaceTool,
+    restoreWorkspaceTool,
     ...(config.executionEnvironment === "wsl" ? [configureWslWorkspaceTool, refreshWslCapabilityTool] : [configureHostWorkspaceTool]),
   ];
 }
