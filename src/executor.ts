@@ -28,6 +28,17 @@ export interface ExecResult {
   terminationIncomplete?: boolean;
 }
 
+export interface RawCommandRequest {
+  kind: "raw-command";
+  command: string;
+}
+
+export interface StructuredProgramRequest {
+  kind: "structured-program";
+  program: string;
+  args: string[];
+}
+
 export interface ExecOptions {
   cwd?: string;
   timeoutMs?: number;
@@ -178,33 +189,28 @@ export function execCommand(command: string, options: ExecOptions = {}): Promise
   });
 }
 
+export function buildProgramExecutionSpec(program: string, args: string[], options: ExecProgramOptions): ExecutionSpec {
+  const environment = options.executionEnvironment ?? "host";
+  if (environment === "wsl") {
+    const validation = resolveEnvironmentPath(options.cwd, "wsl");
+    if (!validation.ok || !validation.resolvedPath) throw new Error(validation.error ?? "Invalid WSL working directory.");
+    const spawnArgs: string[] = [];
+    if (options.wslDistribution) spawnArgs.push("--distribution", options.wslDistribution);
+    spawnArgs.push("--cd", validation.resolvedPath, "--exec", program, ...args);
+    return { program: "wsl.exe", args: spawnArgs, platform: "windows", environment, shell: program };
+  }
+  return { program, args: [...args], cwd: resolveCwd(options.cwd), platform: detectPlatform(), environment, shell: program };
+}
+
 export function execProgram(
   program: string,
   args: string[],
   options: ExecProgramOptions,
 ): Promise<ExecResult> {
   const environment = options.executionEnvironment ?? "host";
-  let spawnProgram = program;
-  let spawnArgs = args;
-  let cwd: string | undefined;
-  let platform = detectPlatform();
-
+  let spec: ExecutionSpec;
   try {
-    if (environment === "wsl") {
-      const validation = resolveEnvironmentPath(options.cwd, "wsl");
-      if (!validation.ok || !validation.resolvedPath) {
-        throw new Error(validation.error ?? "Invalid WSL working directory.");
-      }
-      spawnProgram = "wsl.exe";
-      spawnArgs = [];
-      if (options.wslDistribution) {
-        spawnArgs.push("--distribution", options.wslDistribution);
-      }
-      spawnArgs.push("--cd", validation.resolvedPath, "--exec", program, ...args);
-      platform = "windows";
-    } else {
-      cwd = resolveCwd(options.cwd);
-    }
+    spec = buildProgramExecutionSpec(program, args, options);
   } catch (error) {
     return Promise.resolve({
       stdout: "",
@@ -212,7 +218,7 @@ export function execProgram(
       exitCode: 1,
       timedOut: false,
       shell: program,
-      platform,
+      platform: detectPlatform(),
       environment,
     });
   }
@@ -230,11 +236,11 @@ export function execProgram(
     };
     let proc: childProcess.ChildProcess;
     try {
-      proc = (options.spawn ?? childProcess.spawn)(spawnProgram, spawnArgs, {
-        cwd,
+      proc = (options.spawn ?? childProcess.spawn)(spec.program, spec.args, {
+        cwd: spec.cwd,
         env,
         windowsHide: true,
-        detached: platform !== "windows",
+        detached: spec.platform !== "windows",
         stdio: ["pipe", "pipe", "pipe"],
       });
     } catch (error) {
@@ -243,9 +249,9 @@ export function execProgram(
         stderr: error instanceof Error ? error.message : String(error),
         exitCode: 1,
         timedOut: false,
-        shell: program,
-        platform,
-        environment,
+        shell: spec.shell,
+        platform: spec.platform,
+        environment: spec.environment,
       });
       return;
     }
@@ -265,7 +271,7 @@ export function execProgram(
     const timer = setTimeout(() => {
       timedOut = true;
       try {
-        if (platform === "windows" && proc.pid) {
+        if (spec.platform === "windows" && proc.pid) {
           childProcess.spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true });
         } else if (proc.pid) {
           process.kill(-proc.pid, "SIGKILL");
@@ -288,9 +294,9 @@ export function execProgram(
         stderr: truncate(error ?? stderr),
         exitCode,
         timedOut,
-        shell: program,
-        platform,
-        environment,
+        shell: spec.shell,
+        platform: spec.platform,
+        environment: spec.environment,
         ...(timedOut ? { terminationIncomplete } : {}),
       });
     };

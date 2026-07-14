@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildExecutionSpec, execCommand } from "../src/executor";
+import { buildExecutionSpec, buildProgramExecutionSpec, execCommand } from "../src/executor";
 
 test("WSL execution preserves command as one shell argument", () => {
   const command = `printf '%s' "a b; $HOME —"`;
@@ -32,4 +32,19 @@ test("WSL ignores Host shell selection and always uses Bash", () => {
   assert.equal(spec.program, "wsl.exe");
   assert.equal(spec.shell, "/bin/bash");
   assert.deepEqual(spec.args.slice(-3), ["/bin/bash", "-lc", "printf ok"]);
+});
+
+test("structured WSL execution bypasses Bash and preserves argv", () => {
+  const spec = buildProgramExecutionSpec("git", ["status", "--short", "path with spaces"], {
+    cwd: "/home/me/work",
+    executionEnvironment: "wsl",
+    wslDistribution: "Ubuntu",
+  });
+  assert.deepEqual(spec, {
+    program: "wsl.exe",
+    args: ["--distribution", "Ubuntu", "--cd", "/home/me/work", "--exec", "git", "status", "--short", "path with spaces"],
+    platform: "windows",
+    environment: "wsl",
+    shell: "git",
+  });
 });
