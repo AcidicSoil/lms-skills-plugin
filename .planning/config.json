@@ -17,7 +17,7 @@
     "research": true,
     "plan_check": true,
     "verifier": true,
-    "nyquist_validation": false,
+    "nyquist_validation": true,
     "auto_advance": true,
     "node_repair": true,
     "node_repair_budget": 2,
