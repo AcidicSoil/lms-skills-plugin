@@ -5,14 +5,14 @@
 
 ## Contextual Workspace UI
 
-- [ ] **UI-01** — Provide a contextual Workspace selector showing the active profile name and active environment path.
+- [x] **UI-01** — Provide a contextual Workspace selector showing the active profile name and active environment path.
 - [ ] **UI-02** — Show explicit workspace states for unset, valid, unavailable, moved, and configuration-required conditions.
 - [ ] **UI-03** — Never fall back to the home directory when a configured workspace path is invalid or unavailable.
 - [ ] **UI-04** — Hide or disable Host-only shell controls in WSL mode and WSL-only controls in Host mode, with scope-aware descriptions.
 - [ ] **UI-05** — Use the system default WSL distribution by default and expose a validated distribution override only as an advanced opt-in.
 - [ ] **UI-06** — Surface WSL capability states for ready, executable missing, no distributions, no default distribution, selected distribution unavailable, and pending detection.
 - [ ] **UI-07** — Provide a refresh action for WSL capability and distribution detection.
-- [ ] **UI-08** — Clearly distinguish chat-scoped active selection, persistent workspace profiles, and global plugin defaults in UI copy and storage behavior.
+- [x] **UI-08** — Clearly distinguish chat-scoped active selection, persistent workspace profiles, and global plugin defaults in UI copy and storage behavior.
 
 ## Backend Guarantees and Validation
 

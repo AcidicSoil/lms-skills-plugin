@@ -6,7 +6,7 @@
 
 ## Active Milestone: v1.1 — Additional Polish
 
-### Phase 4 — Contextual Workspace UI
+### Phase 4 — Contextual Workspace UI ✓ (completed 2026-07-14)
 
 **Goal:** Make workspace and environment selection visible, understandable, and recoverable in the plugin UI.
 
@@ -63,7 +63,7 @@
 
 | Phase | Status | Requirements |
 |---|---|---|
-| 4 — Contextual Workspace UI | Not started | 8 |
+| 4 — Contextual Workspace UI | Complete (2026-07-14) | 8 |
 | 5 — Backend Guarantees and Validation | Not started | 14 |
 | 6 — Workspace Profiles and Safety | Not started | 9 |
 | 7 — Compatibility and Advanced Management | Not started | 8 |
