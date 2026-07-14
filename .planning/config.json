@@ -98,21 +98,6 @@
   },
   "resolve_model_ids": "omit",
   "review": {
-    "reviewer_instances": {
-      "opencode-ollama": {
-        "cli": "opencode",
-        "model": "ollama/qwen3.5:4b",
-        "agent": "review"
-      }
-    },
-    "default_reviewers": [
-      "opencode-ollama"
-    ]
-  },
-  "model_policy": {
-    "provider": [
-      "opencode"
-    ],
-    "budget": "low"
+    "default_reviewers": ["opencode"]
   }
 }
