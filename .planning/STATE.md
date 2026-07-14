@@ -5,7 +5,7 @@ milestone_name: host-wsl-execution-and-project-workspaces
 current_phase: null
 current_phase_name: null
 status: milestone_complete
-last_updated: "2026-07-13T23:59:59.000Z"
+last_updated: "2026-07-14T00:00:00.000Z"
 progress:
   total_phases: 3
   completed_phases: 3
@@ -39,6 +39,10 @@ Completion was explicitly approved without a standalone milestone-audit artifact
 
 - `.planning/milestones/v1.0-ROADMAP.md`
 - `.planning/milestones/v1.0-REQUIREMENTS.md`
+
+## Last Activity
+
+2026-07-14 — Extracted source-attributed learnings for Phases 1–3 into per-phase `LEARNINGS.md` files.
 
 ---
 *Last updated: 2026-07-13 after v1.0 milestone archival*
