@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: additional-polish
-current_phase: 6
-current_phase_name: workspace-profiles-and-safety
-status: ready_to_plan
-last_updated: "2026-07-14T21:23:28.097Z"
+milestone_name: — Additional Polish
+current_phase: 6 — Workspace Profiles and Safety
+status: executing
+last_updated: "2026-07-14T21:37:27.822Z"
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 6
   completed_plans: 6
   percent: 50
+current_phase_name: workspace-profiles-and-safety
 ---
 
 # Project State
@@ -21,7 +21,7 @@ progress:
 **Milestone:** v1.1 — Additional Polish
 **Completed phase:** 5 — Backend Guarantees and Validation
 **Current phase:** 6 — Workspace Profiles and Safety
-**Status:** Ready to plan
+**Status:** Ready to execute
 **Next command:** `$gsd-plan-phase 6`
 
 ## Milestone Scope
