@@ -17,6 +17,24 @@ test("preflight accepts a valid invocation context", () => {
   assert.equal(result.ok, true);
 });
 
+test("preflight enforces path-scoped outside-workspace approvals", () => {
+  const denied = runPreflight({ environment: "host", workspace: valid, outsideWorkspacePath: "/tmp/a", outsideWorkspaceScope: "write", pathGrant: { path: "/tmp/a", scope: "read" } });
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.equal(denied.error.code, "approval-denied");
+  const allowed = runPreflight({ environment: "host", workspace: valid, outsideWorkspacePath: "/tmp/a", outsideWorkspaceScope: "read", pathGrant: { path: "/tmp/a", scope: "write" } });
+  assert.equal(allowed.ok, true);
+});
+
+test("preflight requires destructive confirmation with affected path preview", () => {
+  const denied = runPreflight({ environment: "host", workspace: valid, destructive: true, destructiveConfirmed: false, affectedPaths: ["/work/demo/file.txt"] });
+  assert.equal(denied.ok, false);
+  if (!denied.ok) {
+    assert.equal(denied.error.code, "destructive-confirmation-required");
+    assert.match(denied.error.message, /file\.txt/);
+  }
+  assert.equal(runPreflight({ environment: "host", workspace: valid, destructive: true, destructiveConfirmed: true, affectedPaths: ["/work/demo/file.txt"] }).ok, true);
+});
+
 for (const [name, input, expected] of [
   ["workspace invalid", { environment: "host", workspace: { ...valid, code: "unavailable", executable: false, message: "missing" } }, "workspace-invalid"],
   ["environment unavailable", { environment: "wsl", workspace: { ...valid, environment: "wsl" }, capability: { status: "wsl-unavailable", error: "missing" } }, "environment-unavailable"],
