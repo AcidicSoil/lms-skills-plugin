@@ -69,8 +69,12 @@ function capabilityError(capability: Exclude<WslCapability, { status: "ready" }>
       return new Error("WSL execution is only available on Windows.");
     case "wsl-unavailable":
       return new Error(`WSL is unavailable: ${capability.error}`);
+    case "pending":
+      return new Error("WSL capability detection is still pending.");
     case "no-distribution":
       return new Error("No WSL distribution is installed.");
+    case "no-default-distribution":
+      return new Error(`No default WSL distribution is configured. Available: ${capability.available.join(", ") || "none"}.`);
     case "distribution-unavailable":
       return new Error(`WSL distribution '${capability.requested}' is unavailable. Available: ${capability.available.join(", ") || "none"}.`);
   }
