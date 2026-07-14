@@ -11,7 +11,7 @@ import {
   CONFIG_CACHE_TTL_MS,
 } from "./constants";
 import { configSchematics } from "./config";
-import type { PersistedSettings, EffectiveConfig } from "./types";
+import type { PersistedSettings, EffectiveConfig, WorkspaceProfile } from "./types";
 import type { PluginController } from "./pluginTypes";
 
 const DEFAULTS: PersistedSettings = {
@@ -46,6 +46,23 @@ function parseSkillsPaths(raw: string, environment: "host" | "wsl"): string[] {
     .filter(Boolean);
 }
 
+
+function normalizeProfiles(value: unknown): WorkspaceProfile[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const profile = item as Partial<WorkspaceProfile>;
+    if (typeof profile.id !== "string" || !profile.id.trim() || typeof profile.name !== "string" || !profile.name.trim()) return [];
+    return [{
+      id: profile.id.trim(),
+      name: profile.name.trim(),
+      hostPath: typeof profile.hostPath === "string" && profile.hostPath.trim() ? profile.hostPath.trim() : undefined,
+      wslPath: typeof profile.wslPath === "string" && profile.wslPath.trim() ? profile.wslPath.trim() : undefined,
+      deleted: profile.deleted === true,
+    }];
+  });
+}
+
 export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): PersistedSettings {
   const skillsPaths = Array.isArray(parsed.skillsPaths) && parsed.skillsPaths.length > 0
     ? parsed.skillsPaths.map((value) => parsed.executionEnvironment === "wsl" ? value.trim() : expandHostSkillsPath(value)).filter(Boolean)
@@ -64,47 +81,23 @@ export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): 
     wslDistribution: typeof parsed.wslDistribution === "string" && parsed.wslDistribution.trim()
       ? parsed.wslDistribution.trim()
       : undefined,
+    workspaceProfiles: normalizeProfiles(parsed.workspaceProfiles),
+    activeWorkspaceProfileId: typeof parsed.activeWorkspaceProfileId === "string" && parsed.activeWorkspaceProfileId.trim() ? parsed.activeWorkspaceProfileId.trim() : undefined,
+    hostWorkspacePath: typeof parsed.hostWorkspacePath === "string" && parsed.hostWorkspacePath.trim() ? parsed.hostWorkspacePath.trim() : undefined,
+    wslWorkspacePath: typeof parsed.wslWorkspacePath === "string" && parsed.wslWorkspacePath.trim() ? parsed.wslWorkspacePath.trim() : undefined,
   };
 }
 
 function loadSettings(): PersistedSettings {
   try {
     if (!fs.existsSync(SETTINGS_FILE)) return { ...DEFAULTS };
-    const parsed = JSON.parse(
-      fs.readFileSync(SETTINGS_FILE, "utf-8"),
-    ) as Partial<PersistedSettings>;
-
-    let skillsPaths: string[];
-    if (Array.isArray(parsed.skillsPaths) && parsed.skillsPaths.length > 0) {
-      skillsPaths = parsed.skillsPaths;
-    } else {
-      skillsPaths = DEFAULTS.skillsPaths;
-    }
-
-    return {
-      skillsPaths,
-      autoInject:
-        typeof parsed.autoInject === "boolean"
-          ? parsed.autoInject
-          : DEFAULTS.autoInject,
-      maxSkillsInContext:
-        typeof parsed.maxSkillsInContext === "number" &&
-        parsed.maxSkillsInContext >= 1
-          ? parsed.maxSkillsInContext
-          : DEFAULTS.maxSkillsInContext,
-      shellPath: typeof parsed.shellPath === "string" ? parsed.shellPath : "",
-      windowsShell: (parsed.windowsShell === "powershell" || parsed.windowsShell === "cmd" || parsed.windowsShell === "git-bash")
-        ? parsed.windowsShell
-        : DEFAULTS.windowsShell,
-      executionEnvironment: parsed.executionEnvironment === "wsl" ? "wsl" : "host",
-      wslDistribution: typeof parsed.wslDistribution === "string" && parsed.wslDistribution.trim() ? parsed.wslDistribution.trim() : undefined,
-    };
+    return normalizePersistedSettings(JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8")) as Partial<PersistedSettings>);
   } catch {
     return { ...DEFAULTS };
   }
 }
 
-function saveSettings(settings: PersistedSettings): void {
+export function saveSettings(settings: PersistedSettings): void {
   try {
     fs.mkdirSync(PLUGIN_DATA_DIR, { recursive: true });
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
@@ -163,7 +156,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     executionEnvironment !== saved.executionEnvironment ||
     wslDistribution !== saved.wslDistribution
   ) {
-    saveSettings({ skillsPaths, autoInject, maxSkillsInContext, shellPath, windowsShell, executionEnvironment, wslDistribution });
+    saveSettings({ ...saved, skillsPaths, autoInject, maxSkillsInContext, shellPath, windowsShell, executionEnvironment, wslDistribution });
   }
 
   const result: EffectiveConfig = {
@@ -174,8 +167,22 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     windowsShell,
     executionEnvironment,
     wslDistribution,
+    workspaceProfiles: saved.workspaceProfiles,
+    activeWorkspaceProfileId: saved.activeWorkspaceProfileId,
+    hostWorkspacePath: saved.hostWorkspacePath,
+    wslWorkspacePath: saved.wslWorkspacePath,
   };
   cachedConfig = result;
   cacheTime = now;
   return result;
+}
+
+export function updatePersistedSettings(patch: Partial<PersistedSettings>): PersistedSettings {
+  const next = normalizePersistedSettings({ ...loadSettings(), ...patch });
+  saveSettings(next);
+  return next;
+}
+
+export function getPersistedSettings(): PersistedSettings {
+  return loadSettings();
 }
