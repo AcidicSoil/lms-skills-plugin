@@ -17,6 +17,7 @@ import { resolveWorkspaceContext } from "./workspace";
 import { createWorkspaceFileSystem, type WorkspaceFileSystem } from "./workspaceFs";
 import { deriveWorkspaceStatus } from "./workspaceSelection";
 import { detectWslCapability, type WslCapability } from "./wslCapability";
+import { createWorkspaceBackend, type WorkspaceBackend } from "./backend";
 
 function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
   if (entries.length === 0) return "Directory is empty.";
@@ -48,6 +49,7 @@ export interface ToolsProviderDependencies {
   detectWsl?: (requested?: string) => Promise<WslCapability>;
   getSettings?: typeof getPersistedSettings;
   updateSettings?: typeof updatePersistedSettings;
+  createBackend?: typeof createWorkspaceBackend;
 }
 
 export const PUBLIC_TOOL_NAMES = [
@@ -75,6 +77,7 @@ export async function toolsProvider(
   dependencies: ToolsProviderDependencies = {},
 ) {
   let workspacePromise: Promise<WorkspaceContext> | undefined;
+  let backendPromise: Promise<WorkspaceBackend> | undefined;
   let workspaceFsPromise: Promise<WorkspaceFileSystem> | undefined;
   let skillStore: SkillStore | undefined;
   let activeCommandDirectory: string | undefined;
@@ -82,7 +85,11 @@ export async function toolsProvider(
   const getSkillStore = (): SkillStore => {
     if (!skillStore) {
       const factory = dependencies.createSkillStore ?? createSkillStore;
-      skillStore = factory(resolveEffectiveConfig(ctl));
+      const cfg = resolveEffectiveConfig(ctl);
+      skillStore = factory(cfg, {
+        execProgram: (program, args, options) => getBackend().then((backend) =>
+          backend.runProgram(program, args, { ...options, cwd: options.cwd })),
+      });
     }
     return skillStore;
   };
@@ -98,11 +105,21 @@ export async function toolsProvider(
     return workspacePromise;
   };
 
-  const getWorkspaceFs = (): Promise<WorkspaceFileSystem> => {
-    if (!workspaceFsPromise) {
-      workspaceFsPromise = getWorkspace().then((context) =>
-        (dependencies.createWorkspaceFs ?? createWorkspaceFileSystem)(context));
+  const getBackend = (): Promise<WorkspaceBackend> => {
+    if (!backendPromise) {
+      backendPromise = getWorkspace().then((context) =>
+        (dependencies.createBackend ?? createWorkspaceBackend)(context, {
+          createFileSystem: dependencies.createWorkspaceFs
+            ? ((ctx) => dependencies.createWorkspaceFs!(ctx))
+            : createWorkspaceFileSystem,
+          executeCommand: dependencies.executeCommand,
+        }));
     }
+    return backendPromise;
+  };
+
+  const getWorkspaceFs = (): Promise<WorkspaceFileSystem> => {
+    if (!workspaceFsPromise) workspaceFsPromise = getBackend().then((backend) => backend.fileSystem);
     return workspaceFsPromise;
   };
 
@@ -171,7 +188,7 @@ export async function toolsProvider(
       const id = current.activeWorkspaceProfileId ?? "default";
       const profiles = [...(current.workspaceProfiles ?? []).filter((item) => item.id !== id), { id, name: profile_name?.trim() || "Default workspace", hostPath: trimmed }];
       const next = updateSettings({ hostWorkspacePath: trimmed, activeWorkspaceProfileId: id, workspaceProfiles: profiles });
-      workspacePromise = undefined; workspaceFsPromise = undefined; activeCommandDirectory = undefined;
+      workspacePromise = undefined; backendPromise = undefined; workspaceFsPromise = undefined; activeCommandDirectory = undefined;
       return { success: true, environment: "host", path: next.hostWorkspacePath, profileId: id };
     },
   });
@@ -189,7 +206,7 @@ export async function toolsProvider(
       const id = current.activeWorkspaceProfileId ?? "default";
       const profiles = [...(current.workspaceProfiles ?? []).filter((item) => item.id !== id), { id, name: profile_name?.trim() || "Default workspace", wslPath: trimmed }];
       const next = updateSettings({ wslWorkspacePath: trimmed, wslDistribution: requested, activeWorkspaceProfileId: id, workspaceProfiles: profiles });
-      workspacePromise = undefined; workspaceFsPromise = undefined; activeCommandDirectory = undefined;
+      workspacePromise = undefined; backendPromise = undefined; workspaceFsPromise = undefined; activeCommandDirectory = undefined;
       return { success: true, environment: "wsl", path: next.wslWorkspacePath, distribution: capability.distribution, profileId: id };
     },
   });
