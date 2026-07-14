@@ -1,7 +1,7 @@
 import * as path from "path";
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
-import { resolveEffectiveConfig } from "./settings";
+import { getPersistedSettings, resolveEffectiveConfig, updatePersistedSettings } from "./settings";
 import { execCommand } from "./executor";
 import {
   EXEC_DEFAULT_TIMEOUT_MS,
@@ -15,6 +15,8 @@ import type { PluginController } from "./pluginTypes";
 import type { DirectoryEntry, EffectiveConfig, WorkspaceContext } from "./types";
 import { resolveWorkspaceContext } from "./workspace";
 import { createWorkspaceFileSystem, type WorkspaceFileSystem } from "./workspaceFs";
+import { deriveWorkspaceStatus } from "./workspaceSelection";
+import { detectWslCapability, type WslCapability } from "./wslCapability";
 
 function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
   if (entries.length === 0) return "Directory is empty.";
@@ -43,6 +45,9 @@ export interface ToolsProviderDependencies {
   createWorkspaceFs?: (context: WorkspaceContext) => WorkspaceFileSystem;
   createSkillStore?: typeof createSkillStore;
   executeCommand?: typeof execCommand;
+  detectWsl?: (requested?: string) => Promise<WslCapability>;
+  getSettings?: typeof getPersistedSettings;
+  updateSettings?: typeof updatePersistedSettings;
 }
 
 export const PUBLIC_TOOL_NAMES = [
@@ -61,6 +66,8 @@ export const PUBLIC_TOOL_NAMES = [
   "change_directory",
   "get_current_directory",
   "run_command",
+  "get_workspace_status",
+  "configure_host_workspace",
 ] as const;
 
 export async function toolsProvider(
@@ -111,6 +118,72 @@ export async function toolsProvider(
     const candidate = pathApi.isAbsolute(value) ? value : pathApi.resolve(current, value);
     return fs.resolvePath(candidate);
   };
+
+
+  const config = resolveEffectiveConfig(ctl);
+  const readSettings = dependencies.getSettings ?? getPersistedSettings;
+  const updateSettings = dependencies.updateSettings ?? updatePersistedSettings;
+  const detectWsl = dependencies.detectWsl ?? ((requested?: string) => detectWslCapability(requested));
+
+  const getWorkspaceStatusTool = tool({
+    name: "get_workspace_status",
+    description: "Inspect the active chat-scoped workspace selection and WSL capability without changing configuration.",
+    parameters: {},
+    implementation: async () => {
+      const persisted = readSettings();
+      const profileId = persisted.activeWorkspaceProfileId;
+      const configuredPath = config.executionEnvironment === "wsl" ? persisted.wslWorkspacePath : persisted.hostWorkspacePath;
+      let exists: boolean | undefined;
+      try { await getWorkspace(); exists = true; } catch { exists = configuredPath ? false : undefined; }
+      const workspace = deriveWorkspaceStatus(
+        { scope: "chat", profileId, environment: config.executionEnvironment },
+        persisted.workspaceProfiles ?? [],
+        { configuredPath, exists, configurationRequired: !configuredPath && !profileId },
+      );
+      const capability = config.executionEnvironment === "wsl" ? await detectWsl(config.wslDistribution) : undefined;
+      return { success: true, workspace, capability, globalDefaults: { hostPath: persisted.hostWorkspacePath, wslPath: persisted.wslWorkspacePath } };
+    },
+  });
+
+  const refreshWslCapabilityTool = tool({
+    name: "refresh_wsl_capability",
+    description: "Refresh WSL executable and distribution capability without changing the selected workspace or distribution.",
+    parameters: {},
+    implementation: async () => ({ success: true, capability: await detectWsl(config.wslDistribution) }),
+  });
+
+  const configureHostWorkspaceTool = tool({
+    name: "configure_host_workspace",
+    description: "Configure the Host workspace path for the active plugin defaults. Only registered in Host mode.",
+    parameters: { path: z.string().min(1), profile_name: z.string().min(1).optional() },
+    implementation: async ({ path: workspacePath, profile_name }) => {
+      const trimmed = workspacePath.trim();
+      const current = readSettings();
+      const id = current.activeWorkspaceProfileId ?? "default";
+      const profiles = [...(current.workspaceProfiles ?? []).filter((item) => item.id !== id), { id, name: profile_name?.trim() || "Default workspace", hostPath: trimmed }];
+      const next = updateSettings({ hostWorkspacePath: trimmed, activeWorkspaceProfileId: id, workspaceProfiles: profiles });
+      workspacePromise = undefined; workspaceFsPromise = undefined; activeCommandDirectory = undefined;
+      return { success: true, environment: "host", path: next.hostWorkspacePath, profileId: id };
+    },
+  });
+
+  const configureWslWorkspaceTool = tool({
+    name: "configure_wsl_workspace",
+    description: "Configure the WSL workspace path and optional distribution override. Only registered in WSL mode; omit distribution to use the system default.",
+    parameters: { path: z.string().min(1), distribution: z.string().optional(), profile_name: z.string().min(1).optional() },
+    implementation: async ({ path: workspacePath, distribution, profile_name }) => {
+      const trimmed = workspacePath.trim();
+      const requested = distribution?.trim() || undefined;
+      const capability = await detectWsl(requested);
+      if (capability.status !== "ready") return { success: false, errorCode: capability.status, capability };
+      const current = readSettings();
+      const id = current.activeWorkspaceProfileId ?? "default";
+      const profiles = [...(current.workspaceProfiles ?? []).filter((item) => item.id !== id), { id, name: profile_name?.trim() || "Default workspace", wslPath: trimmed }];
+      const next = updateSettings({ wslWorkspacePath: trimmed, wslDistribution: requested, activeWorkspaceProfileId: id, workspaceProfiles: profiles });
+      workspacePromise = undefined; workspaceFsPromise = undefined; activeCommandDirectory = undefined;
+      return { success: true, environment: "wsl", path: next.wslWorkspacePath, distribution: capability.distribution, profileId: id };
+    },
+  });
 
   const executeCommand = dependencies.executeCommand ?? execCommand;
   const failure = (error: unknown) => ({
@@ -646,5 +719,7 @@ export async function toolsProvider(
     changeDirectoryTool,
     getCurrentDirectoryTool,
     runCommandTool,
+    getWorkspaceStatusTool,
+    ...(config.executionEnvironment === "wsl" ? [configureWslWorkspaceTool, refreshWslCapabilityTool] : [configureHostWorkspaceTool]),
   ];
 }

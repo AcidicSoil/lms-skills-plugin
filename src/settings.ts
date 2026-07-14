@@ -23,8 +23,7 @@ const DEFAULTS: PersistedSettings = {
   executionEnvironment: "host",
 };
 
-let cachedConfig: EffectiveConfig | null = null;
-let cacheTime = 0;
+let configCache = new WeakMap<PluginController, { config: EffectiveConfig; time: number }>();
 
 function defaultSkillsPaths(environment: "host" | "wsl"): string[] {
   return environment === "wsl" ? ["~/.lmstudio/skills"] : [DEFAULT_SKILLS_DIR];
@@ -101,14 +100,14 @@ export function saveSettings(settings: PersistedSettings): void {
   try {
     fs.mkdirSync(PLUGIN_DATA_DIR, { recursive: true });
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
-    cachedConfig = null;
+    configCache = new WeakMap();
   } catch {}
 }
 
 export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
   const now = Date.now();
-  if (cachedConfig && now - cacheTime < CONFIG_CACHE_TTL_MS)
-    return cachedConfig;
+  const cached = configCache.get(ctl);
+  if (cached && now - cached.time < CONFIG_CACHE_TTL_MS) return cached.config;
 
   const c = ctl.getPluginConfig(configSchematics);
   const autoInject = (c.get("autoInject") as string) === "on";
@@ -133,8 +132,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
       wslDistribution,
     };
     saveSettings(next);
-    cachedConfig = next;
-    cacheTime = now;
+    configCache.set(ctl, { config: next, time: now });
     return next;
   }
 
@@ -172,8 +170,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     hostWorkspacePath: saved.hostWorkspacePath,
     wslWorkspacePath: saved.wslWorkspacePath,
   };
-  cachedConfig = result;
-  cacheTime = now;
+  configCache.set(ctl, { config: result, time: now });
   return result;
 }
 
