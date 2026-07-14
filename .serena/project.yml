@@ -135,6 +135,7 @@ default_modes: |
     - skills
     - .codex
     - .agents
+    - docs/*gsd*
 
 # list of mode names to be activated additionally for this project, e.g. ["query-projects"]
 # The full set of modes to be activated is base_modes (from global config) + default_modes + added_modes.
