@@ -71,8 +71,8 @@ export const configSchematics = createConfigSchematics()
     "wslDistribution",
     "string",
     {
-      displayName: "WSL Distribution",
-      subtitle: "Optional installed distribution name. Leave empty to use the default distribution.",
+      displayName: "WSL Distribution Override (advanced)",
+      subtitle: "WSL-only. Leave empty to use the system default distribution; named overrides are validated before use.",
     },
     "",
   )
@@ -80,7 +80,7 @@ export const configSchematics = createConfigSchematics()
     "shellPath",
     "string",
     {
-      displayName: "Shell Path (optional)",
+      displayName: "Host Shell Path (optional)",
       subtitle:
         "Override the Host shell used by run_command. Ignored in WSL mode, which always uses /bin/bash.",
     },
@@ -90,8 +90,8 @@ export const configSchematics = createConfigSchematics()
     "windowsShell",
     "select",
     {
-      displayName: "Windows Shell",
-      subtitle: "Which native shell run_command uses on Windows Host. WSL always uses Bash inside the selected distribution.",
+      displayName: "Windows Host Shell",
+      subtitle: "Host-only. Selects the native Windows shell; WSL always uses Bash inside the selected distribution.",
       options: [
         { value: "cmd", displayName: "Command Prompt (cmd.exe)" },
         { value: "powershell", displayName: "PowerShell (pwsh/powershell.exe)" },

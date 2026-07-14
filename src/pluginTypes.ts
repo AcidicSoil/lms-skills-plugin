@@ -5,6 +5,7 @@ export interface PluginController {
     get(key: string): unknown;
   };
   getWorkingDirectory(): string;
+  getChatId?(): string;
 }
 
 export interface PluginContext {

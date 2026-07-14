@@ -37,3 +37,36 @@ test("WSL defaults keep skill roots Linux-native", () => {
   const normalized = normalizePersistedSettings({ executionEnvironment: "wsl" });
   assert.deepEqual(normalized.skillsPaths, ["~/.lmstudio/skills"]);
 });
+
+test("workspace profile settings remain backward compatible and environment-specific", () => {
+  const legacy = normalizePersistedSettings({ executionEnvironment: "host" });
+  assert.deepEqual(legacy.workspaceProfiles, []);
+  assert.equal(legacy.hostWorkspacePath, undefined);
+  assert.equal(legacy.wslWorkspacePath, undefined);
+
+  const normalized = normalizePersistedSettings({
+    executionEnvironment: "wsl",
+    wslDistribution: "",
+    hostWorkspacePath: "C:\\work\\demo",
+    wslWorkspacePath: "/home/me/demo",
+    activeWorkspaceProfileId: " demo ",
+    workspaceProfiles: [{ id: " demo ", name: " Demo ", hostPath: " C:\\work\\demo ", wslPath: " /home/me/demo " }],
+  });
+  assert.equal(normalized.wslDistribution, undefined);
+  assert.equal(normalized.activeWorkspaceProfileId, "demo");
+  assert.equal(normalized.hostWorkspacePath, "C:\\work\\demo");
+  assert.equal(normalized.wslWorkspacePath, "/home/me/demo");
+  assert.deepEqual(normalized.workspaceProfiles, [{
+    id: "demo",
+    name: "Demo",
+    hostPath: "C:\\work\\demo",
+    wslPath: "/home/me/demo",
+    enabled: true,
+    trusted: false,
+    preferred: false,
+    deleted: false,
+    createdAt: undefined,
+    updatedAt: undefined,
+    repositoryIdentity: undefined,
+  }]);
+});

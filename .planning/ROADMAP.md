@@ -2,8 +2,9 @@
 
 ## Shipped Milestones
 
-- [v1.0 — Host/WSL Execution and Project Workspaces](milestones/v1.0-ROADMAP.md) — shipped 2026-07-13; Host/WSL execution, deterministic workspaces, environment-aligned tools, native shells, documentation, and release validation.
+- [v1.0 — Host/WSL Execution and Project Workspaces](milestones/v1.0-ROADMAP.md) — shipped 2026-07-13; 3 phases, 9 plans, 24 requirements.
+- [v1.1 — Additional Polish](milestones/v1.1-ROADMAP.md) — shipped 2026-07-14; 4 phases, 12 plans, 42 requirements; contextual workspace UI, unified backend guarantees, trusted profiles, safe switching, migration, and compatibility management.
 
 ## Next Milestone
 
-Not yet defined. Run `$gsd-new-milestone` to create fresh requirements and continue phase numbering from Phase 4.
+Not yet defined. Start with `$gsd-new-milestone`.

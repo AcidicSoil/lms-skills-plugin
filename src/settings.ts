@@ -11,10 +11,12 @@ import {
   CONFIG_CACHE_TTL_MS,
 } from "./constants";
 import { configSchematics } from "./config";
-import type { PersistedSettings, EffectiveConfig } from "./types";
+import type { PersistedSettings, EffectiveConfig, WorkspaceProfile, ApprovalHistoryRecord, ChatWorkspaceSelection } from "./types";
+import { CURRENT_SETTINGS_SCHEMA_VERSION, parseAndMigrateSettings, projectPlatformSafeSettings, type SettingsDiagnostic } from "./settingsMigration";
 import type { PluginController } from "./pluginTypes";
 
 const DEFAULTS: PersistedSettings = {
+  settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
   skillsPaths: [DEFAULT_SKILLS_DIR],
   autoInject: true,
   maxSkillsInContext: DEFAULT_MAX_SKILLS_IN_CONTEXT,
@@ -23,8 +25,8 @@ const DEFAULTS: PersistedSettings = {
   executionEnvironment: "host",
 };
 
-let cachedConfig: EffectiveConfig | null = null;
-let cacheTime = 0;
+let configCache = new WeakMap<PluginController, { config: EffectiveConfig; time: number }>();
+let lastLoadDiagnostics: SettingsDiagnostic[] = [];
 
 function defaultSkillsPaths(environment: "host" | "wsl"): string[] {
   return environment === "wsl" ? ["~/.lmstudio/skills"] : [DEFAULT_SKILLS_DIR];
@@ -46,11 +48,53 @@ function parseSkillsPaths(raw: string, environment: "host" | "wsl"): string[] {
     .filter(Boolean);
 }
 
+
+function normalizeProfiles(value: unknown): WorkspaceProfile[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const profile = item as Partial<WorkspaceProfile>;
+    if (typeof profile.id !== "string" || !profile.id.trim() || typeof profile.name !== "string" || !profile.name.trim()) return [];
+    return [{
+      id: profile.id.trim(),
+      name: profile.name.trim(),
+      hostPath: typeof profile.hostPath === "string" && profile.hostPath.trim() ? profile.hostPath.trim() : undefined,
+      wslPath: typeof profile.wslPath === "string" && profile.wslPath.trim() ? profile.wslPath.trim() : undefined,
+      enabled: profile.enabled !== false,
+      trusted: profile.trusted === true,
+      preferred: profile.preferred === true,
+      deleted: profile.deleted === true,
+      createdAt: typeof profile.createdAt === "string" ? profile.createdAt : undefined,
+      updatedAt: typeof profile.updatedAt === "string" ? profile.updatedAt : undefined,
+      repositoryIdentity: typeof profile.repositoryIdentity === "string" && profile.repositoryIdentity.trim() ? profile.repositoryIdentity.trim() : undefined,
+    }];
+  });
+}
+
+function normalizeApprovalHistory(value: unknown): ApprovalHistoryRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is ApprovalHistoryRecord => Boolean(item && typeof item === "object" && typeof (item as ApprovalHistoryRecord).id === "string" && typeof (item as ApprovalHistoryRecord).workspaceId === "string" && typeof (item as ApprovalHistoryRecord).toolName === "string" && typeof (item as ApprovalHistoryRecord).timestamp === "string"));
+}
+
+function normalizeChatSelections(value: unknown): Record<string, ChatWorkspaceSelection> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, ChatWorkspaceSelection> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (!item || typeof item !== "object") continue;
+    const candidate = item as Partial<ChatWorkspaceSelection>;
+    if ((candidate.environment === "host" || candidate.environment === "wsl") && typeof candidate.updatedAt === "string") {
+      result[key] = { environment: candidate.environment, ...(typeof candidate.profileId === "string" ? { profileId: candidate.profileId } : {}), updatedAt: candidate.updatedAt };
+    }
+  }
+  return result;
+}
+
 export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): PersistedSettings {
   const skillsPaths = Array.isArray(parsed.skillsPaths) && parsed.skillsPaths.length > 0
     ? parsed.skillsPaths.map((value) => parsed.executionEnvironment === "wsl" ? value.trim() : expandHostSkillsPath(value)).filter(Boolean)
     : defaultSkillsPaths(parsed.executionEnvironment === "wsl" ? "wsl" : "host");
   return {
+    settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     skillsPaths,
     autoInject: typeof parsed.autoInject === "boolean" ? parsed.autoInject : DEFAULTS.autoInject,
     maxSkillsInContext: typeof parsed.maxSkillsInContext === "number" && parsed.maxSkillsInContext >= 1
@@ -64,58 +108,43 @@ export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): 
     wslDistribution: typeof parsed.wslDistribution === "string" && parsed.wslDistribution.trim()
       ? parsed.wslDistribution.trim()
       : undefined,
+    workspaceProfiles: normalizeProfiles(parsed.workspaceProfiles),
+    activeWorkspaceProfileId: typeof parsed.activeWorkspaceProfileId === "string" && parsed.activeWorkspaceProfileId.trim() ? parsed.activeWorkspaceProfileId.trim() : undefined,
+    hostWorkspacePath: typeof parsed.hostWorkspacePath === "string" && parsed.hostWorkspacePath.trim() ? parsed.hostWorkspacePath.trim() : undefined,
+    wslWorkspacePath: typeof parsed.wslWorkspacePath === "string" && parsed.wslWorkspacePath.trim() ? parsed.wslWorkspacePath.trim() : undefined,
+    workspacesEnabled: parsed.workspacesEnabled !== false,
+    approvalHistory: normalizeApprovalHistory(parsed.approvalHistory),
+    chatWorkspaceSelections: normalizeChatSelections(parsed.chatWorkspaceSelections),
   };
 }
 
 function loadSettings(): PersistedSettings {
   try {
-    if (!fs.existsSync(SETTINGS_FILE)) return { ...DEFAULTS };
-    const parsed = JSON.parse(
-      fs.readFileSync(SETTINGS_FILE, "utf-8"),
-    ) as Partial<PersistedSettings>;
-
-    let skillsPaths: string[];
-    if (Array.isArray(parsed.skillsPaths) && parsed.skillsPaths.length > 0) {
-      skillsPaths = parsed.skillsPaths;
-    } else {
-      skillsPaths = DEFAULTS.skillsPaths;
+    if (!fs.existsSync(SETTINGS_FILE)) {
+      lastLoadDiagnostics = [];
+      return { ...DEFAULTS };
     }
-
-    return {
-      skillsPaths,
-      autoInject:
-        typeof parsed.autoInject === "boolean"
-          ? parsed.autoInject
-          : DEFAULTS.autoInject,
-      maxSkillsInContext:
-        typeof parsed.maxSkillsInContext === "number" &&
-        parsed.maxSkillsInContext >= 1
-          ? parsed.maxSkillsInContext
-          : DEFAULTS.maxSkillsInContext,
-      shellPath: typeof parsed.shellPath === "string" ? parsed.shellPath : "",
-      windowsShell: (parsed.windowsShell === "powershell" || parsed.windowsShell === "cmd" || parsed.windowsShell === "git-bash")
-        ? parsed.windowsShell
-        : DEFAULTS.windowsShell,
-      executionEnvironment: parsed.executionEnvironment === "wsl" ? "wsl" : "host",
-      wslDistribution: typeof parsed.wslDistribution === "string" && parsed.wslDistribution.trim() ? parsed.wslDistribution.trim() : undefined,
-    };
+    const migration = parseAndMigrateSettings(fs.readFileSync(SETTINGS_FILE, "utf-8"));
+    lastLoadDiagnostics = migration.diagnostics;
+    return normalizePersistedSettings(migration.settings);
   } catch {
+    lastLoadDiagnostics = [{ code: "invalid-json", message: "Settings could not be loaded; safe defaults were used." }];
     return { ...DEFAULTS };
   }
 }
 
-function saveSettings(settings: PersistedSettings): void {
+export function saveSettings(settings: PersistedSettings): void {
   try {
     fs.mkdirSync(PLUGIN_DATA_DIR, { recursive: true });
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
-    cachedConfig = null;
+    configCache = new WeakMap();
   } catch {}
 }
 
 export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
   const now = Date.now();
-  if (cachedConfig && now - cacheTime < CONFIG_CACHE_TTL_MS)
-    return cachedConfig;
+  const cached = configCache.get(ctl);
+  if (cached && now - cached.time < CONFIG_CACHE_TTL_MS) return cached.config;
 
   const c = ctl.getPluginConfig(configSchematics);
   const autoInject = (c.get("autoInject") as string) === "on";
@@ -140,8 +169,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
       wslDistribution,
     };
     saveSettings(next);
-    cachedConfig = next;
-    cacheTime = now;
+    configCache.set(ctl, { config: next, time: now });
     return next;
   }
 
@@ -163,7 +191,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     executionEnvironment !== saved.executionEnvironment ||
     wslDistribution !== saved.wslDistribution
   ) {
-    saveSettings({ skillsPaths, autoInject, maxSkillsInContext, shellPath, windowsShell, executionEnvironment, wslDistribution });
+    saveSettings({ ...saved, skillsPaths, autoInject, maxSkillsInContext, shellPath, windowsShell, executionEnvironment, wslDistribution });
   }
 
   const result: EffectiveConfig = {
@@ -174,8 +202,32 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     windowsShell,
     executionEnvironment,
     wslDistribution,
+    workspaceProfiles: saved.workspaceProfiles,
+    activeWorkspaceProfileId: saved.activeWorkspaceProfileId,
+    hostWorkspacePath: saved.hostWorkspacePath,
+    wslWorkspacePath: saved.wslWorkspacePath,
+    workspacesEnabled: saved.workspacesEnabled,
+    approvalHistory: saved.approvalHistory,
+    chatWorkspaceSelections: saved.chatWorkspaceSelections,
   };
-  cachedConfig = result;
-  cacheTime = now;
+  configCache.set(ctl, { config: result, time: now });
   return result;
+}
+
+export function updatePersistedSettings(patch: Partial<PersistedSettings>): PersistedSettings {
+  const next = normalizePersistedSettings({ ...loadSettings(), ...patch });
+  saveSettings(next);
+  return next;
+}
+
+export function getPersistedSettings(): PersistedSettings {
+  return loadSettings();
+}
+
+export function getSettingsLoadDiagnostics(): SettingsDiagnostic[] {
+  return [...lastLoadDiagnostics];
+}
+
+export function getPlatformSafeSettings(platform: NodeJS.Platform = process.platform): { settings: PersistedSettings; diagnostics: SettingsDiagnostic[] } {
+  return projectPlatformSafeSettings(loadSettings(), platform);
 }
