@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: — Additional Polish
-current_phase: 6 — Workspace Profiles and Safety
-status: executing
-last_updated: "2026-07-14T21:37:27.822Z"
+milestone_name: additional-polish
+current_phase: 7
+current_phase_name: compatibility-and-advanced-management
+status: ready_to_plan
+last_updated: "2026-07-14T22:00:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 50
-current_phase_name: workspace-profiles-and-safety
+  completed_phases: 3
+  total_plans: 9
+  completed_plans: 9
+  percent: 75
 ---
 
 # Project State
@@ -19,10 +19,10 @@ current_phase_name: workspace-profiles-and-safety
 ## Current Position
 
 **Milestone:** v1.1 — Additional Polish
-**Completed phase:** 5 — Backend Guarantees and Validation
-**Current phase:** 6 — Workspace Profiles and Safety
-**Status:** Ready to execute
-**Next command:** `$gsd-plan-phase 6`
+**Completed phase:** 6 — Workspace Profiles and Safety
+**Current phase:** 7 — Compatibility and Advanced Management
+**Status:** Ready to plan
+**Next command:** `$gsd-plan-phase 7`
 
 ## Milestone Scope
 
@@ -31,17 +31,17 @@ The milestone turns the shipped Host/WSL workspace foundation into a visible, en
 ## Progress
 
 - 4 milestone phases planned.
-- 2 milestone phases completed.
-- 6 plans completed across Phases 4–5.
+- 3 milestone phases completed.
+- 9 plans completed across Phases 4–6.
 - 43 milestone requirements defined.
-- Phase 6 is ready for planning.
+- Phase 7 is ready for planning.
 
-## Phase 5 Result
+## Phase 6 Result
 
-- All 13 Phase 5 requirements verified.
-- 53 automated tests pass.
+- All 13 Phase 6 requirements verified.
+- 69 automated tests pass.
 - TypeScript build and release verification pass.
-- Report: `.planning/phases/05-backend-guarantees-and-validation/05-VERIFICATION.md`
+- Report: `.planning/phases/06-workspace-profiles-and-safety/06-VERIFICATION.md`
 
 ## Conflict Status
 
@@ -57,4 +57,4 @@ The milestone turns the shipped Host/WSL workspace foundation into a visible, en
 
 ## Last Activity
 
-2026-07-14 — Completed and verified Phase 5: Backend Guarantees and Validation.
+2026-07-14 — Completed and verified Phase 6: Workspace Profiles and Safety.

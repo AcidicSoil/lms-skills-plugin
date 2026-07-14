@@ -33,7 +33,7 @@
 - Structured recovery errors.
 - Integration coverage for backend consistency and invalid-state behavior.
 
-### Phase 6 — Workspace Profiles and Safety
+### Phase 6 — Workspace Profiles and Safety ✓ (completed 2026-07-14)
 
 **Goal:** Add durable workspace lifecycle management and enforce safety around permissions, destructive actions, and active processes.
 
@@ -68,5 +68,5 @@
 |---|---|---|
 | 4 — Contextual Workspace UI | Complete (2026-07-14) | 8 |
 | 5 — Backend Guarantees and Validation | Complete (2026-07-14) | 13 |
-| 6 — Workspace Profiles and Safety | Not started | 13 |
+| 6 — Workspace Profiles and Safety | Complete (2026-07-14) | 13 |
 | 7 — Compatibility and Advanced Management | Not started | 8 |

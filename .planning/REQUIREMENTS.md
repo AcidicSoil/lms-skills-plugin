@@ -27,17 +27,17 @@
 
 ## Workspace Profiles and Safety
 
-- [ ] **PROF-01** — Persist workspace profiles with stable ID, editable name, Host and WSL paths, availability/deletion state, workspace settings, and optional last-session reference.
-- [ ] **PROF-02** — Define tool metadata for workspace requirement, destructiveness, and environment compatibility.
-- [ ] **PROF-03** — Support invocation-time outside-workspace approvals with path-specific grants, read/write scope, and affected-path preview.
-- [ ] **PROF-04** — Require explicit destructive confirmation where tool metadata or affected paths indicate destructive behavior.
-- [ ] **PROF-05** — Prevent workspace switching or deletion while an invocation is active or termination remains unresolved.
-- [ ] **PROF-06** — Track workspace ownership and process-tree termination state for active invocations.
-- [ ] **PROF-07** — Support rename, locate, path management, soft delete, restore, permanent delete, and deleted-workspace recovery.
-- [ ] **PROF-08** — Add advisory repository identity checks that fail closed on mismatch without requiring Git.
-- [ ] **PROF-09** — Provide a workspace picker with a dropdown/button list that supports incremental or infinite scrolling, searchable filtering, and an inline input for adding a workspace path or profile.
-- [ ] **PROF-10** — Let users enable or disable workspace functionality and explicitly mark workspace profiles as trusted and/or preferred; trust and preference must be visible, editable, and persisted independently.
-- [ ] **PROF-11** — Allow seamless per-chat workspace switching from the picker while preserving the active environment and enforcing active-invocation, validation, trust, and termination guards before the switch becomes effective.
+- [x] **PROF-01** — Persist workspace profiles with stable ID, editable name, Host and WSL paths, availability/deletion state, workspace settings, and optional last-session reference.
+- [x] **PROF-02** — Define tool metadata for workspace requirement, destructiveness, and environment compatibility.
+- [x] **PROF-03** — Support invocation-time outside-workspace approvals with path-specific grants, read/write scope, and affected-path preview.
+- [x] **PROF-04** — Require explicit destructive confirmation where tool metadata or affected paths indicate destructive behavior.
+- [x] **PROF-05** — Prevent workspace switching or deletion while an invocation is active or termination remains unresolved.
+- [x] **PROF-06** — Track workspace ownership and process-tree termination state for active invocations.
+- [x] **PROF-07** — Support rename, locate, path management, soft delete, restore, permanent delete, and deleted-workspace recovery.
+- [x] **PROF-08** — Add advisory repository identity checks that fail closed on mismatch without requiring Git.
+- [x] **PROF-09** — Provide a workspace picker with a dropdown/button list that supports incremental or infinite scrolling, searchable filtering, and an inline input for adding a workspace path or profile.
+- [x] **PROF-10** — Let users enable or disable workspace functionality and explicitly mark workspace profiles as trusted and/or preferred; trust and preference must be visible, editable, and persisted independently.
+- [x] **PROF-11** — Allow seamless per-chat workspace switching from the picker while preserving the active environment and enforcing active-invocation, validation, trust, and termination guards before the switch becomes effective.
 
 ## Compatibility and Management
 
@@ -54,11 +54,11 @@
 - [ ] **TEST-02** — Cover per-chat environment and workspace selection persistence and restoration.
 - [x] **TEST-03** — Cover backend consistency across command execution, filesystem tools, repository discovery, and skill workflows.
 - [x] **TEST-04** — Cover strict invalid-path behavior and prove there is no home-directory fallback.
-- [ ] **TEST-05** — Cover active-invocation workspace-switch and deletion safety.
+- [x] **TEST-05** — Cover active-invocation workspace-switch and deletion safety.
 - [x] **TEST-06** — Cover WSL distribution validation, deletion, misspelling, and default-distribution changes.
 - [ ] **TEST-07** — Cover settings migration, malformed persisted data, downgrade behavior, and non-Windows startup.
 - [x] **TEST-08** — Cover structured recovery errors and user-visible capability states.
-- [ ] **TEST-09** — Cover large workspace lists, incremental loading/filtering, add-workspace input, enable/disable behavior, trusted/preferred persistence, and safe per-chat switching.
+- [x] **TEST-09** — Cover large workspace lists, incremental loading/filtering, add-workspace input, enable/disable behavior, trusted/preferred persistence, and safe per-chat switching.
 
 ## Traceability
 
