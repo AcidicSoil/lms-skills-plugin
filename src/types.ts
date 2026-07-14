@@ -21,7 +21,13 @@ export interface WorkspaceProfile {
   name: string;
   hostPath?: string;
   wslPath?: string;
+  enabled?: boolean;
+  trusted?: boolean;
+  preferred?: boolean;
   deleted?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  repositoryIdentity?: string;
 }
 
 export interface PersistedSettings {
@@ -36,6 +42,7 @@ export interface PersistedSettings {
   activeWorkspaceProfileId?: string;
   hostWorkspacePath?: string;
   wslWorkspacePath?: string;
+  workspacesEnabled?: boolean;
 }
 
 export interface EffectiveConfig {
@@ -50,6 +57,7 @@ export interface EffectiveConfig {
   activeWorkspaceProfileId?: string;
   hostWorkspacePath?: string;
   wslWorkspacePath?: string;
+  workspacesEnabled?: boolean;
 }
 
 export interface WorkspaceContext {

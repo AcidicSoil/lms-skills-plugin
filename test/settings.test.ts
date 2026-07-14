@@ -56,5 +56,17 @@ test("workspace profile settings remain backward compatible and environment-spec
   assert.equal(normalized.activeWorkspaceProfileId, "demo");
   assert.equal(normalized.hostWorkspacePath, "C:\\work\\demo");
   assert.equal(normalized.wslWorkspacePath, "/home/me/demo");
-  assert.deepEqual(normalized.workspaceProfiles, [{ id: "demo", name: "Demo", hostPath: "C:\\work\\demo", wslPath: "/home/me/demo", deleted: false }]);
+  assert.deepEqual(normalized.workspaceProfiles, [{
+    id: "demo",
+    name: "Demo",
+    hostPath: "C:\\work\\demo",
+    wslPath: "/home/me/demo",
+    enabled: true,
+    trusted: false,
+    preferred: false,
+    deleted: false,
+    createdAt: undefined,
+    updatedAt: undefined,
+    repositoryIdentity: undefined,
+  }]);
 });

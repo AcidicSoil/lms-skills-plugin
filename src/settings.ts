@@ -57,7 +57,13 @@ function normalizeProfiles(value: unknown): WorkspaceProfile[] {
       name: profile.name.trim(),
       hostPath: typeof profile.hostPath === "string" && profile.hostPath.trim() ? profile.hostPath.trim() : undefined,
       wslPath: typeof profile.wslPath === "string" && profile.wslPath.trim() ? profile.wslPath.trim() : undefined,
+      enabled: profile.enabled !== false,
+      trusted: profile.trusted === true,
+      preferred: profile.preferred === true,
       deleted: profile.deleted === true,
+      createdAt: typeof profile.createdAt === "string" ? profile.createdAt : undefined,
+      updatedAt: typeof profile.updatedAt === "string" ? profile.updatedAt : undefined,
+      repositoryIdentity: typeof profile.repositoryIdentity === "string" && profile.repositoryIdentity.trim() ? profile.repositoryIdentity.trim() : undefined,
     }];
   });
 }
@@ -84,6 +90,7 @@ export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): 
     activeWorkspaceProfileId: typeof parsed.activeWorkspaceProfileId === "string" && parsed.activeWorkspaceProfileId.trim() ? parsed.activeWorkspaceProfileId.trim() : undefined,
     hostWorkspacePath: typeof parsed.hostWorkspacePath === "string" && parsed.hostWorkspacePath.trim() ? parsed.hostWorkspacePath.trim() : undefined,
     wslWorkspacePath: typeof parsed.wslWorkspacePath === "string" && parsed.wslWorkspacePath.trim() ? parsed.wslWorkspacePath.trim() : undefined,
+    workspacesEnabled: parsed.workspacesEnabled !== false,
   };
 }
 
@@ -169,6 +176,7 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     activeWorkspaceProfileId: saved.activeWorkspaceProfileId,
     hostWorkspacePath: saved.hostWorkspacePath,
     wslWorkspacePath: saved.wslWorkspacePath,
+    workspacesEnabled: saved.workspacesEnabled,
   };
   configCache.set(ctl, { config: result, time: now });
   return result;
