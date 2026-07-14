@@ -11,10 +11,12 @@ import {
   CONFIG_CACHE_TTL_MS,
 } from "./constants";
 import { configSchematics } from "./config";
-import type { PersistedSettings, EffectiveConfig, WorkspaceProfile } from "./types";
+import type { PersistedSettings, EffectiveConfig, WorkspaceProfile, ApprovalHistoryRecord, ChatWorkspaceSelection } from "./types";
+import { CURRENT_SETTINGS_SCHEMA_VERSION, parseAndMigrateSettings, projectPlatformSafeSettings, type SettingsDiagnostic } from "./settingsMigration";
 import type { PluginController } from "./pluginTypes";
 
 const DEFAULTS: PersistedSettings = {
+  settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
   skillsPaths: [DEFAULT_SKILLS_DIR],
   autoInject: true,
   maxSkillsInContext: DEFAULT_MAX_SKILLS_IN_CONTEXT,
@@ -24,6 +26,7 @@ const DEFAULTS: PersistedSettings = {
 };
 
 let configCache = new WeakMap<PluginController, { config: EffectiveConfig; time: number }>();
+let lastLoadDiagnostics: SettingsDiagnostic[] = [];
 
 function defaultSkillsPaths(environment: "host" | "wsl"): string[] {
   return environment === "wsl" ? ["~/.lmstudio/skills"] : [DEFAULT_SKILLS_DIR];
@@ -68,11 +71,30 @@ function normalizeProfiles(value: unknown): WorkspaceProfile[] {
   });
 }
 
+function normalizeApprovalHistory(value: unknown): ApprovalHistoryRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is ApprovalHistoryRecord => Boolean(item && typeof item === "object" && typeof (item as ApprovalHistoryRecord).id === "string" && typeof (item as ApprovalHistoryRecord).workspaceId === "string" && typeof (item as ApprovalHistoryRecord).toolName === "string" && typeof (item as ApprovalHistoryRecord).timestamp === "string"));
+}
+
+function normalizeChatSelections(value: unknown): Record<string, ChatWorkspaceSelection> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, ChatWorkspaceSelection> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (!item || typeof item !== "object") continue;
+    const candidate = item as Partial<ChatWorkspaceSelection>;
+    if ((candidate.environment === "host" || candidate.environment === "wsl") && typeof candidate.updatedAt === "string") {
+      result[key] = { environment: candidate.environment, ...(typeof candidate.profileId === "string" ? { profileId: candidate.profileId } : {}), updatedAt: candidate.updatedAt };
+    }
+  }
+  return result;
+}
+
 export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): PersistedSettings {
   const skillsPaths = Array.isArray(parsed.skillsPaths) && parsed.skillsPaths.length > 0
     ? parsed.skillsPaths.map((value) => parsed.executionEnvironment === "wsl" ? value.trim() : expandHostSkillsPath(value)).filter(Boolean)
     : defaultSkillsPaths(parsed.executionEnvironment === "wsl" ? "wsl" : "host");
   return {
+    settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     skillsPaths,
     autoInject: typeof parsed.autoInject === "boolean" ? parsed.autoInject : DEFAULTS.autoInject,
     maxSkillsInContext: typeof parsed.maxSkillsInContext === "number" && parsed.maxSkillsInContext >= 1
@@ -91,14 +113,22 @@ export function normalizePersistedSettings(parsed: Partial<PersistedSettings>): 
     hostWorkspacePath: typeof parsed.hostWorkspacePath === "string" && parsed.hostWorkspacePath.trim() ? parsed.hostWorkspacePath.trim() : undefined,
     wslWorkspacePath: typeof parsed.wslWorkspacePath === "string" && parsed.wslWorkspacePath.trim() ? parsed.wslWorkspacePath.trim() : undefined,
     workspacesEnabled: parsed.workspacesEnabled !== false,
+    approvalHistory: normalizeApprovalHistory(parsed.approvalHistory),
+    chatWorkspaceSelections: normalizeChatSelections(parsed.chatWorkspaceSelections),
   };
 }
 
 function loadSettings(): PersistedSettings {
   try {
-    if (!fs.existsSync(SETTINGS_FILE)) return { ...DEFAULTS };
-    return normalizePersistedSettings(JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8")) as Partial<PersistedSettings>);
+    if (!fs.existsSync(SETTINGS_FILE)) {
+      lastLoadDiagnostics = [];
+      return { ...DEFAULTS };
+    }
+    const migration = parseAndMigrateSettings(fs.readFileSync(SETTINGS_FILE, "utf-8"));
+    lastLoadDiagnostics = migration.diagnostics;
+    return normalizePersistedSettings(migration.settings);
   } catch {
+    lastLoadDiagnostics = [{ code: "invalid-json", message: "Settings could not be loaded; safe defaults were used." }];
     return { ...DEFAULTS };
   }
 }
@@ -177,6 +207,8 @@ export function resolveEffectiveConfig(ctl: PluginController): EffectiveConfig {
     hostWorkspacePath: saved.hostWorkspacePath,
     wslWorkspacePath: saved.wslWorkspacePath,
     workspacesEnabled: saved.workspacesEnabled,
+    approvalHistory: saved.approvalHistory,
+    chatWorkspaceSelections: saved.chatWorkspaceSelections,
   };
   configCache.set(ctl, { config: result, time: now });
   return result;
@@ -190,4 +222,12 @@ export function updatePersistedSettings(patch: Partial<PersistedSettings>): Pers
 
 export function getPersistedSettings(): PersistedSettings {
   return loadSettings();
+}
+
+export function getSettingsLoadDiagnostics(): SettingsDiagnostic[] {
+  return [...lastLoadDiagnostics];
+}
+
+export function getPlatformSafeSettings(platform: NodeJS.Platform = process.platform): { settings: PersistedSettings; diagnostics: SettingsDiagnostic[] } {
+  return projectPlatformSafeSettings(loadSettings(), platform);
 }

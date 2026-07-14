@@ -30,7 +30,14 @@ export interface WorkspaceProfile {
   repositoryIdentity?: string;
 }
 
+export interface ApprovalHistoryRecord {
+  id: string; workspaceId: string; profileId?: string; toolName: string; path?: string; scope?: "read" | "write"; decision: "approved" | "denied" | "revoked"; timestamp: string; expiresAt?: string;
+}
+
+export interface ChatWorkspaceSelection { environment: ExecutionEnvironment; profileId?: string; updatedAt: string; }
+
 export interface PersistedSettings {
+  settingsSchemaVersion?: number;
   skillsPaths: string[];
   autoInject: boolean;
   maxSkillsInContext: number;
@@ -43,6 +50,8 @@ export interface PersistedSettings {
   hostWorkspacePath?: string;
   wslWorkspacePath?: string;
   workspacesEnabled?: boolean;
+  approvalHistory?: ApprovalHistoryRecord[];
+  chatWorkspaceSelections?: Record<string, ChatWorkspaceSelection>;
 }
 
 export interface EffectiveConfig {
@@ -58,6 +67,8 @@ export interface EffectiveConfig {
   hostWorkspacePath?: string;
   wslWorkspacePath?: string;
   workspacesEnabled?: boolean;
+  approvalHistory?: ApprovalHistoryRecord[];
+  chatWorkspaceSelections?: Record<string, ChatWorkspaceSelection>;
 }
 
 export interface WorkspaceContext {
