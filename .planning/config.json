@@ -98,6 +98,13 @@
   },
   "resolve_model_ids": "omit",
   "review": {
-    "default_reviewers": ["opencode"]
+    "reviewer_instances": {
+      "opencode-review": {
+        "cli": "opencode",
+        "model": "lmstudio/ornith-1.0-9b@q4_k_m",
+        "agent": "review"
+      }
+    },
+    "default_reviewers": ["opencode-review"]
   }
 }
