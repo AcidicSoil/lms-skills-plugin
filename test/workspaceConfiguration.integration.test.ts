@@ -81,3 +81,37 @@ test("WSL capability refresh is side-effect free", async () => {
   assert.equal(probes, 1);
   assert.equal(writes, 0);
 });
+
+test("workspace status reports resolved chat context without home fallback", async () => {
+  const settings = { ...base, activeWorkspaceProfileId: "p1", hostWorkspacePath: "/work/demo", workspaceProfiles: [{ id: "p1", name: "Demo", hostPath: "/work/demo" }] };
+  const tools = await toolsProvider(controller("host"), {
+    getSettings: () => settings,
+    updateSettings: (patch) => ({ ...settings, ...patch }),
+    resolveWorkspace: async () => ({ workspaceId: "workspace-1", providerWorkingDirectory: "/provider/project", executionEnvironment: "host", nativeRoot: "/work/demo" }),
+  });
+  const result = await invoke(tools, "get_workspace_status");
+  assert.equal(result.success, true);
+  assert.equal(result.workspaceId, "workspace-1");
+  assert.equal(result.workspace.code, "valid");
+  assert.equal(result.workspace.profileName, "Demo");
+  assert.equal(result.workspace.scope, "chat");
+  assert.equal(result.workspace.nativePath, "/work/demo");
+});
+
+test("invalid workspace blocks execution and never substitutes home", async () => {
+  let executions = 0;
+  const settings = { ...base, activeWorkspaceProfileId: "p1", hostWorkspacePath: "/missing/demo", workspaceProfiles: [{ id: "p1", name: "Missing", hostPath: "/missing/demo" }] };
+  const tools = await toolsProvider(controller("host"), {
+    getSettings: () => settings,
+    updateSettings: (patch) => ({ ...settings, ...patch }),
+    resolveWorkspace: async () => { throw new Error("Workspace path is unavailable: /missing/demo"); },
+    executeCommand: async () => { executions += 1; return { stdout: "", stderr: "", exitCode: 0, timedOut: false, shell: "/bin/sh", platform: "linux", environment: "host" }; },
+  });
+  const status = await invoke(tools, "get_workspace_status");
+  assert.equal(status.workspace.code, "unavailable");
+  assert.equal(status.workspace.nativePath, "/missing/demo");
+  const result = await invoke(tools, "run_command", { command: "pwd" });
+  assert.equal(result.success, false);
+  assert.match(result.error, /unavailable/);
+  assert.equal(executions, 0);
+});

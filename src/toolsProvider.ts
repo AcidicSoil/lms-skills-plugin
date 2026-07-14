@@ -134,14 +134,23 @@ export async function toolsProvider(
       const profileId = persisted.activeWorkspaceProfileId;
       const configuredPath = config.executionEnvironment === "wsl" ? persisted.wslWorkspacePath : persisted.hostWorkspacePath;
       let exists: boolean | undefined;
-      try { await getWorkspace(); exists = true; } catch { exists = configuredPath ? false : undefined; }
+      let resolvedPath = configuredPath;
+      let workspaceId: string | undefined;
+      try {
+        const resolved = await getWorkspace();
+        exists = true;
+        resolvedPath ??= resolved.nativeRoot;
+        workspaceId = resolved.workspaceId;
+      } catch {
+        exists = configuredPath ? false : undefined;
+      }
       const workspace = deriveWorkspaceStatus(
         { scope: "chat", profileId, environment: config.executionEnvironment },
         persisted.workspaceProfiles ?? [],
-        { configuredPath, exists, configurationRequired: !configuredPath && !profileId },
+        { configuredPath: resolvedPath, exists, configurationRequired: !resolvedPath && !profileId },
       );
       const capability = config.executionEnvironment === "wsl" ? await detectWsl(config.wslDistribution) : undefined;
-      return { success: true, workspace, capability, globalDefaults: { hostPath: persisted.hostWorkspacePath, wslPath: persisted.wslWorkspacePath } };
+      return { success: true, workspaceId, workspace, capability, globalDefaults: { hostPath: persisted.hostWorkspacePath, wslPath: persisted.wslWorkspacePath } };
     },
   });
 
