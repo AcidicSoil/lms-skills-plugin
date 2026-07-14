@@ -31,6 +31,22 @@ export function recoveryError(code: RecoveryErrorCode, message: string): Recover
   return { code, message, recoveryActions: actions[code] };
 }
 
+export class RecoveryFailure extends Error {
+  readonly recovery: RecoveryError;
+
+  constructor(recovery: RecoveryError) {
+    super(recovery.message);
+    this.name = "RecoveryFailure";
+    this.recovery = recovery;
+  }
+}
+
 export function toRecoveryResponse(error: RecoveryError) {
   return { success: false as const, errorCode: error.code, message: error.message, error: error.message, recoveryActions: error.recoveryActions };
+}
+
+export function mapUnknownToRecovery(error: unknown): RecoveryError {
+  if (error instanceof RecoveryFailure) return error.recovery;
+  const message = error instanceof Error ? error.message : String(error);
+  return recoveryError("workspace-invalid", message);
 }

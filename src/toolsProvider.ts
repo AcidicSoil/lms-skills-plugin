@@ -18,6 +18,8 @@ import { createWorkspaceFileSystem, type WorkspaceFileSystem } from "./workspace
 import { deriveWorkspaceStatus } from "./workspaceSelection";
 import { detectWslCapability, type WslCapability } from "./wslCapability";
 import { createWorkspaceBackend, type WorkspaceBackend } from "./backend";
+import { runPreflight } from "./preflight";
+import { RecoveryFailure, mapUnknownToRecovery, recoveryError, toRecoveryResponse } from "./recoveryError";
 
 function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
   if (entries.length === 0) return "Directory is empty.";
@@ -107,13 +109,34 @@ export async function toolsProvider(
 
   const getBackend = (): Promise<WorkspaceBackend> => {
     if (!backendPromise) {
-      backendPromise = getWorkspace().then((context) =>
-        (dependencies.createBackend ?? createWorkspaceBackend)(context, {
+      backendPromise = (async () => {
+        let context: WorkspaceContext;
+        try {
+          context = await getWorkspace();
+        } catch (error) {
+          throw new RecoveryFailure(recoveryError("workspace-invalid", error instanceof Error ? error.message : String(error)));
+        }
+        const capability = context.executionEnvironment === "wsl"
+          ? (dependencies.detectWsl
+            ? await detectWsl(context.wslDistribution ?? config.wslDistribution)
+            : { status: "ready" as const, distribution: context.wslDistribution ?? config.wslDistribution ?? "default", available: [context.wslDistribution ?? config.wslDistribution ?? "default"] })
+          : undefined;
+        const persisted = readSettings();
+        const profileId = persisted.activeWorkspaceProfileId;
+        const workspace = deriveWorkspaceStatus(
+          { scope: "chat", profileId, environment: context.executionEnvironment },
+          persisted.workspaceProfiles ?? [],
+          { configuredPath: context.nativeRoot, exists: true, identityMatches: true },
+        );
+        const preflight = runPreflight({ environment: context.executionEnvironment, workspace, capability });
+        if (!preflight.ok) throw new RecoveryFailure(preflight.error);
+        return (dependencies.createBackend ?? createWorkspaceBackend)(context, {
           createFileSystem: dependencies.createWorkspaceFs
             ? ((ctx) => dependencies.createWorkspaceFs!(ctx))
             : createWorkspaceFileSystem,
           executeCommand: dependencies.executeCommand,
-        }));
+        });
+      })();
     }
     return backendPromise;
   };
@@ -201,7 +224,12 @@ export async function toolsProvider(
       const trimmed = workspacePath.trim();
       const requested = distribution?.trim() || undefined;
       const capability = await detectWsl(requested);
-      if (capability.status !== "ready") return { success: false, errorCode: capability.status, capability };
+      if (capability.status !== "ready") {
+        const code = capability.status === "no-distribution" || capability.status === "no-default-distribution" || capability.status === "distribution-unavailable"
+          ? "distribution-missing"
+          : "environment-unavailable";
+        return { ...toRecoveryResponse(recoveryError(code, "The requested WSL environment is unavailable.")), capability };
+      }
       const current = readSettings();
       const id = current.activeWorkspaceProfileId ?? "default";
       const profiles = [...(current.workspaceProfiles ?? []).filter((item) => item.id !== id), { id, name: profile_name?.trim() || "Default workspace", wslPath: trimmed }];
@@ -211,11 +239,7 @@ export async function toolsProvider(
     },
   });
 
-  const executeCommand = dependencies.executeCommand ?? execCommand;
-  const failure = (error: unknown) => ({
-    success: false,
-    error: error instanceof Error ? error.message : String(error),
-  });
+  const failure = (error: unknown) => toRecoveryResponse(mapUnknownToRecovery(error));
   const listSkillsTool = tool({
     name: "list_skills",
     description:
@@ -703,14 +727,13 @@ export async function toolsProvider(
         const workspace = await getWorkspace();
         const commandCwd = await resolveCommandDirectory(cwd);
         const timeoutMs = timeout_ms ?? EXEC_DEFAULT_TIMEOUT_MS;
-        const result = await executeCommand(command, {
+        const backend = await getBackend();
+        const result = await backend.runCommand(command, {
           cwd: commandCwd,
           timeoutMs,
           shellPath: config.shellPath || undefined,
           windowsShell: config.windowsShell,
           env,
-          executionEnvironment: workspace.executionEnvironment,
-          wslDistribution: workspace.wslDistribution,
         });
         return {
           stdout: result.stdout,
