@@ -16,6 +16,14 @@ export interface SkillManifestFile {
 
 export type ExecutionEnvironment = "host" | "wsl";
 
+export interface WorkspaceProfile {
+  id: string;
+  name: string;
+  hostPath?: string;
+  wslPath?: string;
+  deleted?: boolean;
+}
+
 export interface PersistedSettings {
   skillsPaths: string[];
   autoInject: boolean;
@@ -24,6 +32,10 @@ export interface PersistedSettings {
   windowsShell?: "powershell" | "cmd" | "git-bash";
   executionEnvironment: ExecutionEnvironment;
   wslDistribution?: string;
+  workspaceProfiles?: WorkspaceProfile[];
+  activeWorkspaceProfileId?: string;
+  hostWorkspacePath?: string;
+  wslWorkspacePath?: string;
 }
 
 export interface EffectiveConfig {
@@ -34,6 +46,10 @@ export interface EffectiveConfig {
   windowsShell?: "powershell" | "cmd" | "git-bash";
   executionEnvironment: ExecutionEnvironment;
   wslDistribution?: string;
+  workspaceProfiles?: WorkspaceProfile[];
+  activeWorkspaceProfileId?: string;
+  hostWorkspacePath?: string;
+  wslWorkspacePath?: string;
 }
 
 export interface WorkspaceContext {
