@@ -23,6 +23,9 @@ import { RecoveryFailure, mapUnknownToRecovery, recoveryError, toRecoveryRespons
 import { WorkspaceInvocationRegistry } from "./invocationRegistry";
 import { addWorkspace, listWorkspaces, permanentlyDeleteWorkspace, restoreWorkspace, softDeleteWorkspace, updateWorkspace } from "./workspaceCatalog";
 import { validateRepositoryIdentity } from "./repositoryIdentity";
+import { ApprovalHistoryStore } from "./approvalHistory";
+import { ChatWorkspaceStateStore } from "./chatWorkspaceState";
+import { unsupportedSessionCapability, validateOpaqueSessionReference, type SessionCapability } from "./sessionCapability";
 
 function formatDirEntries(entries: DirectoryEntry[], rootName: string): string {
   if (entries.length === 0) return "Directory is empty.";
@@ -56,6 +59,7 @@ export interface ToolsProviderDependencies {
   updateSettings?: typeof updatePersistedSettings;
   createBackend?: typeof createWorkspaceBackend;
   invocationRegistry?: WorkspaceInvocationRegistry;
+  sessionCapability?: SessionCapability;
 }
 
 export const PUBLIC_TOOL_NAMES = [
@@ -82,6 +86,11 @@ export const PUBLIC_TOOL_NAMES = [
   "switch_workspace",
   "delete_workspace",
   "restore_workspace",
+  "list_workspace_approvals",
+  "revoke_workspace_approval",
+  "clear_workspace_approvals",
+  "get_session_capability",
+  "resume_session",
   "configure_host_workspace",
 ] as const;
 
@@ -94,7 +103,11 @@ export async function toolsProvider(
   let workspaceFsPromise: Promise<WorkspaceFileSystem> | undefined;
   let skillStore: SkillStore | undefined;
   let activeCommandDirectory: string | undefined;
-  let activeWorkspaceProfileId = (dependencies.getSettings ?? getPersistedSettings)().activeWorkspaceProfileId;
+  const initialSettings = (dependencies.getSettings ?? getPersistedSettings)();
+  const chatId = ctl.getChatId?.() ?? "current-chat";
+  const chatState = new ChatWorkspaceStateStore(initialSettings.chatWorkspaceSelections ?? {});
+  const restoredSelection = chatState.get(chatId);
+  let activeWorkspaceProfileId = restoredSelection?.profileId ?? initialSettings.activeWorkspaceProfileId;
   const invocationRegistry = dependencies.invocationRegistry ?? new WorkspaceInvocationRegistry();
 
   const getSkillStore = (): SkillStore => {
@@ -857,7 +870,7 @@ export async function toolsProvider(
       }
       const previousProfileId = activeWorkspaceProfileId;
       activeWorkspaceProfileId = profile_id;
-      updateSettings({ activeWorkspaceProfileId: profile_id });
+      updateSettings({ activeWorkspaceProfileId: profile_id, chatWorkspaceSelections: chatState.set(chatId, config.executionEnvironment, profile_id) });
       workspacePromise = undefined; backendPromise = undefined; workspaceFsPromise = undefined; activeCommandDirectory = undefined;
       return { success: true, previousProfileId, activeWorkspaceProfileId: profile_id, environment: config.executionEnvironment, path: candidatePath };
     },
@@ -891,6 +904,40 @@ export async function toolsProvider(
     },
   });
 
+
+
+  const getSessionCapabilityTool = tool({
+    name: "get_session_capability",
+    description: "Report whether stable host session resume is available.",
+    parameters: {},
+    implementation: async () => { const capability=dependencies.sessionCapability ?? unsupportedSessionCapability; return capability.status === "supported" ? {success:true,status:"supported"} : {success:true,status:"unsupported",reason:capability.reason}; },
+  });
+  const resumeSessionTool = tool({
+    name: "resume_session",
+    description: "Resume an opaque host session reference when a stable host capability is available.",
+    parameters: { session_ref: z.string().min(1) },
+    implementation: async ({ session_ref }) => { const capability=dependencies.sessionCapability ?? unsupportedSessionCapability; if(capability.status!=="supported") return toRecoveryResponse(recoveryError("environment-unavailable", capability.reason)); try { return {success:true,...await capability.resume(validateOpaqueSessionReference(session_ref))}; } catch(error){ return failure(error); } },
+  });
+
+  const listWorkspaceApprovalsTool = tool({
+    name: "list_workspace_approvals",
+    description: "List bounded redacted approval history for one workspace.",
+    parameters: { workspace_id: z.string().min(1) },
+    implementation: async ({ workspace_id }) => { const persisted=readSettings(); const store=new ApprovalHistoryStore(persisted.approvalHistory??[]); return { success:true, items:store.list(workspace_id) }; },
+  });
+  const revokeWorkspaceApprovalTool = tool({
+    name: "revoke_workspace_approval",
+    description: "Revoke one workspace approval history record.",
+    parameters: { approval_id: z.string().min(1) },
+    implementation: async ({ approval_id }) => { const persisted=readSettings(); const store=new ApprovalHistoryStore(persisted.approvalHistory??[]); updateSettings({approvalHistory:store.revoke(approval_id)}); return {success:true,approvalId:approval_id}; },
+  });
+  const clearWorkspaceApprovalsTool = tool({
+    name: "clear_workspace_approvals",
+    description: "Clear approval history for one workspace.",
+    parameters: { workspace_id: z.string().min(1) },
+    implementation: async ({ workspace_id }) => { const persisted=readSettings(); const store=new ApprovalHistoryStore(persisted.approvalHistory??[]); updateSettings({approvalHistory:store.clearWorkspace(workspace_id)}); return {success:true,workspaceId:workspace_id}; },
+  });
+
   return [
     listSkillsTool,
     readSkillFileTool,
@@ -915,6 +962,11 @@ export async function toolsProvider(
     switchWorkspaceTool,
     deleteWorkspaceTool,
     restoreWorkspaceTool,
+    listWorkspaceApprovalsTool,
+    revokeWorkspaceApprovalTool,
+    clearWorkspaceApprovalsTool,
+    getSessionCapabilityTool,
+    resumeSessionTool,
     ...(config.executionEnvironment === "wsl" ? [configureWslWorkspaceTool, refreshWslCapabilityTool] : [configureHostWorkspaceTool]),
   ];
 }
