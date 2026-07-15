@@ -42,7 +42,8 @@ progress:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260715-2eh | Refactor filesystem access for portability: remove WSL subprocesses from skill scanning and workspace filesystem I/O | 2026-07-15 | 08a0179 | [260715-2eh-refactor-filesystem-access-for-portabili](./quick/260715-2eh-refactor-filesystem-access-for-portabili/) |
+| 260715-2n4 | Propagate abort signals and guarantee process-supervisor settlement | 2026-07-15 | 2ca165a | [260715-2n4-abort-signal-propagation-and-process-sup](./quick/260715-2n4-abort-signal-propagation-and-process-sup/) |
 
 ## Last Activity
 
-2026-07-15 — Completed quick task 260715-2eh: native WSL filesystem access refactor.
+2026-07-15 — Completed quick task 260715-2n4: abort-aware process settlement.
