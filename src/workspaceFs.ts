@@ -1,8 +1,8 @@
-import * as fs from "fs";
-import * as path from "path";
-import { execProgram } from "./executor";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { classifyPath, isContainedPath, resolveEnvironmentPath } from "./pathPolicy";
 import type { DirectoryEntry, WorkspaceContext } from "./types";
+import { wslDisplayPathToNative } from "./wslPath";
 
 export interface DirectExecutionRequest {
   environment: "host" | "wsl";
@@ -23,25 +23,16 @@ export interface DirectExecutionResult {
 export type DirectExecutionRunner = (request: DirectExecutionRequest) => Promise<DirectExecutionResult>;
 
 export interface WorkspaceFsDependencies {
+  /** @deprecated Filesystem operations no longer execute programs. */
   runDirect?: DirectExecutionRunner;
+  /** @deprecated Native canonicalization replaces WSL realpath execution. */
   canonicalizeWsl?: (value: string) => Promise<string>;
+  toNativeWslPath?: (linuxPath: string, distribution?: string) => string;
 }
 
-export interface FileReadResult {
-  path: string;
-  content: string;
-  bytes: number;
-}
-
-export interface FileWriteResult {
-  path: string;
-  bytes: number;
-}
-
-export interface DirectoryListResult {
-  path: string;
-  entries: DirectoryEntry[];
-}
+export interface FileReadResult { path: string; content: string; bytes: number; }
+export interface FileWriteResult { path: string; bytes: number; }
+export interface DirectoryListResult { path: string; entries: DirectoryEntry[]; }
 
 export interface WorkspaceFileSystem {
   resolvePath(input: string): Promise<string>;
@@ -56,26 +47,7 @@ export interface WorkspaceFileSystem {
   renameFile(input: string, newName: string, overwrite?: boolean): Promise<{ source: string; destination: string }>;
 }
 
-const defaultRunner: DirectExecutionRunner = async (request) => {
-  const result = await execProgram(request.program, request.args, {
-    cwd: request.cwd,
-    executionEnvironment: request.environment,
-    wslDistribution: request.distribution,
-    stdin: request.stdin,
-  });
-  return {
-    stdout: result.stdout,
-    stderr: result.stderr,
-    exitCode: result.exitCode,
-    timedOut: result.timedOut,
-  };
-};
-
-function fail(result: DirectExecutionResult, operation: string): never {
-  throw new Error(result.stderr.trim() || `${operation} failed with exit code ${result.exitCode}.`);
-}
-
-async function canonicalizeHost(value: string): Promise<string> {
+async function canonicalizeNative(value: string): Promise<string> {
   let cursor = value;
   const remainder: string[] = [];
   while (!fs.existsSync(cursor)) {
@@ -98,7 +70,6 @@ function lexicalResolve(context: WorkspaceContext, input: string): string {
     }
     return path.posix.normalize(resolved.resolvedPath);
   }
-
   const windowsHost = classifyPath(context.nativeRoot) === "windows-drive" || classifyPath(context.nativeRoot) === "wsl-unc";
   const environment = windowsHost ? "host-windows" : "host-posix";
   const resolved = resolveEnvironmentPath(raw, environment, context.nativeRoot);
@@ -109,212 +80,109 @@ function lexicalResolve(context: WorkspaceContext, input: string): string {
   return resolved.resolvedPath;
 }
 
-export function createWorkspaceFileSystem(
-  context: WorkspaceContext,
-  dependencies: WorkspaceFsDependencies = {},
-): WorkspaceFileSystem {
-  const runDirect = dependencies.runDirect ?? defaultRunner;
-  const canonicalizeWsl = dependencies.canonicalizeWsl ?? (async (value: string) => {
-    const result = await runDirect({
-      environment: "wsl",
-      distribution: context.wslDistribution,
-      cwd: context.nativeRoot,
-      program: "realpath",
-      args: ["-m", "--", value],
-    });
-    if (result.exitCode !== 0) fail(result, "realpath");
-    return result.stdout.trim();
-  });
+export function createWorkspaceFileSystem(context: WorkspaceContext, dependencies: WorkspaceFsDependencies = {}): WorkspaceFileSystem {
+  const displayRoot = context.nativeRoot;
+  const toNative = (displayPath: string): string => context.executionEnvironment === "wsl"
+    ? (dependencies.toNativeWslPath?.(displayPath, context.wslDistribution)
+      ?? wslDisplayPathToNative(context.wslDistribution, displayPath))
+    : displayPath;
+  const nativeRoot = toNative(displayRoot);
 
-  const resolvePath = async (input: string): Promise<string> => {
-    const lexical = lexicalResolve(context, input);
-    if (context.executionEnvironment === "wsl") {
-      const canonicalRoot = await canonicalizeWsl(context.nativeRoot);
-      const canonicalTarget = await canonicalizeWsl(lexical);
-      if (!isContainedPath(canonicalRoot, canonicalTarget, { platform: "posix", canonicalize: (value) => value })) {
-        throw new Error("Canonical path escapes outside the workspace root.");
-      }
-      return canonicalTarget;
-    }
-    const canonicalRoot = await canonicalizeHost(context.nativeRoot);
-    const canonicalTarget = await canonicalizeHost(lexical);
-    const windowsHost = classifyPath(context.nativeRoot) === "windows-drive" || classifyPath(context.nativeRoot) === "wsl-unc";
+  const resolvePair = async (input: string): Promise<{ display: string; native: string }> => {
+    const display = lexicalResolve(context, input);
+    const native = toNative(display);
+    const canonicalRoot = await canonicalizeNative(nativeRoot);
+    const canonicalTarget = await canonicalizeNative(native);
+    const windowsNative = classifyPath(nativeRoot) === "windows-drive" || classifyPath(nativeRoot) === "wsl-unc";
     if (!isContainedPath(canonicalRoot, canonicalTarget, {
-      platform: windowsHost ? "windows" : "posix",
+      platform: windowsNative ? "windows" : "posix",
       canonicalize: (value) => value,
-    })) {
-      throw new Error("Canonical path escapes outside the workspace root.");
-    }
-    return canonicalTarget;
+    })) throw new Error("Canonical path escapes outside the workspace root.");
+    return { display, native: canonicalTarget };
   };
 
-  const runWsl = async (program: string, args: string[], stdin?: string | Buffer): Promise<DirectExecutionResult> => {
-    const result = await runDirect({
-      environment: "wsl",
-      distribution: context.wslDistribution,
-      cwd: context.nativeRoot,
-      program,
-      args,
-      ...(stdin !== undefined ? { stdin } : {}),
-    });
-    if (result.exitCode !== 0) fail(result, program);
-    return result;
-  };
-
-  const ensureParentWsl = async (target: string): Promise<void> => {
-    await runWsl("mkdir", ["-p", "--", path.posix.dirname(target)]);
-  };
-
-  return {
-    resolvePath,
-
+  const api: WorkspaceFileSystem = {
+    async resolvePath(input) { return (await resolvePair(input)).display; },
     async readFile(input) {
-      const target = await resolvePath(input);
-      if (context.executionEnvironment === "wsl") {
-        const result = await runWsl("cat", ["--", target]);
-        return { path: target, content: result.stdout, bytes: Buffer.byteLength(result.stdout, "utf8") };
-      }
-      const content = await fs.promises.readFile(target, "utf8");
-      return { path: target, content, bytes: Buffer.byteLength(content, "utf8") };
+      const target = await resolvePair(input);
+      const content = await fs.promises.readFile(target.native, "utf8");
+      return { path: target.display, content, bytes: Buffer.byteLength(content, "utf8") };
     },
-
     async writeFile(input, content) {
-      const target = await resolvePath(input);
-      if (context.executionEnvironment === "wsl") {
-        await ensureParentWsl(target);
-        await runWsl("tee", ["--", target], content);
-      } else {
-        await fs.promises.mkdir(path.dirname(target), { recursive: true });
-        await fs.promises.writeFile(target, content, "utf8");
-      }
-      return { path: target, bytes: Buffer.byteLength(content, "utf8") };
+      const target = await resolvePair(input);
+      await fs.promises.mkdir(path.dirname(target.native), { recursive: true });
+      await fs.promises.writeFile(target.native, content, "utf8");
+      return { path: target.display, bytes: Buffer.byteLength(content, "utf8") };
     },
-
     async patchFile(input, search, replacement, replaceAll = false) {
       if (!search) throw new Error("Patch search text cannot be empty.");
-      const current = await this.readFile(input);
+      const current = await api.readFile(input);
       if (!current.content.includes(search)) throw new Error("Patch search text was not found.");
-      const content = replaceAll
-        ? current.content.split(search).join(replacement)
-        : current.content.replace(search, replacement);
-      return this.writeFile(input, content);
+      const content = replaceAll ? current.content.split(search).join(replacement) : current.content.replace(search, replacement);
+      return api.writeFile(input, content);
     },
-
     async appendFile(input, content) {
-      const target = await resolvePath(input);
-      if (context.executionEnvironment === "wsl") {
-        await ensureParentWsl(target);
-        await runWsl("tee", ["-a", "--", target], content);
-      } else {
-        await fs.promises.mkdir(path.dirname(target), { recursive: true });
-        await fs.promises.appendFile(target, content, "utf8");
-      }
-      return { path: target, bytes: Buffer.byteLength(content, "utf8") };
+      const target = await resolvePair(input);
+      await fs.promises.mkdir(path.dirname(target.native), { recursive: true });
+      await fs.promises.appendFile(target.native, content, "utf8");
+      return { path: target.display, bytes: Buffer.byteLength(content, "utf8") };
     },
-
     async createDirectory(input) {
-      const target = await resolvePath(input);
-      if (context.executionEnvironment === "wsl") await runWsl("mkdir", ["-p", "--", target]);
-      else await fs.promises.mkdir(target, { recursive: true });
-      return { path: target };
+      const target = await resolvePair(input);
+      await fs.promises.mkdir(target.native, { recursive: true });
+      return { path: target.display };
     },
-
     async listDirectory(input = ".", recursive = false) {
-      const target = await resolvePath(input);
-      if (context.executionEnvironment === "wsl") {
-        const result = await runWsl("find", [
-          target,
-          "-mindepth",
-          "1",
-          "-maxdepth",
-          recursive ? "10" : "1",
-          "-printf",
-          "%P\\0%y\\0%s\\0",
-        ]);
-        const fields = result.stdout.split("\0");
-        const entries: DirectoryEntry[] = [];
-        for (let index = 0; index + 2 < fields.length; index += 3) {
-          const [relativeFromTarget, kind, size] = fields.slice(index, index + 3);
-          if (!relativeFromTarget) continue;
-          const full = path.posix.join(target, relativeFromTarget);
-          entries.push({
-            name: path.posix.basename(relativeFromTarget),
-            relativePath: path.posix.relative(context.nativeRoot, full),
-            type: kind === "d" ? "directory" : "file",
-            ...(kind === "d" ? {} : { sizeBytes: Number(size) || 0 }),
-          });
-        }
-        return { path: target, entries };
-      }
-
+      const target = await resolvePair(input);
       const entries: DirectoryEntry[] = [];
-      const walk = async (directory: string, depth: number): Promise<void> => {
-        const dirents = await fs.promises.readdir(directory, { withFileTypes: true });
+      const walk = async (nativeDirectory: string, displayDirectory: string, depth: number): Promise<void> => {
+        const dirents = await fs.promises.readdir(nativeDirectory, { withFileTypes: true });
         for (const entry of dirents) {
-          const full = path.join(directory, entry.name);
-          const stat = entry.isDirectory() ? undefined : await fs.promises.stat(full);
+          const nativeFull = path.join(nativeDirectory, entry.name);
+          const displayFull = context.executionEnvironment === "wsl"
+            ? path.posix.join(displayDirectory, entry.name)
+            : path.join(displayDirectory, entry.name);
+          const stat = entry.isDirectory() ? undefined : await fs.promises.stat(nativeFull);
           entries.push({
             name: entry.name,
-            relativePath: path.relative(context.nativeRoot, full),
+            relativePath: context.executionEnvironment === "wsl"
+              ? path.posix.relative(displayRoot, displayFull)
+              : path.relative(displayRoot, displayFull),
             type: entry.isDirectory() ? "directory" : "file",
             ...(stat ? { sizeBytes: stat.size } : {}),
           });
-          if (recursive && entry.isDirectory() && depth < 10) {
-            await walk(full, depth + 1);
-          }
+          if (recursive && entry.isDirectory() && depth < 10) await walk(nativeFull, displayFull, depth + 1);
         }
       };
-      await walk(target, 1);
-      return { path: target, entries };
+      await walk(target.native, target.display, 1);
+      return { path: target.display, entries };
     },
-
     async deleteFile(input, recursive = false) {
-      const target = await resolvePath(input);
-      if (target === context.nativeRoot) throw new Error("The workspace root cannot be deleted.");
-      if (context.executionEnvironment === "wsl") {
-        await runWsl("rm", [recursive ? "-rf" : "-f", "--", target]);
-      } else {
-        await fs.promises.rm(target, { recursive, force: false });
-      }
-      return { path: target };
+      const target = await resolvePair(input);
+      if (target.display === displayRoot) throw new Error("The workspace root cannot be deleted.");
+      await fs.promises.rm(target.native, { recursive, force: false });
+      return { path: target.display };
     },
-
     async moveFile(source, destination, overwrite = false) {
-      const resolvedSource = await resolvePath(source);
-      const resolvedDestination = await resolvePath(destination);
-      if (context.executionEnvironment === "wsl") {
-        await ensureParentWsl(resolvedDestination);
-        if (!overwrite) {
-          const exists = await runDirect({
-            environment: "wsl",
-            distribution: context.wslDistribution,
-            cwd: context.nativeRoot,
-            program: "test",
-            args: ["-e", resolvedDestination],
-          });
-          if (exists.exitCode === 0) throw new Error("Destination already exists.");
-          if (exists.exitCode !== 1) fail(exists, "test");
-        }
-        await runWsl("mv", [overwrite ? "-f" : "--", ...(overwrite ? ["--"] : []), resolvedSource, resolvedDestination]);
-      } else {
-        await fs.promises.mkdir(path.dirname(resolvedDestination), { recursive: true });
-        if (!overwrite && fs.existsSync(resolvedDestination)) throw new Error("Destination already exists.");
-        if (overwrite) await fs.promises.rm(resolvedDestination, { recursive: true, force: true });
-        await fs.promises.rename(resolvedSource, resolvedDestination);
-      }
-      return { source: resolvedSource, destination: resolvedDestination };
+      const resolvedSource = await resolvePair(source);
+      const resolvedDestination = await resolvePair(destination);
+      await fs.promises.mkdir(path.dirname(resolvedDestination.native), { recursive: true });
+      if (!overwrite && fs.existsSync(resolvedDestination.native)) throw new Error("Destination already exists.");
+      if (overwrite) await fs.promises.rm(resolvedDestination.native, { recursive: true, force: true });
+      await fs.promises.rename(resolvedSource.native, resolvedDestination.native);
+      return { source: resolvedSource.display, destination: resolvedDestination.display };
     },
-
     async renameFile(input, newName, overwrite = false) {
       if (!newName || newName.includes("/") || newName.includes("\\")) throw new Error("New name must be a single path segment.");
-      const source = await resolvePath(input);
+      const source = await resolvePair(input);
       const destination = context.executionEnvironment === "wsl"
-        ? path.posix.join(path.posix.dirname(source), newName)
-        : path.join(path.dirname(source), newName);
+        ? path.posix.join(path.posix.dirname(source.display), newName)
+        : path.join(path.dirname(source.display), newName);
       const relativeDestination = context.executionEnvironment === "wsl"
-        ? path.posix.relative(context.nativeRoot, destination)
-        : path.relative(context.nativeRoot, destination);
-      return this.moveFile(input, relativeDestination, overwrite);
+        ? path.posix.relative(displayRoot, destination)
+        : path.relative(displayRoot, destination);
+      return api.moveFile(input, relativeDestination, overwrite);
     },
   };
+  return api;
 }

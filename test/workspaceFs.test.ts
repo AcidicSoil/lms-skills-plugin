@@ -51,33 +51,29 @@ test("host workspace filesystem rejects canonical symlink escape", async () => {
   });
 });
 
-test("WSL workspace filesystem uses argv and stdin without content interpolation", async () => {
-  const calls: DirectExecutionRequest[] = [];
-  const runner = async (request: DirectExecutionRequest): Promise<DirectExecutionResult> => {
-    calls.push(request);
-    if (request.program === "cat") return { stdout: "value", stderr: "", exitCode: 0, timedOut: false };
-    return { stdout: "", stderr: "", exitCode: 0, timedOut: false };
-  };
-  const context: WorkspaceContext = {
-    workspaceId: "abc",
-    providerWorkingDirectory: "C:/provider",
-    executionEnvironment: "wsl",
-    wslDistribution: "Ubuntu 24.04",
-    nativeRoot: "/home/me/.lmstudio/lms-skills/workspaces/abc",
-  };
-  const workspaceFs = createWorkspaceFileSystem(context, { runDirect: runner, canonicalizeWsl: async (value) => value });
-  const content = "quotes ' \" ; $HOME\nUnicode —";
-  await workspaceFs.writeFile("space dir/a.txt", content);
-  await workspaceFs.readFile("space dir/a.txt");
-  const teeCall = calls.find((call) => call.program === "tee");
-  assert.deepEqual(teeCall, {
-    environment: "wsl",
-    distribution: "Ubuntu 24.04",
-    cwd: context.nativeRoot,
-    program: "tee",
-    args: ["--", "/home/me/.lmstudio/lms-skills/workspaces/abc/space dir/a.txt"],
-    stdin: content,
+test("WSL workspace filesystem uses native fs without spawning commands", async () => {
+  await withTempRoot(async (root) => {
+    const calls: DirectExecutionRequest[] = [];
+    const runner = async (request: DirectExecutionRequest): Promise<DirectExecutionResult> => {
+      calls.push(request);
+      return { stdout: "", stderr: "", exitCode: 0, timedOut: false };
+    };
+    const linuxRoot = "/home/me/.lmstudio/lms-skills/workspaces/abc";
+    const context: WorkspaceContext = {
+      workspaceId: "abc",
+      providerWorkingDirectory: "C:/provider",
+      executionEnvironment: "wsl",
+      wslDistribution: "Ubuntu 24.04",
+      nativeRoot: linuxRoot,
+    };
+    const workspaceFs = createWorkspaceFileSystem(context, {
+      runDirect: runner,
+      toNativeWslPath: (value) => path.join(root, path.posix.relative(linuxRoot, value)),
+    });
+    const content = "quotes ' \" ; $HOME\nUnicode —";
+    await workspaceFs.writeFile("space dir/a.txt", content);
+    assert.equal((await workspaceFs.readFile("space dir/a.txt")).content, content);
+    assert.equal(calls.length, 0);
+    assert.equal(fs.existsSync(path.join(root, "space dir", "a.txt")), true);
   });
-  assert.equal(JSON.stringify(teeCall).includes("$HOME"), true);
-  assert.equal(teeCall?.args.join(" ").includes("$HOME"), false);
 });

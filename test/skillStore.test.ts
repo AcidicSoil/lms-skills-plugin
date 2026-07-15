@@ -1,83 +1,70 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { createSkillStore } from "../src/skillStore";
 import type { EffectiveConfig } from "../src/types";
 import type { ExecProgramOptions, ExecResult } from "../src/executor";
 
 function result(stdout = "", stderr = "", exitCode = 0): ExecResult {
-  return {
-    stdout,
-    stderr,
-    exitCode,
-    timedOut: false,
-    shell: "test",
-    platform: "windows",
-    environment: "wsl",
-  };
+  return { stdout, stderr, exitCode, timedOut: false, shell: "test", platform: "windows", environment: "wsl" };
 }
 
-test("WSL skill store resolves tilde in the selected distribution and discovers child skills", async () => {
-  const calls: Array<{ program: string; args: string[]; options: ExecProgramOptions }> = [];
-  const config: EffectiveConfig = {
-    skillsPaths: ["~/.agents/skills"],
-    autoInject: true,
-    maxSkillsInContext: 15,
-    shellPath: "",
-    windowsShell: "cmd",
-    executionEnvironment: "wsl",
-    wslDistribution: "Ubuntu",
-  };
-  const runner = async (program: string, args: string[], options: ExecProgramOptions): Promise<ExecResult> => {
-    calls.push({ program, args, options });
-    if (program === "printenv") return result("/home/user\n");
-    if (program === "find" && args.includes("-mindepth") && args[args.indexOf("-mindepth") + 1] === "2") {
-      assert.equal(args[0], "/home/user/.agents/skills");
-      return result("/home/user/.agents/skills/docx/SKILL.md\n");
-    }
-    if (program === "cat") {
-      assert.equal(args[1], "/home/user/.agents/skills/docx/SKILL.md");
-      return result("# DOCX\n\nCreate and edit Word documents.\n");
-    }
-    if (program === "find") return result("/home/user/.agents/skills/docx/scripts\n");
-    return result("", "unexpected command", 1);
-  };
+async function withSkillRoot(run: (nativeRoot: string) => Promise<void>): Promise<void> {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "lms-skills-store-"));
+  await fs.promises.mkdir(path.join(root, "docx", "scripts"), { recursive: true });
+  await fs.promises.writeFile(path.join(root, "docx", "SKILL.md"), "# DOCX\n\nCreate and edit Word documents.\n", "utf8");
+  await fs.promises.writeFile(path.join(root, "docx", "scripts", "run.js"), "", "utf8");
+  try { await run(root); } finally { await fs.promises.rm(root, { recursive: true, force: true }); }
+}
 
-  const store = createSkillStore(config, { execProgram: runner });
-  const skills = await store.scan();
-
-  assert.equal(skills.length, 1);
-  assert.equal(skills[0].name, "docx");
-  assert.equal(skills[0].directoryPath, "/home/user/.agents/skills/docx");
-  assert.deepEqual(store.roots, ["/home/user/.agents/skills"]);
-  assert.ok(calls.every((call) => call.options.executionEnvironment === "wsl"));
-  assert.ok(calls.every((call) => call.options.wslDistribution === "Ubuntu"));
-  assert.ok(calls.every((call) => !call.args.some((arg) => arg.includes("C:\\Users"))));
+const config = (skillsPaths: string[]): EffectiveConfig => ({
+  skillsPaths,
+  autoInject: true,
+  maxSkillsInContext: 15,
+  shellPath: "",
+  windowsShell: "cmd",
+  executionEnvironment: "wsl",
+  wslDistribution: "Ubuntu",
 });
 
-test("WSL skill store reads and lists files through WSL", async () => {
-  const config: EffectiveConfig = {
-    skillsPaths: ["/home/user/.agents/skills"],
-    autoInject: true,
-    maxSkillsInContext: 15,
-    shellPath: "",
-    windowsShell: "cmd",
-    executionEnvironment: "wsl",
-    wslDistribution: "Ubuntu",
-  };
-  const runner = async (program: string, args: string[], _options: ExecProgramOptions): Promise<ExecResult> => {
-    if (program === "printenv") return result("/home/user\n");
-    if (program === "find" && args.includes("SKILL.md")) return result("/home/user/.agents/skills/docx/SKILL.md\n");
-    if (program === "cat") return result("# DOCX\n\nInstructions\n");
-    if (program === "find") {
-      return result("f\t20\t/home/user/.agents/skills/docx/SKILL.md\nd\t0\t/home/user/.agents/skills/docx/scripts\n");
-    }
-    return result("", "unexpected command", 1);
-  };
+test("WSL skill store resolves legacy tilde once and scans through native fs", async () => {
+  await withSkillRoot(async (nativeRoot) => {
+    const calls: Array<{ program: string; args: string[]; options: ExecProgramOptions }> = [];
+    const runner = async (program: string, args: string[], options: ExecProgramOptions): Promise<ExecResult> => {
+      calls.push({ program, args, options });
+      return program === "printenv" ? result("/home/user\n") : result("", "unexpected command", 1);
+    };
+    const linuxRoot = "/home/user/.agents/skills";
+    const store = createSkillStore(config(["~/.agents/skills"]), {
+      execProgram: runner,
+      toNativeWslPath: (value) => path.join(nativeRoot, path.posix.relative(linuxRoot, value)),
+    });
+    const skills = await store.scan();
+    assert.equal(skills.length, 1);
+    assert.equal(skills[0].name, "docx");
+    assert.equal(skills[0].directoryPath, "/home/user/.agents/skills/docx");
+    assert.deepEqual(store.roots, [linuxRoot]);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].program, "printenv");
+  });
+});
 
-  const store = createSkillStore(config, { execProgram: runner });
-  const skill = (await store.scan())[0];
-  const read = await store.read(skill);
-  assert.ok("content" in read);
-  const entries = await store.list(skill);
-  assert.deepEqual(entries.map((entry) => entry.relativePath), ["SKILL.md", "scripts"]);
+test("WSL skill store reads and lists through native fs without spawning", async () => {
+  await withSkillRoot(async (nativeRoot) => {
+    const linuxRoot = "/home/user/.agents/skills";
+    let calls = 0;
+    const runner = async (): Promise<ExecResult> => { calls += 1; return result("", "unexpected", 1); };
+    const store = createSkillStore(config([linuxRoot]), {
+      execProgram: runner,
+      toNativeWslPath: (value) => path.join(nativeRoot, path.posix.relative(linuxRoot, value)),
+    });
+    const skill = (await store.scan())[0];
+    const read = await store.read(skill);
+    assert.ok("content" in read);
+    const entries = await store.list(skill);
+    assert.deepEqual(entries.map((entry) => entry.relativePath), ["SKILL.md", "scripts", "scripts/run.js"]);
+    assert.equal(calls, 0);
+  });
 });

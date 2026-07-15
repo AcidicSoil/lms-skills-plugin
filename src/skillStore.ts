@@ -1,4 +1,5 @@
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { execProgram } from "./executor";
 import {
   extractBodyExcerpt,
@@ -12,6 +13,7 @@ import {
 } from "./scanner";
 import { MAX_DIRECTORY_DEPTH, MAX_DIRECTORY_ENTRIES, SKILL_ENTRY_POINT } from "./constants";
 import type { DirectoryEntry, EffectiveConfig, SkillInfo } from "./types";
+import { wslDisplayPathToNative } from "./wslPath";
 
 export interface SkillStore {
   roots: string[];
@@ -34,37 +36,27 @@ function createHostSkillStore(config: EffectiveConfig): SkillStore {
 }
 
 type SkillProgramRunner = typeof execProgram;
+type WslPathMapper = (linuxPath: string, distribution?: string) => string;
 
-async function runWsl(config: EffectiveConfig, runner: SkillProgramRunner, program: string, args: string[]) {
-  return runner(program, args, {
+async function resolveWslRoots(config: EffectiveConfig, runner: SkillProgramRunner): Promise<string[]> {
+  if (config.skillsPaths.every((raw) => raw.trim().startsWith("/"))) {
+    return config.skillsPaths.map((raw) => path.posix.normalize(raw.trim()));
+  }
+  const homeResult = await runner("printenv", ["HOME"], {
     executionEnvironment: "wsl",
     wslDistribution: config.wslDistribution,
     cwd: "/",
   });
-}
-
-async function resolveWslRoots(config: EffectiveConfig, runner: SkillProgramRunner): Promise<string[]> {
-  const homeResult = await runWsl(config, runner, "printenv", ["HOME"]);
-  if (homeResult.exitCode !== 0) {
-    throw new Error(homeResult.stderr || "Unable to resolve WSL HOME for skill paths.");
-  }
+  if (homeResult.exitCode !== 0) throw new Error(homeResult.stderr || "Unable to resolve WSL HOME for skill paths.");
   const home = homeResult.stdout.trim().replace(/\/+$/, "");
   if (!home.startsWith("/")) throw new Error("WSL HOME is not a Linux absolute path.");
   return config.skillsPaths.map((raw) => {
     const value = raw.trim();
     if (value === "~") return home;
     if (value.startsWith("~/")) return path.posix.join(home, value.slice(2));
-    if (!value.startsWith("/")) {
-      throw new Error(`WSL skill path must be Linux-absolute or start with ~/: ${value}`);
-    }
+    if (!value.startsWith("/")) throw new Error(`WSL skill path must be Linux-absolute or start with ~/: ${value}`);
     return path.posix.normalize(value);
   });
-}
-
-async function readWslFile(config: EffectiveConfig, runner: SkillProgramRunner, absolutePath: string) {
-  const result = await runWsl(config, runner, "cat", ["--", absolutePath]);
-  if (result.exitCode !== 0) return { error: result.stderr || `Unable to read file: ${absolutePath}` } as const;
-  return { content: result.stdout, resolvedPath: absolutePath } as const;
 }
 
 function simpleSearch(skills: SkillInfo[], query: string): SkillSearchResult[] {
@@ -77,10 +69,11 @@ function simpleSearch(skills: SkillInfo[], query: string): SkillSearchResult[] {
   }).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score || a.skill.name.localeCompare(b.skill.name));
 }
 
-function createWslSkillStore(config: EffectiveConfig, runner: SkillProgramRunner): SkillStore {
+function createWslSkillStore(config: EffectiveConfig, runner: SkillProgramRunner, mapPath: WslPathMapper): SkillStore {
   let resolvedRootsPromise: Promise<string[]> | undefined;
   let cachedSkills: SkillInfo[] | undefined;
   const roots = () => resolvedRootsPromise ??= resolveWslRoots(config, runner);
+  const native = (linuxPath: string) => mapPath(linuxPath, config.wslDistribution);
 
   const store: SkillStore = {
     roots: config.skillsPaths,
@@ -88,24 +81,31 @@ function createWslSkillStore(config: EffectiveConfig, runner: SkillProgramRunner
       if (cachedSkills) return cachedSkills;
       const found: SkillInfo[] = [];
       for (const root of await roots()) {
-        const result = await runWsl(config, runner, "find", [root, "-mindepth", "2", "-maxdepth", "2", "-type", "f", "-name", SKILL_ENTRY_POINT, "-print"]);
-        if (result.exitCode !== 0) {
-          if (/No such file or directory/i.test(result.stderr)) continue;
-          throw new Error(result.stderr || `Unable to scan WSL skill root: ${root}`);
+        let entries: fs.Dirent[];
+        try { entries = await fs.promises.readdir(native(root), { withFileTypes: true }); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw error;
         }
-        for (const skillMdPath of result.stdout.split("\n").map((line) => line.trim()).filter(Boolean)) {
-          const directoryPath = path.posix.dirname(skillMdPath);
-          const contentResult = await readWslFile(config, runner, skillMdPath);
-          if ("error" in contentResult) continue;
-          const extraResult = await runWsl(config, runner, "find", [directoryPath, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "!", "-name", SKILL_ENTRY_POINT, "-print", "-quit"]);
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const directoryPath = path.posix.join(root, entry.name);
+          const skillMdPath = path.posix.join(directoryPath, SKILL_ENTRY_POINT);
+          let content: string;
+          try { content = await fs.promises.readFile(native(skillMdPath), "utf8"); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+            throw error;
+          }
+          const children = await fs.promises.readdir(native(directoryPath), { withFileTypes: true });
           found.push({
-            name: path.posix.basename(directoryPath),
-            description: extractDescription(contentResult.content),
-            bodyExcerpt: extractBodyExcerpt(contentResult.content),
+            name: entry.name,
+            description: extractDescription(content),
+            bodyExcerpt: extractBodyExcerpt(content),
             tags: [],
             skillMdPath,
             directoryPath,
-            hasExtraFiles: Boolean(extraResult.stdout.trim()),
+            hasExtraFiles: children.some((child) => child.name !== SKILL_ENTRY_POINT),
           });
         }
       }
@@ -117,9 +117,7 @@ function createWslSkillStore(config: EffectiveConfig, runner: SkillProgramRunner
     async resolve(nameOrPath) {
       const target = nameOrPath.toLowerCase().trim();
       return (await store.scan()).find((skill) =>
-        skill.name.toLowerCase() === target ||
-        skill.skillMdPath.toLowerCase() === target ||
-        skill.directoryPath.toLowerCase() === target,
+        skill.name.toLowerCase() === target || skill.skillMdPath.toLowerCase() === target || skill.directoryPath.toLowerCase() === target,
       ) ?? null;
     },
     async read(skill, relativeFilePath) {
@@ -128,30 +126,45 @@ function createWslSkillStore(config: EffectiveConfig, runner: SkillProgramRunner
       if (relative.startsWith("../") || relative === ".." || path.posix.isAbsolute(relative)) {
         return { error: "Path traversal outside skill directory is not allowed." };
       }
-      return readWslFile(config, runner, target);
+      try { return { content: await fs.promises.readFile(native(target), "utf8"), resolvedPath: target }; }
+      catch (error) { return { error: (error as Error).message || `Unable to read file: ${target}` }; }
     },
     async list(skill, relativeSubPath) {
       const base = path.posix.resolve(skill.directoryPath, relativeSubPath?.trim() || ".");
       const relative = path.posix.relative(skill.directoryPath, base);
       if (relative.startsWith("../") || relative === ".." || path.posix.isAbsolute(relative)) return [];
-      const result = await runWsl(config, runner, "find", [base, "-mindepth", "1", "-maxdepth", String(MAX_DIRECTORY_DEPTH + 1), "-printf", "%y\t%s\t%p\n"]);
-      if (result.exitCode !== 0) return [];
-      return result.stdout.split("\n").filter(Boolean).slice(0, MAX_DIRECTORY_ENTRIES).map((line): DirectoryEntry | null => {
-        const [kind, size, ...parts] = line.split("\t");
-        const absolute = parts.join("\t");
-        if (!absolute) return null;
-        const relativePath = path.posix.relative(skill.directoryPath, absolute);
-        return kind === "d"
-          ? { name: path.posix.basename(absolute), relativePath, type: "directory" }
-          : { name: path.posix.basename(absolute), relativePath, type: "file", sizeBytes: Number(size) || undefined };
-      }).filter((entry): entry is DirectoryEntry => entry !== null);
+      const entries: DirectoryEntry[] = [];
+      const walk = async (displayDirectory: string, depth: number): Promise<void> => {
+        const dirents = await fs.promises.readdir(native(displayDirectory), { withFileTypes: true });
+        for (const entry of dirents) {
+          if (entries.length >= MAX_DIRECTORY_ENTRIES) return;
+          const displayFull = path.posix.join(displayDirectory, entry.name);
+          const stat = entry.isDirectory() ? undefined : await fs.promises.stat(native(displayFull));
+          entries.push({
+            name: entry.name,
+            relativePath: path.posix.relative(skill.directoryPath, displayFull),
+            type: entry.isDirectory() ? "directory" : "file",
+            ...(stat ? { sizeBytes: stat.size } : {}),
+          });
+          if (entry.isDirectory() && depth < MAX_DIRECTORY_DEPTH) await walk(displayFull, depth + 1);
+        }
+      };
+      try { await walk(base, 0); } catch { return []; }
+      return entries;
     },
   };
   return store;
 }
 
-export function createSkillStore(config: EffectiveConfig, dependencies: { execProgram?: SkillProgramRunner } = {}): SkillStore {
+export function createSkillStore(
+  config: EffectiveConfig,
+  dependencies: { execProgram?: SkillProgramRunner; toNativeWslPath?: WslPathMapper } = {},
+): SkillStore {
   return config.executionEnvironment === "wsl"
-    ? createWslSkillStore(config, dependencies.execProgram ?? execProgram)
+    ? createWslSkillStore(
+      config,
+      dependencies.execProgram ?? execProgram,
+      dependencies.toNativeWslPath ?? ((linuxPath, distribution) => wslDisplayPathToNative(distribution, linuxPath)),
+    )
     : createHostSkillStore(config);
 }
