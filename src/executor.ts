@@ -26,6 +26,7 @@ export interface ExecResult {
   platform: Platform;
   environment: ExecutionEnvironment;
   terminationIncomplete?: boolean;
+  aborted?: boolean;
 }
 
 export interface RawCommandRequest {
@@ -48,6 +49,7 @@ export interface ExecOptions {
   executionEnvironment?: ExecutionEnvironment;
   wslDistribution?: string;
   spawn?: typeof childProcess.spawn;
+  signal?: AbortSignal;
 }
 
 export interface ExecProgramOptions {
@@ -58,6 +60,7 @@ export interface ExecProgramOptions {
   wslDistribution?: string;
   stdin?: string | Buffer;
   spawn?: typeof childProcess.spawn;
+  signal?: AbortSignal;
 }
 
 export interface ExecutionSpec {
@@ -150,6 +153,9 @@ export function execCommand(command: string, options: ExecOptions = {}): Promise
     const platform = detectPlatform();
     return Promise.resolve({ stdout: "", stderr: error instanceof Error ? error.message : String(error), exitCode: 1, timedOut: false, shell: "", platform, environment: options.executionEnvironment ?? "host" });
   }
+  if (options.signal?.aborted) {
+    return Promise.resolve({ stdout: "", stderr: "Command aborted before start.", exitCode: 1, timedOut: false, aborted: true, shell: spec.shell, platform: spec.platform, environment: spec.environment });
+  }
   return new Promise((resolve) => {
     const timeoutMs = Math.min(Math.max(options.timeoutMs ?? EXEC_DEFAULT_TIMEOUT_MS, 1), EXEC_MAX_TIMEOUT_MS);
     const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8", ...(options.env ?? {}) };
@@ -163,27 +169,38 @@ export function execCommand(command: string, options: ExecOptions = {}): Promise
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let aborted = false;
     let terminationIncomplete = false;
+    let settled = false;
+    let settlementTimer: NodeJS.Timeout | undefined;
     proc.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
     proc.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
-    const timer = setTimeout(() => {
-      timedOut = true;
+    const finish = (exitCode: number, error?: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (settlementTimer) clearTimeout(settlementTimer);
+      options.signal?.removeEventListener("abort", onAbort);
+      resolve({ stdout: truncate(stdout), stderr: truncate(error ?? stderr), exitCode, timedOut, aborted, shell: spec.shell, platform: spec.platform, environment: spec.environment, ...((timedOut || aborted) ? { terminationIncomplete } : {}) });
+    };
+    const terminate = (reason: string) => {
       try {
-        if (spec.platform === "windows" && proc.pid) childProcess.spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true });
+        if (spec.platform === "windows" && proc.pid) childProcess.spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }).unref();
         else if (proc.pid) process.kill(-proc.pid, "SIGKILL");
         else proc.kill("SIGKILL");
       } catch {
         terminationIncomplete = true;
         try { proc.kill("SIGKILL"); } catch { terminationIncomplete = true; }
       }
-    }, timeoutMs);
-    let settled = false;
-    const finish = (exitCode: number, error?: string) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ stdout: truncate(stdout), stderr: truncate(error ?? stderr), exitCode, timedOut, shell: spec.shell, platform: spec.platform, environment: spec.environment, ...(timedOut ? { terminationIncomplete } : {}) });
+      settlementTimer = setTimeout(() => {
+        terminationIncomplete = true;
+        finish(1, reason);
+      }, 250);
+      settlementTimer.unref?.();
     };
+    const onAbort = () => { aborted = true; terminate("Command aborted."); };
+    const timer = setTimeout(() => { timedOut = true; terminate("Command timed out."); }, timeoutMs);
+    options.signal?.addEventListener("abort", onAbort, { once: true });
     proc.on("close", (code) => finish(code ?? 1));
     proc.on("error", (error) => finish(1, error.message));
   });
@@ -212,94 +229,57 @@ export function execProgram(
   try {
     spec = buildProgramExecutionSpec(program, args, options);
   } catch (error) {
-    return Promise.resolve({
-      stdout: "",
-      stderr: error instanceof Error ? error.message : String(error),
-      exitCode: 1,
-      timedOut: false,
-      shell: program,
-      platform: detectPlatform(),
-      environment,
-    });
+    return Promise.resolve({ stdout: "", stderr: error instanceof Error ? error.message : String(error), exitCode: 1, timedOut: false, shell: program, platform: detectPlatform(), environment });
   }
-
+  if (options.signal?.aborted) {
+    return Promise.resolve({ stdout: "", stderr: "Command aborted before start.", exitCode: 1, timedOut: false, aborted: true, shell: spec.shell, platform: spec.platform, environment: spec.environment });
+  }
   return new Promise((resolve) => {
-    const timeoutMs = Math.min(
-      Math.max(options.timeoutMs ?? EXEC_DEFAULT_TIMEOUT_MS, 1),
-      EXEC_MAX_TIMEOUT_MS,
-    );
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      PYTHONUTF8: "1",
-      PYTHONIOENCODING: "utf-8",
-      ...(options.env ?? {}),
-    };
+    const timeoutMs = Math.min(Math.max(options.timeoutMs ?? EXEC_DEFAULT_TIMEOUT_MS, 1), EXEC_MAX_TIMEOUT_MS);
+    const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8", ...(options.env ?? {}) };
     let proc: childProcess.ChildProcess;
     try {
-      proc = (options.spawn ?? childProcess.spawn)(spec.program, spec.args, {
-        cwd: spec.cwd,
-        env,
-        windowsHide: true,
-        detached: spec.platform !== "windows",
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      proc = (options.spawn ?? childProcess.spawn)(spec.program, spec.args, { cwd: spec.cwd, env, windowsHide: true, detached: spec.platform !== "windows", stdio: ["pipe", "pipe", "pipe"] });
     } catch (error) {
-      resolve({
-        stdout: "",
-        stderr: error instanceof Error ? error.message : String(error),
-        exitCode: 1,
-        timedOut: false,
-        shell: spec.shell,
-        platform: spec.platform,
-        environment: spec.environment,
-      });
+      resolve({ stdout: "", stderr: error instanceof Error ? error.message : String(error), exitCode: 1, timedOut: false, shell: spec.shell, platform: spec.platform, environment: spec.environment });
       return;
     }
-
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let aborted = false;
     let terminationIncomplete = false;
+    let settled = false;
+    let settlementTimer: NodeJS.Timeout | undefined;
     proc.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
     proc.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
-    if (options.stdin !== undefined) {
-      proc.stdin?.end(options.stdin);
-    } else {
-      proc.stdin?.end();
-    }
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        if (spec.platform === "windows" && proc.pid) {
-          childProcess.spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true });
-        } else if (proc.pid) {
-          process.kill(-proc.pid, "SIGKILL");
-        } else {
-          proc.kill("SIGKILL");
-        }
-      } catch {
-        terminationIncomplete = true;
-        try { proc.kill("SIGKILL"); } catch { terminationIncomplete = true; }
-      }
-    }, timeoutMs);
-
-    let settled = false;
+    proc.stdin?.end(options.stdin);
     const finish = (exitCode: number, error?: string) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({
-        stdout: truncate(stdout),
-        stderr: truncate(error ?? stderr),
-        exitCode,
-        timedOut,
-        shell: spec.shell,
-        platform: spec.platform,
-        environment: spec.environment,
-        ...(timedOut ? { terminationIncomplete } : {}),
-      });
+      if (settlementTimer) clearTimeout(settlementTimer);
+      options.signal?.removeEventListener("abort", onAbort);
+      resolve({ stdout: truncate(stdout), stderr: truncate(error ?? stderr), exitCode, timedOut, aborted, shell: spec.shell, platform: spec.platform, environment: spec.environment, ...((timedOut || aborted) ? { terminationIncomplete } : {}) });
     };
+    const terminate = (reason: string) => {
+      try {
+        if (spec.platform === "windows" && proc.pid) childProcess.spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { windowsHide: true }).unref();
+        else if (proc.pid) process.kill(-proc.pid, "SIGKILL");
+        else proc.kill("SIGKILL");
+      } catch {
+        terminationIncomplete = true;
+        try { proc.kill("SIGKILL"); } catch { terminationIncomplete = true; }
+      }
+      settlementTimer = setTimeout(() => {
+        terminationIncomplete = true;
+        finish(1, reason);
+      }, 250);
+      settlementTimer.unref?.();
+    };
+    const onAbort = () => { aborted = true; terminate("Command aborted."); };
+    const timer = setTimeout(() => { timedOut = true; terminate("Command timed out."); }, timeoutMs);
+    options.signal?.addEventListener("abort", onAbort, { once: true });
     proc.on("close", (code) => finish(code ?? 1));
     proc.on("error", (error) => finish(1, error.message));
   });
