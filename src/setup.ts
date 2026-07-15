@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from 'fs';
+import * as path from 'path';
 
 function copyDir(src: string, dest: string): void {
   fs.mkdirSync(dest, { recursive: true });
@@ -19,7 +19,7 @@ export function bootstrapSkillsDir(skillsPath: string): void {
 
   fs.mkdirSync(skillsPath, { recursive: true });
 
-  const samplesDir = path.resolve(__dirname, "..", "samples");
+  const samplesDir = path.resolve(__dirname, '..', 'samples');
   if (!fs.existsSync(samplesDir)) return;
 
   copyDir(samplesDir, skillsPath);

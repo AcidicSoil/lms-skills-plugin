@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   SKILL_ENTRY_POINT,
   SKILL_MANIFEST_FILE,
@@ -11,20 +11,20 @@ import {
   BM25_K1,
   BM25_B,
   FIELD_WEIGHTS,
-} from "./constants";
-import type { SkillInfo, SkillManifestFile, DirectoryEntry } from "./types";
+} from './constants';
+import type { SkillInfo, SkillManifestFile, DirectoryEntry } from './types';
 
 function readFileSafe(filePath: string): string | null {
   try {
     const stat = fs.statSync(filePath);
     if (stat.size <= MAX_FILE_SIZE_BYTES) {
-      return fs.readFileSync(filePath, "utf-8");
+      return fs.readFileSync(filePath, 'utf-8');
     }
 
     const headBytes = Math.floor(MAX_FILE_SIZE_BYTES * 0.8);
     const tailBytes = MAX_FILE_SIZE_BYTES - headBytes;
 
-    const fd = fs.openSync(filePath, "r");
+    const fd = fs.openSync(filePath, 'r');
     const headBuf = Buffer.alloc(headBytes);
     const tailBuf = Buffer.alloc(tailBytes);
 
@@ -32,8 +32,8 @@ function readFileSafe(filePath: string): string | null {
     fs.readSync(fd, tailBuf, 0, tailBytes, stat.size - tailBytes);
     fs.closeSync(fd);
 
-    const head = headBuf.toString("utf-8").replace(/\uFFFD.*$/, "");
-    const tail = tailBuf.toString("utf-8").replace(/^.*?\uFFFD/, "");
+    const head = headBuf.toString('utf-8').replace(/\uFFFD.*$/, '');
+    const tail = tailBuf.toString('utf-8').replace(/^.*?\uFFFD/, '');
     const omitted = Math.round((stat.size - MAX_FILE_SIZE_BYTES) / 1024);
 
     return `${head}\n\n[... ${omitted}KB omitted - middle of file truncated ...]\n\n${tail}`;
@@ -43,7 +43,7 @@ function readFileSafe(filePath: string): string | null {
 }
 
 export function extractDescription(content: string): string {
-  const lines = content.split("\n");
+  const lines = content.split('\n');
   const collected: string[] = [];
   let passedH1 = false;
 
@@ -53,30 +53,23 @@ export function extractDescription(content: string): string {
       if (collected.length > 0) break;
       continue;
     }
-    if (trimmed.startsWith("# ") && !passedH1) {
+    if (trimmed.startsWith('# ') && !passedH1) {
       passedH1 = true;
       continue;
     }
-    if (
-      trimmed.startsWith("#") ||
-      trimmed.startsWith("```") ||
-      trimmed.startsWith("<!--")
-    ) {
+    if (trimmed.startsWith('#') || trimmed.startsWith('```') || trimmed.startsWith('<!--')) {
       if (collected.length > 0) break;
       continue;
     }
     collected.push(trimmed);
-    if (collected.join(" ").length >= MAX_DESCRIPTION_CHARS) break;
+    if (collected.join(' ').length >= MAX_DESCRIPTION_CHARS) break;
   }
 
-  return (
-    collected.join(" ").trim().slice(0, MAX_DESCRIPTION_CHARS) ||
-    "No description available."
-  );
+  return collected.join(' ').trim().slice(0, MAX_DESCRIPTION_CHARS) || 'No description available.';
 }
 
 export function extractBodyExcerpt(content: string): string {
-  const lines = content.split("\n");
+  const lines = content.split('\n');
   const collected: string[] = [];
   let passedH1 = false;
   let passedDescription = false;
@@ -86,20 +79,20 @@ export function extractBodyExcerpt(content: string): string {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    if (trimmed.startsWith("```")) {
+    if (trimmed.startsWith('```')) {
       inCodeFence = !inCodeFence;
       continue;
     }
     if (inCodeFence) continue;
 
     if (!passedH1) {
-      if (trimmed.startsWith("# ")) passedH1 = true;
+      if (trimmed.startsWith('# ')) passedH1 = true;
       continue;
     }
 
     if (!descriptionDone) {
       if (!passedDescription) {
-        if (trimmed && !trimmed.startsWith("#")) {
+        if (trimmed && !trimmed.startsWith('#')) {
           passedDescription = true;
           continue;
         }
@@ -115,30 +108,28 @@ export function extractBodyExcerpt(content: string): string {
     if (!trimmed) continue;
 
     const stripped = trimmed
-      .replace(/^#{1,6}\s+/, "")
-      .replace(/\*\*(.+?)\*\*/g, "$1")
-      .replace(/\*(.+?)\*/g, "$1")
-      .replace(/`(.+?)`/g, "$1")
-      .replace(/^\s*[-*+]\s+/, "")
-      .replace(/^\s*\d+\.\s+/, "")
-      .replace(/\[(.+?)\]\(.+?\)/g, "$1");
+      .replace(/^#{1,6}\s+/, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/`(.+?)`/g, '$1')
+      .replace(/^\s*[-*+]\s+/, '')
+      .replace(/^\s*\d+\.\s+/, '')
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1');
 
     if (!stripped) continue;
 
     collected.push(stripped);
-    if (collected.join(" ").length >= BODY_EXCERPT_CHARS) break;
+    if (collected.join(' ').length >= BODY_EXCERPT_CHARS) break;
   }
 
-  return collected.join(" ").trim().slice(0, BODY_EXCERPT_CHARS);
+  return collected.join(' ').trim().slice(0, BODY_EXCERPT_CHARS);
 }
 
 function loadManifest(skillDir: string): SkillManifestFile | null {
   const manifestPath = path.join(skillDir, SKILL_MANIFEST_FILE);
   try {
     if (!fs.existsSync(manifestPath)) return null;
-    return JSON.parse(
-      fs.readFileSync(manifestPath, "utf-8"),
-    ) as SkillManifestFile;
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as SkillManifestFile;
   } catch {
     return null;
   }
@@ -181,16 +172,12 @@ function scanSkillsDir(skillsDir: string): SkillInfo[] {
 
       const description =
         manifest?.description ??
-        (skillMdContent
-          ? extractDescription(skillMdContent)
-          : "No description available.");
+        (skillMdContent ? extractDescription(skillMdContent) : 'No description available.');
 
-      const bodyExcerpt = skillMdContent
-        ? extractBodyExcerpt(skillMdContent)
-        : "";
+      const bodyExcerpt = skillMdContent ? extractBodyExcerpt(skillMdContent) : '';
 
       const tags = Array.isArray(manifest?.tags)
-        ? manifest.tags.filter((t): t is string => typeof t === "string")
+        ? manifest.tags.filter((t): t is string => typeof t === 'string')
         : [];
 
       skills.push({
@@ -213,14 +200,16 @@ function scanSkillsDir(skillsDir: string): SkillInfo[] {
 let cachedSkills: SkillInfo[] | null = null;
 let searchIndex: SearchIndex | null = null;
 let watchers: fs.FSWatcher[] = [];
-let isWatchingPaths = "";
+let isWatchingPaths = '';
 
 function setupWatchers(skillsDirs: string[]) {
-  const currentPaths = skillsDirs.join(";");
+  const currentPaths = skillsDirs.join(';');
   if (isWatchingPaths === currentPaths) return;
 
   watchers.forEach((w) => {
-    try { w.close(); } catch { }
+    try {
+      w.close();
+    } catch {}
   });
   watchers = [];
   isWatchingPaths = currentPaths;
@@ -232,7 +221,7 @@ function setupWatchers(skillsDirs: string[]) {
         cachedSkills = null;
         searchIndex = null;
       });
-      w.on("error", () => { }); // catch watch limits silently
+      w.on('error', () => {}); // catch watch limits silently
       watchers.push(w);
     } catch {
       try {
@@ -240,7 +229,7 @@ function setupWatchers(skillsDirs: string[]) {
           cachedSkills = null;
           searchIndex = null;
         });
-        w.on("error", () => { });
+        w.on('error', () => {});
         watchers.push(w);
       } catch {
         // watcher unsupported on this OS configuration
@@ -337,10 +326,7 @@ function buildSearchIndex(skills: SkillInfo[]) {
   searchIndex = { idf, avgLengths, docTokens };
 }
 
-export function searchSkills(
-  skillsDirs: string[],
-  query: string,
-): SkillSearchResult[] {
+export function searchSkills(skillsDirs: string[], query: string): SkillSearchResult[] {
   const queryTokens = tokenize(query);
   if (queryTokens.length === 0) return [];
 
@@ -413,16 +399,12 @@ export function searchSkills(
   return results.sort((a, b) => b.score - a.score);
 }
 
-export function resolveSkillByName(
-  skillsDirs: string[],
-  skillName: string,
-): SkillInfo | null {
+export function resolveSkillByName(skillsDirs: string[], skillName: string): SkillInfo | null {
   const lower = skillName.toLowerCase().trim();
   return (
     scanSkills(skillsDirs).find(
       (s) =>
-        s.name.toLowerCase() === lower ||
-        path.basename(s.directoryPath).toLowerCase() === lower,
+        s.name.toLowerCase() === lower || path.basename(s.directoryPath).toLowerCase() === lower,
     ) ?? null
   );
 }
@@ -435,7 +417,7 @@ export function readSkillFile(
   const resolved = path.resolve(skill.directoryPath, targetRel);
 
   if (!resolved.startsWith(path.resolve(skill.directoryPath))) {
-    return { error: "Path traversal outside skill directory is not allowed." };
+    return { error: 'Path traversal outside skill directory is not allowed.' };
   }
   if (!fs.existsSync(resolved)) {
     return {
@@ -474,10 +456,7 @@ export function readAbsolutePath(
   return { content, resolvedPath: resolved };
 }
 
-export function listSkillDirectory(
-  skill: SkillInfo,
-  relativeSubPath?: string,
-): DirectoryEntry[] {
+export function listSkillDirectory(skill: SkillInfo, relativeSubPath?: string): DirectoryEntry[] {
   const base = relativeSubPath
     ? path.resolve(skill.directoryPath, relativeSubPath.trim())
     : skill.directoryPath;
@@ -489,16 +468,11 @@ export function listSkillDirectory(
 
 export function listAbsoluteDirectory(absolutePath: string): DirectoryEntry[] {
   const resolved = path.resolve(absolutePath);
-  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory())
-    return [];
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) return [];
   return walkDirectory(resolved, resolved, 0);
 }
 
-function walkDirectory(
-  dir: string,
-  rootDir: string,
-  depth: number,
-): DirectoryEntry[] {
+function walkDirectory(dir: string, rootDir: string, depth: number): DirectoryEntry[] {
   if (depth > MAX_DIRECTORY_DEPTH) return [];
 
   let dirEntries: fs.Dirent[];
@@ -517,7 +491,7 @@ function walkDirectory(
     const relativePath = path.relative(rootDir, fullPath);
 
     if (entryIsDirectory(dir, entry)) {
-      entries.push({ name: entry.name, relativePath, type: "directory" });
+      entries.push({ name: entry.name, relativePath, type: 'directory' });
       if (depth < MAX_DIRECTORY_DEPTH) {
         entries.push(...walkDirectory(fullPath, rootDir, depth + 1));
       }
@@ -525,8 +499,8 @@ function walkDirectory(
       let sizeBytes: number | undefined;
       try {
         sizeBytes = fs.statSync(fullPath).size;
-      } catch { }
-      entries.push({ name: entry.name, relativePath, type: "file", sizeBytes });
+      } catch {}
+      entries.push({ name: entry.name, relativePath, type: 'file', sizeBytes });
     }
   }
 

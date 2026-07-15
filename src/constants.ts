@@ -1,24 +1,15 @@
-import * as os from "os";
-import * as path from "path";
+import * as os from 'os';
+import * as path from 'path';
 
-export const DEFAULT_SKILLS_DIR = path.join(
-  os.homedir(),
-  ".lmstudio",
-  "skills",
-);
-export const PLUGIN_DATA_DIR = path.join(
-  os.homedir(),
-  ".lmstudio",
-  "plugin-data",
-  "lms-skills",
-);
-export const SETTINGS_FILE = path.join(PLUGIN_DATA_DIR, "settings.json");
-export const HOST_WORKSPACES_DIR = path.join(PLUGIN_DATA_DIR, "workspaces");
-export const WSL_WORKSPACES_RELATIVE_DIR = ".lmstudio/lms-skills/workspaces";
+export const DEFAULT_SKILLS_DIR = path.join(os.homedir(), '.lmstudio', 'skills');
+export const PLUGIN_DATA_DIR = path.join(os.homedir(), '.lmstudio', 'plugin-data', 'lms-skills');
+export const SETTINGS_FILE = path.join(PLUGIN_DATA_DIR, 'settings.json');
+export const HOST_WORKSPACES_DIR = path.join(PLUGIN_DATA_DIR, 'workspaces');
+export const WSL_WORKSPACES_RELATIVE_DIR = '.lmstudio/lms-skills/workspaces';
 
-export const SKILL_ENTRY_POINT = "SKILL.md";
-export const SKILL_MANIFEST_FILE = "skill.json";
-export const RESET_TO_DEFAULT_SENTINEL = "default";
+export const SKILL_ENTRY_POINT = 'SKILL.md';
+export const SKILL_MANIFEST_FILE = 'skill.json';
+export const RESET_TO_DEFAULT_SENTINEL = 'default';
 
 export const MAX_FILE_SIZE_BYTES = 102_400;
 export const MAX_DESCRIPTION_CHARS = 500;
@@ -37,12 +28,12 @@ export const EXEC_MAX_TIMEOUT_MS = 300_000;
 export const EXEC_MAX_OUTPUT_BYTES = 100_000;
 export const EXEC_MAX_COMMAND_LENGTH = 8_000;
 
-export const SKILLS_PATH_SEPARATOR = ";";
+export const SKILLS_PATH_SEPARATOR = ';';
 export const CONFIG_CACHE_TTL_MS = 5_000;
 export const REINJECT_INTERVAL_MS = 15 * 60 * 1_000;
 
 export const EXPLICIT_SKILL_REGEX = /(?<![a-zA-Z0-9:/])\/([a-z][a-z0-9._-]*)/g;
-export const EXPLICIT_SKILL_CONTEXT_TAG = "skill_context";
+export const EXPLICIT_SKILL_CONTEXT_TAG = 'skill_context';
 
 export const BM25_K1 = 1.2;
 export const BM25_B = 0.75;

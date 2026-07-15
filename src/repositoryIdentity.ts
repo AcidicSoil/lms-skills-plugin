@@ -1,3 +1,17 @@
-export type RepositoryIdentityResult = {status:"match"}|{status:"unknown"}|{status:"mismatch";expected:string;actual:string};
-export function normalizeRepositoryIdentity(value?:string):string|undefined { const v=value?.trim().replace(/\\/g,"/").replace(/\/+$/g,"").toLowerCase(); return v || undefined; }
-export function validateRepositoryIdentity(expected?:string, actual?:string):RepositoryIdentityResult { const e=normalizeRepositoryIdentity(expected), a=normalizeRepositoryIdentity(actual); if(!e||!a) return {status:"unknown"}; return e===a?{status:"match"}:{status:"mismatch",expected:e,actual:a}; }
+export type RepositoryIdentityResult =
+  | { status: 'match' }
+  | { status: 'unknown' }
+  | { status: 'mismatch'; expected: string; actual: string };
+export function normalizeRepositoryIdentity(value?: string): string | undefined {
+  const v = value?.trim().replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
+  return v || undefined;
+}
+export function validateRepositoryIdentity(
+  expected?: string,
+  actual?: string,
+): RepositoryIdentityResult {
+  const e = normalizeRepositoryIdentity(expected),
+    a = normalizeRepositoryIdentity(actual);
+  if (!e || !a) return { status: 'unknown' };
+  return e === a ? { status: 'match' } : { status: 'mismatch', expected: e, actual: a };
+}

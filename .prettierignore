@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+coverage/
+
+# Framework and tooling output
+.next/
+.nuxt/
+.svelte-kit/
+.turbo/
+.cache/
+.vite/
+storybook-static/
+
+# Generated files
+generated/
+**/*.generated.*
+**/*.min.js
+**/*.min.css
+
+# Package-manager state
+.pnpm-store/
+.yarn/
+bun.lock
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Environment and local state
+.env
+.env.*
+!.env.example
+*.log
+
+# IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.agents
+.codex
+.planning
+.serena
+.serena-gsd
+skills

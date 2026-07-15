@@ -14,7 +14,7 @@ export interface SkillManifestFile {
   tags?: string[];
 }
 
-export type ExecutionEnvironment = "host" | "wsl";
+export type ExecutionEnvironment = 'host' | 'wsl';
 
 export interface WorkspaceProfile {
   id: string;
@@ -31,10 +31,22 @@ export interface WorkspaceProfile {
 }
 
 export interface ApprovalHistoryRecord {
-  id: string; workspaceId: string; profileId?: string; toolName: string; path?: string; scope?: "read" | "write"; decision: "approved" | "denied" | "revoked"; timestamp: string; expiresAt?: string;
+  id: string;
+  workspaceId: string;
+  profileId?: string;
+  toolName: string;
+  path?: string;
+  scope?: 'read' | 'write';
+  decision: 'approved' | 'denied' | 'revoked';
+  timestamp: string;
+  expiresAt?: string;
 }
 
-export interface ChatWorkspaceSelection { environment: ExecutionEnvironment; profileId?: string; updatedAt: string; }
+export interface ChatWorkspaceSelection {
+  environment: ExecutionEnvironment;
+  profileId?: string;
+  updatedAt: string;
+}
 
 export interface PersistedSettings {
   settingsSchemaVersion?: number;
@@ -42,7 +54,7 @@ export interface PersistedSettings {
   autoInject: boolean;
   maxSkillsInContext: number;
   shellPath: string;
-  windowsShell?: "powershell" | "cmd" | "git-bash";
+  windowsShell?: 'powershell' | 'cmd' | 'git-bash';
   executionEnvironment: ExecutionEnvironment;
   wslDistribution?: string;
   workspaceProfiles?: WorkspaceProfile[];
@@ -59,7 +71,7 @@ export interface EffectiveConfig {
   autoInject: boolean;
   maxSkillsInContext: number;
   shellPath: string;
-  windowsShell?: "powershell" | "cmd" | "git-bash";
+  windowsShell?: 'powershell' | 'cmd' | 'git-bash';
   executionEnvironment: ExecutionEnvironment;
   wslDistribution?: string;
   workspaceProfiles?: WorkspaceProfile[];
@@ -82,6 +94,6 @@ export interface WorkspaceContext {
 export interface DirectoryEntry {
   name: string;
   relativePath: string;
-  type: "file" | "directory";
+  type: 'file' | 'directory';
   sizeBytes?: number;
 }
