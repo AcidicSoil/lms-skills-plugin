@@ -37,6 +37,12 @@ progress:
 - `.planning/milestones/v1.1-REQUIREMENTS.md`
 - `.planning/v1.1-MILESTONE-AUDIT.md`
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260715-2eh | Refactor filesystem access for portability: remove WSL subprocesses from skill scanning and workspace filesystem I/O | 2026-07-15 | 08a0179 | [260715-2eh-refactor-filesystem-access-for-portabili](./quick/260715-2eh-refactor-filesystem-access-for-portabili/) |
+
 ## Last Activity
 
-2026-07-14 — Archived and tagged milestone v1.1 Additional Polish.
+2026-07-15 — Completed quick task 260715-2eh: native WSL filesystem access refactor.
